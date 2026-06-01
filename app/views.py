@@ -11,7 +11,8 @@ from .models import db, User, Location, Plant, PlantPhoto, PlantNote, GardenMap,
 from .services.timeline_service import save_uploaded_attachment, set_single_title_entry, delete_timeline_entry, build_unique_upload_name
 from .taxonomy import service as taxonomy_service
 from .taxonomy.catalogs import get_database_catalog_by_key, get_database_catalogs
-from .taxonomy.resolvers.base import normalize_scientific_name_for_lookup
+from .taxonomy.resolvers.base import ExternalCall, normalize_scientific_name_for_lookup
+from .taxonomy.resolvers.http import execute_external_call, full_debug_enabled, get_full_debug_external_requests
 
 main_bp = Blueprint('main', __name__)
 ALLOWED = {'png', 'jpg', 'jpeg', 'webp', 'gif', 'pdf'}
@@ -61,6 +62,23 @@ LIGHT_NEED_KEY_TO_LABEL = {item['key']: item['label'] for item in LIGHT_NEED_OPT
 LIGHT_NEED_ICON_BY_KEY = {item['key']: item['icon'] for item in LIGHT_NEED_OPTIONS}
 
 
+def _debuggable_external_get(catalog, url, params=None, timeout=6):
+    return execute_external_call(
+        ExternalCall(catalog=catalog, url=url, query=params or {}),
+        timeout=timeout,
+    )
+
+
+def _debug_payload(trace_id, duration_ms=None):
+    payload = {'trace_id': trace_id}
+    if duration_ms is not None:
+        payload['duration_ms'] = duration_ms
+    if full_debug_enabled():
+        payload['full_debug_enabled'] = True
+        payload['external_web_requests'] = get_full_debug_external_requests()
+    return payload
+
+
 def _title_text_from_html(page_html):
     if not page_html:
         return None
@@ -92,7 +110,7 @@ def _naturadb_common_name_from_slug(slug):
         return None, []
     url = (catalog.record_url_template or '').replace('{id}', quote(slug, safe='/'))
     try:
-        response = requests.get(url, timeout=6)
+        response = _debuggable_external_get('naturadb_common_name', url, timeout=6)
         response.raise_for_status()
     except requests.RequestException:
         return None, [url]
@@ -153,7 +171,8 @@ def _lookup_common_name_from_web(scientific_name, language_code='de', naturadb_i
 
     def _search(term):
         try:
-            response = requests.get(
+            response = _debuggable_external_get(
+                'wikipedia_common_name_search',
                 search_url,
                 params={
                     'action': 'query',
@@ -173,7 +192,8 @@ def _lookup_common_name_from_web(scientific_name, language_code='de', naturadb_i
         page_slug = quote(unquote(wikipedia_id).replace(' ', '_'), safe=':_()-,.%')
         sources.append(f'{base_domain}/wiki/{page_slug}')
         try:
-            summary_response = requests.get(
+            summary_response = _debuggable_external_get(
+                'wikipedia_common_name_summary',
                 f'{summary_url}/{page_slug}',
                 timeout=6,
             )
@@ -202,7 +222,8 @@ def _lookup_common_name_from_web(scientific_name, language_code='de', naturadb_i
         page_slug = title.replace(' ', '_')
         sources.append(f'{base_domain}/wiki/{page_slug}')
         try:
-            summary_response = requests.get(
+            summary_response = _debuggable_external_get(
+                'wikipedia_common_name_summary',
                 f'{summary_url}/{page_slug}',
                 timeout=6,
             )
@@ -1055,7 +1076,7 @@ def suggest_common_name(plant_id):
     trace_id = f"magic-common-{plant_id}-{int(time.time() * 1000)}"
     if not name_value:
         current_app.logger.info('[%s] common-name lookup aborted: missing source name', trace_id)
-        return jsonify({'ok': False, 'error': 'Bitte zuerst einen Namen eingeben.', 'debug': {'trace_id': trace_id}}), 400
+        return jsonify({'ok': False, 'error': 'Bitte zuerst einen Namen eingeben.', 'debug': _debug_payload(trace_id)}), 400
 
     lookup_language = current_app.config.get('COMMON_NAME_LOOKUP_LANG', 'de')
     common_name, sources = _lookup_common_name_from_web(
@@ -1067,12 +1088,12 @@ def suggest_common_name(plant_id):
     if not common_name:
         duration_ms = round((time.perf_counter() - started_at) * 1000, 1)
         current_app.logger.info('[%s] common-name lookup failed for "%s" (%sms, sources=%s)', trace_id, name_value, duration_ms, len(sources or []))
-        return jsonify({'ok': False, 'error': 'Kein Vorschlag gefunden.', 'debug': {'trace_id': trace_id, 'duration_ms': duration_ms}}), 404
+        return jsonify({'ok': False, 'error': 'Kein Vorschlag gefunden.', 'debug': _debug_payload(trace_id, duration_ms)}), 404
 
     confidence = 0.88 if common_name.lower() != name_value.lower() else 0.55
     duration_ms = round((time.perf_counter() - started_at) * 1000, 1)
     current_app.logger.info('[%s] common-name lookup success for "%s" -> "%s" (%sms, sources=%s)', trace_id, name_value, common_name, duration_ms, len(sources or []))
-    return jsonify({'ok': True, 'common_name': common_name, 'confidence': confidence, 'sources': sources, 'language': lookup_language, 'debug': {'trace_id': trace_id, 'duration_ms': duration_ms}})
+    return jsonify({'ok': True, 'common_name': common_name, 'confidence': confidence, 'sources': sources, 'language': lookup_language, 'debug': _debug_payload(trace_id, duration_ms)})
 
 
 def upsert_plant_database_identifiers(plant, form):

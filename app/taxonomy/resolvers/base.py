@@ -13,6 +13,7 @@ class ExternalCall:
     url: str | None
     query: dict[str, str] = field(default_factory=dict)
     request_url: str | None = None
+    full_debug: dict[str, Any] | None = None
 
     def __post_init__(self):
         self.query = {str(key): str(value) for key, value in dict(self.query or {}).items()}
@@ -20,12 +21,15 @@ class ExternalCall:
             self.request_url = f"{self.url}?{urlencode(self.query)}" if self.query else self.url
 
     def to_dict(self):
-        return {
+        payload = {
             'catalog': self.catalog,
             'url': self.url,
             'query': dict(self.query or {}),
             'request_url': self.request_url,
         }
+        if self.full_debug is not None:
+            payload['full_debug'] = self.full_debug
+        return payload
 
 
 @dataclass(frozen=True)
