@@ -1,8 +1,10 @@
 import unittest
 from unittest.mock import Mock, patch
 
+from flask import Flask
+
 from app.taxonomy.resolvers.base import ExternalCall
-from app.taxonomy.resolvers.http import execute_external_call, fetch_json, fetch_text
+from app.taxonomy.resolvers.http import execute_external_call, fetch_json, fetch_text, get_full_debug_external_requests
 
 
 class ExternalCallHttpExecutionTest(unittest.TestCase):
@@ -22,6 +24,42 @@ class ExternalCallHttpExecutionTest(unittest.TestCase):
             timeout=8,
         )
         response.raise_for_status.assert_called_once_with()
+
+
+    def test_execute_external_call_captures_full_debug_when_enabled(self):
+        call = ExternalCall(catalog='gbif', url='https://example.test/api', query={'q': 'Phlox'})
+        response = Mock()
+        response.status_code = 200
+        response.url = 'https://example.test/api?q=Phlox'
+        response.headers = {'Content-Type': 'application/json'}
+        response.text = '{"usageKey":12345}'
+        response.raise_for_status = Mock()
+        app = Flask(__name__)
+        app.config['GARDENGLOW_FULL_DEBUG'] = True
+
+        with app.app_context(), patch('app.taxonomy.resolvers.http.requests.get', return_value=response):
+            execute_external_call(call, headers={'Accept': 'application/json'}, timeout=3)
+            captured = get_full_debug_external_requests()
+
+        self.assertEqual(call.full_debug['response']['content'], '{"usageKey":12345}')
+        self.assertEqual(call.full_debug['response']['status_code'], 200)
+        self.assertEqual(call.full_debug['headers']['Accept'], 'application/json')
+        self.assertEqual(call.full_debug['timeout'], 3)
+        self.assertEqual(captured[0]['response']['content'], '{"usageKey":12345}')
+
+    def test_execute_external_call_omits_full_debug_by_default(self):
+        call = ExternalCall(catalog='gbif', url='https://example.test/api', query={'q': 'Phlox'})
+        response = Mock()
+        response.raise_for_status = Mock()
+        app = Flask(__name__)
+        app.config['GARDENGLOW_FULL_DEBUG'] = False
+
+        with app.app_context(), patch('app.taxonomy.resolvers.http.requests.get', return_value=response):
+            execute_external_call(call)
+            captured = get_full_debug_external_requests()
+
+        self.assertIsNone(call.full_debug)
+        self.assertEqual(captured, [])
 
     def test_fetch_json_and_text_delegate_to_execute_external_call(self):
         call = ExternalCall(catalog='html_search', url='https://example.test/search', query={'q': 'Phlox'})

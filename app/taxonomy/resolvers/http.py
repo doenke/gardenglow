@@ -1,5 +1,9 @@
 """HTTP execution helpers for taxonomy resolver external calls."""
 
+import os
+import time
+
+from flask import current_app, g, has_app_context
 import requests
 
 from .base import ExternalCall
@@ -7,6 +11,75 @@ from .base import ExternalCall
 
 USER_AGENT = 'garten-taxonomy-resolver/1.0'
 REQUEST_TIMEOUT = 8
+FULL_DEBUG_ENV_VAR = 'GARDENGLOW_FULL_DEBUG'
+_TRUE_VALUES = {'1', 'true', 'yes', 'on', 'y'}
+
+
+def _env_flag(name, default='false'):
+    return (os.getenv(name, default) or '').strip().lower() in _TRUE_VALUES
+
+
+def full_debug_enabled():
+    """Return whether full external-request debugging is enabled."""
+    if has_app_context():
+        return bool(current_app.config.get('GARDENGLOW_FULL_DEBUG'))
+    return _env_flag(FULL_DEBUG_ENV_VAR)
+
+
+def get_full_debug_external_requests():
+    """Return captured detailed external web requests for this Flask request."""
+    if not has_app_context():
+        return []
+    return list(getattr(g, 'taxonomy_full_debug_external_requests', []))
+
+
+def _append_full_debug_entry(entry):
+    if not has_app_context():
+        return
+    if not hasattr(g, 'taxonomy_full_debug_external_requests'):
+        g.taxonomy_full_debug_external_requests = []
+    g.taxonomy_full_debug_external_requests.append(entry)
+
+
+def _response_text(response):
+    try:
+        return response.text or ''
+    except (LookupError, UnicodeError):
+        return response.content.decode('utf-8', errors='replace') if response.content else ''
+
+
+def _response_debug_payload(response):
+    return {
+        'status_code': response.status_code,
+        'url': response.url,
+        'headers': dict(response.headers),
+        'content': _response_text(response),
+    }
+
+
+def _record_full_debug(call, *, headers, timeout, duration_ms, response=None, error=None):
+    if not full_debug_enabled():
+        return
+
+    entry = {
+        'catalog': call.catalog,
+        'url': call.url,
+        'query': dict(call.query or {}),
+        'request_url': call.request_url,
+        'headers': dict(headers or {}),
+        'timeout': timeout,
+        'duration_ms': duration_ms,
+    }
+    if response is not None:
+        entry['response'] = _response_debug_payload(response)
+    if error is not None:
+        entry['error'] = {
+            'type': type(error).__name__,
+            'message': str(error),
+        }
+
+    call.full_debug = entry
+    _append_full_debug_entry(entry)
 
 
 def execute_external_call(call: ExternalCall, headers=None, timeout=None):
@@ -21,14 +94,41 @@ def execute_external_call(call: ExternalCall, headers=None, timeout=None):
     if headers:
         request_headers.update(headers)
 
-    response = requests.get(
-        call.url,
-        params=call.query,
-        headers=request_headers,
-        timeout=REQUEST_TIMEOUT if timeout is None else timeout,
-    )
-    response.raise_for_status()
-    return response
+    request_timeout = REQUEST_TIMEOUT if timeout is None else timeout
+    started_at = time.perf_counter()
+    response = None
+    request_failed = False
+    try:
+        response = requests.get(
+            call.url,
+            params=call.query,
+            headers=request_headers,
+            timeout=request_timeout,
+        )
+        response.raise_for_status()
+        return response
+    except requests.RequestException as error:
+        request_failed = True
+        duration_ms = round((time.perf_counter() - started_at) * 1000, 1)
+        _record_full_debug(
+            call,
+            headers=request_headers,
+            timeout=request_timeout,
+            duration_ms=duration_ms,
+            response=response,
+            error=error,
+        )
+        raise
+    finally:
+        if response is not None and not request_failed:
+            duration_ms = round((time.perf_counter() - started_at) * 1000, 1)
+            _record_full_debug(
+                call,
+                headers=request_headers,
+                timeout=request_timeout,
+                duration_ms=duration_ms,
+                response=response,
+            )
 
 
 def fetch_response(call: ExternalCall, accept: str):

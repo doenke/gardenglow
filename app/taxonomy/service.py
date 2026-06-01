@@ -4,6 +4,7 @@ from typing import Mapping
 from . import registry
 from . import resolvers  # noqa: F401 - import triggers static resolver registration
 from .resolvers.base import ResolverResult
+from .resolvers.http import full_debug_enabled, get_full_debug_external_requests
 
 
 @dataclass(frozen=True)
@@ -26,6 +27,15 @@ class TaxonomySuggestion:
         return [call for result in self.resolver_results for call in result.external_calls]
 
     def to_response(self, *, trace_id, duration_ms):
+        debug = {
+            'trace_id': trace_id,
+            'duration_ms': duration_ms,
+            'external_calls': [call.to_dict() for call in self.external_calls],
+        }
+        if full_debug_enabled():
+            debug['full_debug_enabled'] = True
+            debug['external_web_requests'] = get_full_debug_external_requests()
+
         return {
             'ok': True,
             'scientific_name': self.scientific_name,
@@ -33,11 +43,7 @@ class TaxonomySuggestion:
             'unavailable_catalogs': list(self.unavailable_catalogs),
             'confidence': self.confidence,
             'note': self.note,
-            'debug': {
-                'trace_id': trace_id,
-                'duration_ms': duration_ms,
-                'external_calls': [call.to_dict() for call in self.external_calls],
-            },
+            'debug': debug,
         }
 
 

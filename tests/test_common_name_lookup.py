@@ -23,7 +23,12 @@ class CommonNameLookupTest(unittest.TestCase):
 
         self.assertEqual(common_name, 'Roter Sonnenhut')
         self.assertEqual(sources, ['https://www.naturadb.de/pflanzen/echinacea-purpurea'])
-        get.assert_called_once_with('https://www.naturadb.de/pflanzen/echinacea-purpurea', timeout=6)
+        get.assert_called_once_with(
+            'https://www.naturadb.de/pflanzen/echinacea-purpurea',
+            params={},
+            headers={'User-Agent': 'garten-taxonomy-resolver/1.0'},
+            timeout=6,
+        )
 
 
 if __name__ == '__main__':

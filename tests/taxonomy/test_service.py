@@ -1,6 +1,8 @@
 import unittest
 from unittest.mock import patch
 
+from flask import Flask, g
+
 from app.taxonomy.catalogs import DatabaseCatalogConfig
 from app.taxonomy import registry
 from app.taxonomy import service as taxonomy_service
@@ -30,6 +32,28 @@ class StubResolver(TaxonomyResolver):
 
 
 class TaxonomyServiceTest(unittest.TestCase):
+
+    def test_to_response_includes_captured_web_requests_only_when_full_debug_enabled(self):
+        suggestion = taxonomy_service.TaxonomySuggestion(scientific_name='Phlox paniculata', matches={'gbif': '12345'})
+        app = Flask(__name__)
+        app.config['GARDENGLOW_FULL_DEBUG'] = True
+
+        with app.app_context():
+            g.taxonomy_full_debug_external_requests = [
+                {
+                    'catalog': 'gbif',
+                    'request_url': 'https://example.test/api?q=Phlox',
+                    'response': {'status_code': 200, 'content': '{"usageKey":12345}'},
+                }
+            ]
+            payload = suggestion.to_response(trace_id='trace-1', duration_ms=12.3)
+
+        self.assertTrue(payload['debug']['full_debug_enabled'])
+        self.assertEqual(
+            payload['debug']['external_web_requests'][0]['response']['content'],
+            '{"usageKey":12345}',
+        )
+
     def test_suggest_for_all_enabled_aggregates_multiple_enabled_database_catalogs(self):
         catalogs = [
             DatabaseCatalogConfig(
