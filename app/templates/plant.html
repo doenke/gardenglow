@@ -115,7 +115,7 @@
           <button type="button" id="magic-common-name" class="btn secondary" title="Bürgerlichen Namen automatisch suchen" aria-label="Bürgerlichen Namen automatisch suchen"><span aria-hidden="true">🪄</span> Namen suchen</button>
           <small id="magic-common-name-status" class="muted" aria-live="polite"></small>
         </div>
-        <small id="magic-debug-last-common-name" class="muted"></small>
+        {% if debug_enabled %}<small id="magic-debug-last-common-name" class="muted"></small>{% endif %}
         <label for="plant-source">Quelle</label>
         <input id="plant-source" name="source" value="{{ plant.source or '' }}" placeholder="z. B. Gärtnerei Musterhof" list="source-suggestions">
         <datalist id="source-suggestions">{% for source in source_suggestions %}<option value="{{ source }}">{% endfor %}</datalist>
@@ -223,11 +223,13 @@
           {% endfor %}
         </div>
         <small id="magic-taxonomy-ids-status" class="muted"></small>
+        {% if debug_enabled %}
         <small id="magic-debug-last-taxonomy" class="muted"></small>
         <details class="mt-1">
           <summary>Magic-Debuglog</summary>
           <ul id="magic-debug-log" class="muted" style="margin:.35rem 0 0 1.1rem;padding:0;display:grid;gap:.2rem;"></ul>
         </details>
+        {% endif %}
       </fieldset>
           <button type="submit">Pflanzendaten speichern</button>
         </form>
@@ -594,11 +596,12 @@ legend{padding:0 .4rem;font-weight:600;color:var(--muted);letter-spacing:.01em}
   const magicAllStatus = document.getElementById('magic-all-status');
   const magicCultivarStatus = document.getElementById('magic-cultivar-status');
   const magicScientificNameStatus = document.getElementById('magic-scientific-name-status');
-  const commonNameDebug = document.getElementById('magic-debug-last-common-name');
-  const taxonomyDebug = document.getElementById('magic-debug-last-taxonomy');
-  const magicDebugLog = document.getElementById('magic-debug-log');
+  const magicDebugEnabled = {{ debug_enabled | tojson }};
+  const commonNameDebug = magicDebugEnabled ? document.getElementById('magic-debug-last-common-name') : null;
+  const taxonomyDebug = magicDebugEnabled ? document.getElementById('magic-debug-last-taxonomy') : null;
+  const magicDebugLog = magicDebugEnabled ? document.getElementById('magic-debug-log') : null;
   const pushMagicDebugLog = (scope, message, linkUrl = null) => {
-    if (!magicDebugLog) return;
+    if (!magicDebugEnabled || !magicDebugLog) return;
     const line = document.createElement('li');
     const prefix = document.createTextNode(`[${new Date().toLocaleTimeString()}] ${scope}: ${message}`);
     line.appendChild(prefix);

@@ -86,7 +86,7 @@ def create_app():
     app.config['STATS_UPLOAD_CACHE_TTL_SECONDS'] = max(0, int(os.getenv('STATS_UPLOAD_CACHE_TTL_SECONDS', '60')))
     app.config['HEADER_LOGO_URL'] = os.getenv('HEADER_LOGO_URL', '').strip()
     app.config['COMMON_NAME_LOOKUP_LANG'] = os.getenv('COMMON_NAME_LOOKUP_LANG', 'de').strip().lower() or 'de'
-    app.config['GARDENGLOW_FULL_DEBUG'] = (os.getenv('GARDENGLOW_FULL_DEBUG', 'false') or '').strip().lower() in {'1', 'true', 'yes', 'on', 'y'}
+    app.config['DEBUG_MODE'] = (os.getenv('DEBUG_MODE', 'false') or '').strip().lower() in {'1', 'true', 'yes', 'on', 'y'}
 
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_port=1, x_prefix=1)
 
