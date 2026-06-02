@@ -7,7 +7,11 @@ from app.taxonomy import resolvers  # noqa: F401 - import triggers static resolv
 from app.taxonomy.resolvers.base import ResolverRequest, validate_common_config
 from app.taxonomy.resolvers.floraweb import FlorawebResolver
 from app.taxonomy.resolvers.gbif import GbifResolver
-from app.taxonomy.resolvers.mein_schoener_garten import MeinSchoenerGartenResolver
+from app.taxonomy.resolvers.mein_schoener_garten import (
+    NEXT_DATA_SEARCH_URL,
+    MeinSchoenerGartenResolver,
+    extract_next_data_taxonomy_id,
+)
 from app.taxonomy.resolvers.naturadb import NaturaDbResolver
 from app.taxonomy.resolvers.passthrough import SearchQueryPassthroughResolver
 from app.taxonomy.resolvers.powo import PowoResolver
@@ -113,6 +117,85 @@ class TaxonomyResolverConfigTest(unittest.TestCase):
             suggestion = resolver.suggest_id(request)
 
         self.assertEqual(suggestion, '6666')
+
+    def test_mein_schoener_garten_resolver_uses_next_data_search_endpoint(self):
+        catalog = DatabaseCatalogConfig(
+            key='mein_schoener_garten',
+            label='Mein schöner Garten',
+            enabled=True,
+            record_url_template='https://www.mein-schoener-garten.de/pflanzen/{id}',
+            search_url_template='https://www.mein-schoener-garten.de/suche?search_api_fulltext={q}',
+        )
+        resolver = MeinSchoenerGartenResolver()
+        config = resolver.build_config(catalog)
+
+        call = resolver.debug_call('Brunnera macrophylla', config)
+
+        self.assertEqual(call.url, NEXT_DATA_SEARCH_URL)
+        self.assertEqual(call.query['search_api_fulltext'], 'Brunnera macrophylla')
+        self.assertEqual(call.query['text'], 'Brunnera macrophylla')
+        self.assertEqual(call.query['facetFilter'], '74355')
+        self.assertEqual(call.query['slug'], 'suche')
+
+    def test_mein_schoener_garten_resolver_extracts_nested_slug_from_next_data(self):
+        resolver = MeinSchoenerGartenResolver()
+        request = ResolverRequest(
+            'mein_schoener_garten',
+            'Brunnera macrophylla',
+            resolver.default_config(),
+        )
+        payload = {
+            'pageProps': {
+                'data': {
+                    'page': {
+                        'content': [
+                            {
+                                'data': {
+                                    'items': [
+                                        {
+                                            '__typename': 'NodePlant',
+                                            'biologicalName': 'Brunnera macrophylla',
+                                            'url': (
+                                                '/pflanzen/kaukasusvergissmeinnicht/'
+                                                'kaukasusvergissmeinnicht'
+                                            ),
+                                        },
+                                    ],
+                                },
+                            },
+                        ],
+                    },
+                },
+            },
+        }
+
+        with patch('app.taxonomy.resolvers.mein_schoener_garten.fetch_json', return_value=payload):
+            suggestion = resolver.suggest_id(request)
+
+        self.assertEqual(suggestion, 'kaukasusvergissmeinnicht/kaukasusvergissmeinnicht')
+
+    def test_mein_schoener_garten_next_data_extractor_prefers_matching_biological_name(self):
+        payload = {
+            'items': [
+                {
+                    '__typename': 'NodePlant',
+                    'biologicalName': 'Phlox paniculata',
+                    'url': '/pflanzen/phlox/flammenblume',
+                },
+                {
+                    '__typename': 'NodePlant',
+                    'biologicalName': 'Brunnera macrophylla',
+                    'url': (
+                        '/pflanzen/kaukasusvergissmeinnicht/'
+                        'kaukasusvergissmeinnicht'
+                    ),
+                },
+            ],
+        }
+
+        suggestion = extract_next_data_taxonomy_id(payload, 'Brunnera macrophylla')
+
+        self.assertEqual(suggestion, 'kaukasusvergissmeinnicht/kaukasusvergissmeinnicht')
 
     def test_common_config_validation_checks_required_keys(self):
         self.assertTrue(validate_common_config({'search_url': 'https://example.test/search'}, required=('search_url',)))
