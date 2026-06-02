@@ -1,3 +1,4 @@
+import os
 import unittest
 from unittest.mock import Mock, patch
 
@@ -5,7 +6,7 @@ import requests
 from flask import Flask
 
 from app.taxonomy.resolvers.base import ExternalCall
-from app.taxonomy.resolvers.http import execute_external_call, fetch_json, fetch_text, get_full_debug_external_requests
+from app.taxonomy.resolvers.http import execute_external_call, fetch_json, fetch_text, full_debug_enabled, get_full_debug_external_requests
 
 
 class ExternalCallHttpExecutionTest(unittest.TestCase):
@@ -35,7 +36,7 @@ class ExternalCallHttpExecutionTest(unittest.TestCase):
         response.text = '{"usageKey":12345}'
         response.raise_for_status = Mock()
         app = Flask(__name__)
-        app.config['GARDENGLOW_FULL_DEBUG'] = True
+        app.config['DEBUG'] = True
 
         with app.app_context(), patch('app.taxonomy.resolvers.http.requests.get', return_value=response):
             execute_external_call(call, headers={'Accept': 'application/json'}, timeout=3)
@@ -74,7 +75,7 @@ class ExternalCallHttpExecutionTest(unittest.TestCase):
         response = Mock()
         response.raise_for_status = Mock()
         app = Flask(__name__)
-        app.config['GARDENGLOW_FULL_DEBUG'] = False
+        app.config['DEBUG'] = False
 
         with app.app_context(), patch('app.taxonomy.resolvers.http.requests.get', return_value=response):
             execute_external_call(call)
@@ -82,6 +83,13 @@ class ExternalCallHttpExecutionTest(unittest.TestCase):
 
         self.assertIsNone(call.full_debug)
         self.assertEqual(captured, [])
+
+    def test_full_debug_enabled_reads_debug_environment_variable_without_app_context(self):
+        with patch.dict(os.environ, {'DEBUG': 'true'}):
+            self.assertTrue(full_debug_enabled())
+
+        with patch.dict(os.environ, {'DEBUG': 'false'}):
+            self.assertFalse(full_debug_enabled())
 
     def test_fetch_json_and_text_delegate_to_execute_external_call(self):
         call = ExternalCall(catalog='html_search', url='https://example.test/search', query={'q': 'Phlox'})

@@ -976,6 +976,7 @@ def plant_detail(plant_id):
         database_identifier_values=_build_database_identifier_values(plant),
         database_search_query=database_search_query,
         database_search_urls=_build_database_search_urls(database_catalogs, database_search_query),
+        magic_debug_enabled=full_debug_enabled(),
     )
 
 

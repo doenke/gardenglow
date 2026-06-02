@@ -13,6 +13,7 @@ class PlantPositionViewTest(unittest.TestCase):
         self.db_fd, self.db_path = tempfile.mkstemp(suffix='.sqlite')
         os.close(self.db_fd)
         os.environ['DATABASE_URL'] = f'sqlite:///{self.db_path}'
+        os.environ['DEBUG'] = 'false'
         self.app = create_app()
         self.app.config.update(TESTING=True)
         self.client = self.app.test_client()
@@ -52,6 +53,7 @@ class PlantPositionViewTest(unittest.TestCase):
             db.drop_all()
         os.unlink(self.db_path)
         os.environ.pop('DATABASE_URL', None)
+        os.environ.pop('DEBUG', None)
 
     def test_plant_detail_reveals_position_save_button_via_hidden_class(self):
         response = self.client.get(f'/plants/{self.plant_id}')
@@ -61,6 +63,32 @@ class PlantPositionViewTest(unittest.TestCase):
         self.assertIn('id="plant-position-save" class="hidden"', html)
         self.assertIn("positionSaveButton.classList.remove('hidden')", html)
         self.assertIn("positionSaveButton.classList.add('hidden')", html)
+
+    def test_plant_detail_hides_magic_debug_ui_without_debug_mode(self):
+        self.app.config['DEBUG'] = False
+
+        response = self.client.get(f'/plants/{self.plant_id}')
+
+        self.assertEqual(response.status_code, 200)
+        html = response.get_data(as_text=True)
+        self.assertNotIn('id="magic-debug-last-common-name"', html)
+        self.assertNotIn('id="magic-debug-last-taxonomy"', html)
+        self.assertNotIn('id="magic-debug-log"', html)
+        self.assertNotIn('Magic-Debuglog', html)
+        self.assertIn('const magicDebugEnabled = false;', html)
+
+    def test_plant_detail_shows_magic_debug_ui_in_debug_mode(self):
+        self.app.config['DEBUG'] = True
+
+        response = self.client.get(f'/plants/{self.plant_id}')
+
+        self.assertEqual(response.status_code, 200)
+        html = response.get_data(as_text=True)
+        self.assertIn('id="magic-debug-last-common-name"', html)
+        self.assertIn('id="magic-debug-last-taxonomy"', html)
+        self.assertIn('id="magic-debug-log"', html)
+        self.assertIn('Magic-Debuglog', html)
+        self.assertIn('const magicDebugEnabled = true;', html)
 
 
 if __name__ == '__main__':

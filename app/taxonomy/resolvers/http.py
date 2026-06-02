@@ -11,7 +11,7 @@ from .base import ExternalCall
 
 USER_AGENT = 'garten-taxonomy-resolver/1.0'
 REQUEST_TIMEOUT = 8
-FULL_DEBUG_ENV_VAR = 'GARDENGLOW_FULL_DEBUG'
+DEBUG_ENV_VAR = 'DEBUG'
 _TRUE_VALUES = {'1', 'true', 'yes', 'on', 'y'}
 
 
@@ -22,8 +22,8 @@ def _env_flag(name, default='false'):
 def full_debug_enabled():
     """Return whether full external-request debugging is enabled."""
     if has_app_context():
-        return bool(current_app.config.get('GARDENGLOW_FULL_DEBUG'))
-    return _env_flag(FULL_DEBUG_ENV_VAR)
+        return bool(current_app.config.get('DEBUG'))
+    return _env_flag(DEBUG_ENV_VAR)
 
 
 def get_full_debug_external_requests():

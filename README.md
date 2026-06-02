@@ -42,7 +42,7 @@ services:
       OIDC_CLIENT_SECRET: change-me
       OIDC_LOGOUT_URL: https://example.com/logout
       WIDGET_API_KEY: change-this-api-key
-      GARDENGLOW_FULL_DEBUG: "false"
+      DEBUG: "false"
     volumes:
       - gardenglow_data:/data
     ports:
@@ -74,7 +74,7 @@ docker compose up --build
 - `MAP_FOLDER` – Verzeichnis für Karten-/Lageplan-Dateien
 - `WIDGET_API_KEY` – API-Key für den Statistik-Webservice `/api/stats`
 - `HEADER_LOGO_URL` – URL eines optionalen Header-Logos (wenn leer oder nicht gesetzt, wird kein Logo angezeigt)
-- `GARDENGLOW_FULL_DEBUG` – aktiviert mit `1`, `true`, `yes`, `on` oder `y` das vollständige Magic-/Taxonomie-Debugging. Dann enthält die JSON-Antwort zusätzlich alle externen Webanfragen samt Headern, Status und vollständigem Antwortinhalt. Standard: `false`.
+- `DEBUG` – aktiviert mit `1`, `true`, `yes`, `on` oder `y` das vollständige Magic-/Taxonomie-Debugging. Dann enthält die JSON-Antwort zusätzlich alle externen Webanfragen samt Headern, Status und vollständigem Antwortinhalt. Standard: `false`.
 
 ### OIDC (Pflicht für Login)
 
@@ -158,4 +158,4 @@ Wenn `SECRET_KEY` fehlt oder zu schwach ist, bricht die App mit einer klaren Kon
 ## Umgebungsvariablen
 
 - `COMMON_NAME_LOOKUP_LANG` steuert die Sprache für die automatische Suche des „Bürgerlichen Namens“ über Wikipedia. Standard: `de` (Deutsch).
-- `GARDENGLOW_FULL_DEBUG` schaltet das vollständige Magic-/Taxonomie-Debugging ein oder aus. Standardmäßig ist es aus; bei aktivem Wert (`1`, `true`, `yes`, `on`, `y`) werden externe Webanfragen inklusive komplettem Response-Content im Debug-Block der JSON-Antwort ausgegeben.
+- `DEBUG` schaltet das vollständige Magic-/Taxonomie-Debugging ein oder aus. Standardmäßig ist es aus; bei aktivem Wert (`1`, `true`, `yes`, `on`, `y`) werden externe Webanfragen inklusive komplettem Response-Content im Debug-Block der JSON-Antwort ausgegeben.

@@ -36,7 +36,7 @@ class TaxonomyServiceTest(unittest.TestCase):
     def test_to_response_includes_captured_web_requests_only_when_full_debug_enabled(self):
         suggestion = taxonomy_service.TaxonomySuggestion(scientific_name='Phlox paniculata', matches={'gbif': '12345'})
         app = Flask(__name__)
-        app.config['GARDENGLOW_FULL_DEBUG'] = True
+        app.config['DEBUG'] = True
 
         with app.app_context():
             g.taxonomy_full_debug_external_requests = [
