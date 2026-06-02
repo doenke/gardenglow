@@ -8,6 +8,7 @@ from functools import wraps
 from datetime import datetime
 from flask import Blueprint, current_app, g, render_template, request, redirect, url_for, session, jsonify, send_from_directory, flash
 from .models import db, User, Location, Plant, PlantPhoto, PlantNote, GardenMap, TimelineEntry, LightNeed, SoilProperty, PlantDatabaseIdentifier, plant_soil_property
+from .map_data import MapPointValidationError, parse_stored_points, validate_calibration_points, validate_polygon_points
 from .services.timeline_service import save_uploaded_attachment, set_single_title_entry, delete_timeline_entry, build_unique_upload_name
 from .auth import get_or_create_default_user, oidc_enabled
 from .taxonomy import service as taxonomy_service
@@ -780,7 +781,7 @@ def location_detail(location_id):
                 'id': other_loc.id,
                 'name': other_loc.name,
                 'color': other_loc.color or '#2f6d40',
-                'polygon_points': other_loc.polygon_points or '[]',
+                'polygon_points': parse_stored_points(other_loc.polygon_points),
             }
             for other_loc in other_locations
         ],
@@ -1005,7 +1006,10 @@ def upload_map():
 @main_bp.route('/map/calibration', methods=['POST'])
 @login_required
 def save_calibration():
-    payload = request.form.get('calibration_points', '[]')
+    try:
+        payload = validate_calibration_points(request.form.get('calibration_points', '[]'))
+    except MapPointValidationError as exc:
+        return str(exc), 400
     garden_map = get_or_create_garden_map()
     garden_map.calibration_points = payload
     db.session.commit()
@@ -1015,7 +1019,10 @@ def save_calibration():
 @main_bp.route('/map/boundary', methods=['POST'])
 @login_required
 def save_boundary():
-    payload = request.form.get('boundary_points', '[]')
+    try:
+        payload = validate_polygon_points(request.form.get('boundary_points', '[]'), 'Grundstücksgrenze')
+    except MapPointValidationError as exc:
+        return str(exc), 400
     garden_map = get_or_create_garden_map()
     garden_map.boundary_points = payload
     db.session.commit()
@@ -1026,8 +1033,12 @@ def save_boundary():
 @login_required
 def save_location_map(location_id):
     loc = Location.query.get_or_404(location_id)
+    try:
+        polygon_points = validate_polygon_points(request.form.get('polygon_points', '[]'), 'Beet-Polygonpunkte')
+    except MapPointValidationError as exc:
+        return str(exc), 400
     loc.color = request.form.get('color') or '#2f6d40'
-    loc.polygon_points = request.form.get('polygon_points') or '[]'
+    loc.polygon_points = polygon_points
     db.session.commit()
     return redirect(url_for('main.location_detail', location_id=location_id))
 

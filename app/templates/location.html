@@ -22,7 +22,7 @@
 <p>Kein Luftbild vorhanden. Bitte zuerst in der Konfiguration hochladen.</p>
 {% endif %}
 <form method="post" action="/locations/{{ location.id }}/map" id="polygon-form" class="grid hidden mb-1">
-  <input type="hidden" name="polygon_points" id="polygon-points-field" value='{{ location.polygon_points or "[]" }}'>
+  <input type="hidden" name="polygon_points" id="polygon-points-field" value='{{ (location.polygon_points | stored_points) | tojson }}'>
   <label>Farbe <input type="color" name="color" value="{{ location.color or '#2f6d40' }}"></label>
   <fieldset class="polygon-keyboard-controls">
     <legend>Polygonpunkte per Tastatur bearbeiten</legend>
@@ -139,8 +139,8 @@
   let polygonPoints = polygonField ? JSON.parse(polygonField.value || '[]') : [];
   const otherLocationPolygons = {{ other_location_polygons|tojson }};
   const plantsById = {{ location_plant_markers | tojson }};
-  const calibrationPoints = {{ ((garden_map.calibration_points or '[]') if garden_map else '[]') | safe }};
-  const gardenBoundary = {{ ((garden_map.boundary_points or '[]') if garden_map else '[]') | safe }};
+  const calibrationPoints = {{ (garden_map.calibration_points | stored_points if garden_map else []) | tojson }};
+  const gardenBoundary = {{ (garden_map.boundary_points | stored_points if garden_map else []) | tojson }};
   const MAP_BORDER_FADE_PX = 50;
   const MAP_BORDER_FADE_STEPS = 14;
   const toGeo = (px, py) => {
@@ -189,12 +189,7 @@
     const overlayHeight = locationImage.clientHeight || locationImage.naturalHeight;
     const otherPolygonsMarkup = polygonEditEnabled
       ? otherLocationPolygons.map((otherLocation) => {
-        let otherPoints = [];
-        try {
-          otherPoints = JSON.parse(otherLocation.polygon_points || '[]');
-        } catch (error) {
-          otherPoints = [];
-        }
+        const otherPoints = Array.isArray(otherLocation.polygon_points) ? otherLocation.polygon_points : [];
         if (otherPoints.length < 3) return '';
         const points = otherPoints.map((point) => { const p = toPixel(Number(point.x), Number(point.y)); return p ? `${p.x * overlayWidth},${p.y * overlayHeight}` : ''; }).filter(Boolean).join(' ');
         return `<polygon points="${points}" fill="${otherLocation.color}66"></polygon>`;
