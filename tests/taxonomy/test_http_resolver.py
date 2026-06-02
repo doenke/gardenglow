@@ -35,7 +35,7 @@ class ExternalCallHttpExecutionTest(unittest.TestCase):
         response.text = '{"usageKey":12345}'
         response.raise_for_status = Mock()
         app = Flask(__name__)
-        app.config['GARDENGLOW_FULL_DEBUG'] = True
+        app.config['DEBUG_MODE'] = True
 
         with app.app_context(), patch('app.taxonomy.resolvers.http.requests.get', return_value=response):
             execute_external_call(call, headers={'Accept': 'application/json'}, timeout=3)
@@ -74,7 +74,7 @@ class ExternalCallHttpExecutionTest(unittest.TestCase):
         response = Mock()
         response.raise_for_status = Mock()
         app = Flask(__name__)
-        app.config['GARDENGLOW_FULL_DEBUG'] = False
+        app.config['DEBUG_MODE'] = False
 
         with app.app_context(), patch('app.taxonomy.resolvers.http.requests.get', return_value=response):
             execute_external_call(call)
