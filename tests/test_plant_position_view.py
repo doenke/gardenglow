@@ -62,6 +62,14 @@ class PlantPositionViewTest(unittest.TestCase):
         self.assertIn("positionSaveButton.classList.remove('hidden')", html)
         self.assertIn("positionSaveButton.classList.add('hidden')", html)
 
+    def test_plant_map_image_keeps_native_dimensions_for_overlay_alignment(self):
+        response = self.client.get(f'/plants/{self.plant_id}')
+
+        self.assertEqual(response.status_code, 200)
+        html = response.get_data(as_text=True)
+        self.assertIn('#plant-map-image{position:absolute;left:0;top:0;display:block;max-width:none;', html)
+
+
 
 if __name__ == '__main__':
     unittest.main()
