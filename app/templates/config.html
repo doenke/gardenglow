@@ -5,13 +5,14 @@
 
   <h3>Luftbild</h3>
   <form method="post" action="/map/upload" enctype="multipart/form-data" class="grid mb-1">
-    <input type="file" name="map_image" accept="image/*" required>
+    <label for="map-image-upload">Luftbild-Datei</label>
+    <input id="map-image-upload" type="file" name="map_image" accept="image/*" required>
     <button>Luftbild hochladen</button>
   </form>
 
   {% if garden_map and garden_map.filename %}
   <div class="rel-inline mb-1 line-0">
-    <img id="overview-map-image" src="/maps/{{ garden_map.filename }}" class="map-image">
+    <img id="overview-map-image" src="/maps/{{ garden_map.filename }}" alt="Luftbild des Gartens zur Kalibrierung und Grundstücksgrenze" class="map-image">
     <svg id="overview-map-overlay" class="map-overlay overlay-no-pointer" preserveAspectRatio="none"></svg>
   </div>
 
@@ -47,7 +48,23 @@
   <h3>Grundstücksgrenze</h3>
   <form method="post" action="/map/boundary" id="boundary-form" class="grid mb-1">
     <input type="hidden" name="boundary_points" id="boundary-points-input">
-    <div><strong>Polygon setzen:</strong> Punkte mit <kbd>Shift</kbd> + Klick nacheinander im Bild anklicken.</div>
+    <div><strong>Polygon setzen:</strong> Aktiviere „Grenzpunkt per Karte setzen“ und klicke/tippe anschließend ins Luftbild. Alternativ kannst du Punkte per Koordinatenfeld hinzufügen oder bestehende Punkte direkt bearbeiten.</div>
+    <fieldset class="boundary-keyboard-controls">
+      <legend>Grenzpunkte per Tastatur bearbeiten</legend>
+      <div class="grid grid-auto-200">
+        <label for="boundary-new-point-x">Koordinate X
+          <input id="boundary-new-point-x" type="text" inputmode="decimal" placeholder="z. B. 52,520008">
+        </label>
+        <label for="boundary-new-point-y">Koordinate Y
+          <input id="boundary-new-point-y" type="text" inputmode="decimal" placeholder="z. B. 13,404954">
+        </label>
+      </div>
+      <div class="actions-inline">
+        <button type="button" id="add-boundary-point" class="btn secondary">Grenzpunkt hinzufügen</button>
+        <button type="button" id="pick-boundary-point" class="btn secondary" aria-pressed="false">Grenzpunkt per Karte setzen</button>
+      </div>
+      <div id="boundary-point-list" class="boundary-point-list" aria-live="polite"></div>
+    </fieldset>
     <div class="actions-inline">
       <button type="button" id="remove-boundary-point" class="btn secondary">Letzten Punkt entfernen</button>
       <button type="button" id="clear-boundary-points" class="btn secondary">Alles löschen</button>
@@ -57,6 +74,11 @@
   {% endif %}
 </section>
 
+<style>
+.boundary-point-list{display:grid;gap:.5rem}
+.boundary-point-row{display:grid;grid-template-columns:auto repeat(2,minmax(140px,1fr));gap:.5rem;align-items:end}
+@media (max-width:700px){.boundary-point-row{grid-template-columns:1fr}}
+</style>
 
 <script>
   const allLocations = [
@@ -91,10 +113,16 @@
   const boundaryInput = document.getElementById('boundary-points-input');
   const clearBoundaryButton = document.getElementById('clear-boundary-points');
   const removeBoundaryButton = document.getElementById('remove-boundary-point');
+  const addBoundaryButton = document.getElementById('add-boundary-point');
+  const pickBoundaryButton = document.getElementById('pick-boundary-point');
+  const boundaryPointList = document.getElementById('boundary-point-list');
+  const boundaryNewPointX = document.getElementById('boundary-new-point-x');
+  const boundaryNewPointY = document.getElementById('boundary-new-point-y');
 
   let activeCalibration = Array.isArray(calibrationPoints) ? calibrationPoints.slice(0, 2) : [];
   let activeBoundary = Array.isArray(boundaryPoints) ? boundaryPoints : [];
   let nextPointIndex = activeCalibration.length >= 2 ? 0 : activeCalibration.length;
+  let boundaryPickMode = false;
 
   const toNumberOrNull = (value) => {
     const trimmed = (value || '').trim();
@@ -174,6 +202,34 @@
     if (boundaryInput) boundaryInput.value = JSON.stringify(activeBoundary);
   };
 
+  const syncBoundaryPointList = () => {
+    if (!boundaryPointList) return;
+    boundaryPointList.innerHTML = activeBoundary.map((point, index) => `
+      <div class="boundary-point-row">
+        <span>Grenzpunkt ${index + 1}</span>
+        <label>Koordinate X
+          <input type="text" inputmode="decimal" value="${Number(point.x)}" data-boundary-coordinate="x" data-boundary-point-index="${index}">
+        </label>
+        <label>Koordinate Y
+          <input type="text" inputmode="decimal" value="${Number(point.y)}" data-boundary-coordinate="y" data-boundary-point-index="${index}">
+        </label>
+      </div>`).join('') || '<small class="text-muted">Noch keine Grenzpunkte vorhanden.</small>';
+  };
+
+  const updateBoundary = () => {
+    syncBoundaryInput();
+    syncBoundaryPointList();
+    renderOverlay();
+  };
+
+  const setBoundaryPickMode = (isEnabled) => {
+    boundaryPickMode = isEnabled;
+    if (pickBoundaryButton) {
+      pickBoundaryButton.setAttribute('aria-pressed', isEnabled ? 'true' : 'false');
+      pickBoundaryButton.textContent = isEnabled ? 'Karte antippen …' : 'Grenzpunkt per Karte setzen';
+    }
+  };
+
   const syncOverlayGeometry = () => {
     if (!img || !svg) return;
     const width = img.clientWidth || img.naturalWidth;
@@ -195,23 +251,24 @@
       renderOverlay();
     });
 
-    img.addEventListener('click', (event) => {
+    img.addEventListener('pointerdown', (event) => {
       const rect = img.getBoundingClientRect();
       const x = (event.clientX - rect.left) / rect.width;
       const y = (event.clientY - rect.top) / rect.height;
-      if (event.shiftKey) {
+      if (boundaryPickMode) {
         const g = toGeo(x, y);
         if (!g) return;
         activeBoundary.push(g);
-        syncBoundaryInput();
-      } else {
-        activeCalibration[nextPointIndex] = {
-          ...(activeCalibration[nextPointIndex] || {}),
-          x,
-          y,
-        };
-        nextPointIndex = nextPointIndex === 0 ? 1 : 0;
+        setBoundaryPickMode(false);
+        updateBoundary();
+        return;
       }
+      activeCalibration[nextPointIndex] = {
+        ...(activeCalibration[nextPointIndex] || {}),
+        x,
+        y,
+      };
+      nextPointIndex = nextPointIndex === 0 ? 1 : 0;
       syncCalibrationInputs();
       renderOverlay();
     });
@@ -234,19 +291,47 @@
   });
 
   syncCalibrationInputs();
-  syncBoundaryInput();
+  updateBoundary();
 
   if (clearBoundaryButton) {
     clearBoundaryButton.addEventListener('click', () => {
       activeBoundary = [];
-      syncBoundaryInput();
-      renderOverlay();
+      updateBoundary();
     });
   }
 
   if (removeBoundaryButton) {
     removeBoundaryButton.addEventListener('click', () => {
       activeBoundary = activeBoundary.slice(0, -1);
+      updateBoundary();
+    });
+  }
+
+  if (addBoundaryButton) {
+    addBoundaryButton.addEventListener('click', () => {
+      const x = toNumberOrNull(boundaryNewPointX?.value);
+      const y = toNumberOrNull(boundaryNewPointY?.value);
+      if (x === null || y === null) return;
+      activeBoundary.push({ x, y });
+      if (boundaryNewPointX) boundaryNewPointX.value = '';
+      if (boundaryNewPointY) boundaryNewPointY.value = '';
+      updateBoundary();
+    });
+  }
+
+  if (pickBoundaryButton) {
+    pickBoundaryButton.addEventListener('click', () => {
+      setBoundaryPickMode(!boundaryPickMode);
+    });
+  }
+
+  if (boundaryPointList) {
+    boundaryPointList.addEventListener('input', (event) => {
+      const index = Number(event.target?.dataset?.boundaryPointIndex);
+      const coordinate = event.target?.dataset?.boundaryCoordinate;
+      const value = toNumberOrNull(event.target?.value);
+      if (!Number.isInteger(index) || !['x', 'y'].includes(coordinate) || value === null || !activeBoundary[index]) return;
+      activeBoundary[index][coordinate] = value;
       syncBoundaryInput();
       renderOverlay();
     });

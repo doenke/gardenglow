@@ -15,7 +15,7 @@
 </div>
 {% if garden_map and garden_map.filename %}
 <div class="rel-inline mb-75">
-  <img id="location-map-image" src="/maps/{{ garden_map.filename }}" class="map-image">
+  <img id="location-map-image" src="/maps/{{ garden_map.filename }}" alt="Luftbild zur Bearbeitung des Beets {{ location.name }}" class="map-image">
   <svg id="location-map-overlay" class="map-overlay overlay-no-pointer" preserveAspectRatio="none"></svg>
 </div>
 {% else %}
@@ -96,8 +96,10 @@
 
 <h3>Timeline</h3>
 <form method="post" action="/locations/{{ location.id }}/timeline/new" enctype="multipart/form-data" class="grid mb-1">
-  <textarea name="description" placeholder="Beschreibung"></textarea>
-  <input type="file" name="attachment" accept="image/*,application/pdf">
+  <label for="location-timeline-description">Beschreibung</label>
+  <textarea id="location-timeline-description" name="description" placeholder="z. B. Beet vorbereitet oder gemulcht"></textarea>
+  <label for="location-timeline-attachment">Foto oder PDF anhängen</label>
+  <input id="location-timeline-attachment" type="file" name="attachment" accept="image/*,application/pdf">
   <small class="text-muted">Text, Bild oder beides möglich.</small>
   <button>Eintrag hinzufügen</button>
 </form>

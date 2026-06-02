@@ -44,9 +44,10 @@
   </tbody>
 </table>
 
-<dialog id="location-color-dialog">
+<dialog id="location-color-dialog" aria-labelledby="location-color-title">
   <form method="post" id="location-color-form" class="grid">
     <h3 id="location-color-title" class="m-0">Farbe ändern</h3>
+    <label for="location-color-input">Beetfarbe</label>
     <input type="color" id="location-color-input" name="color" value="#2f6d40" required>
     <div class="actions-inline">
       <button type="submit">Speichern</button>

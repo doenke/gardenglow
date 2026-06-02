@@ -238,7 +238,7 @@
     {% if garden_map and garden_map.filename and location %}
     <div class="plant-map-panel">
       <div class="plant-map-wrapper">
-        <img id="plant-map-image" src="/maps/{{ garden_map.filename }}" class="map-image">
+        <img id="plant-map-image" src="/maps/{{ garden_map.filename }}" alt="Luftbild zur Positionsbearbeitung von {{ plant.name }}" class="map-image">
         <button type="button" id="plant-position-edit-toggle" class="plant-position-edit-icon" aria-label="Position setzen" title="Position setzen">✏️</button>
         <small id="plant-position-instructions" class="plant-position-instructions text-muted hidden">Klicke/tippe auf die Karte, um die Position zu setzen. Ziehe den Pflanzenmarker zum Verschieben.</small>
         <svg id="plant-map-overlay-base"></svg>
@@ -307,11 +307,20 @@
       <h4 class="timeline-toolbar-title">Neues Event</h4>
       <form method="post" action="/plants/{{ plant.id }}/events" enctype="multipart/form-data" class="grid timeline-form">
         <div class="timeline-form-row">
-          <input name="title" placeholder="Titel">
-          <textarea name="description" placeholder="Beschreibung"></textarea>
+          <div class="timeline-field">
+            <label for="plant-event-title">Titel</label>
+            <input id="plant-event-title" name="title" placeholder="z. B. Rückschnitt">
+          </div>
+          <div class="timeline-field">
+            <label for="plant-event-description">Beschreibung</label>
+            <textarea id="plant-event-description" name="description" placeholder="z. B. Verblühte Triebe entfernt"></textarea>
+          </div>
         </div>
         <div class="timeline-form-row">
-          <input id="event-attachment" type="file" name="attachment" accept="image/*,application/pdf" capture="environment">
+          <div class="timeline-field">
+            <label for="event-attachment">Foto oder PDF anhängen</label>
+            <input id="event-attachment" type="file" name="attachment" accept="image/*,application/pdf" capture="environment">
+          </div>
           <button>Speichern</button>
         </div>
       </form>
@@ -443,6 +452,7 @@ legend{padding:0 .4rem;font-weight:600;color:var(--muted);letter-spacing:.01em}
 .timeline-form{margin:0}
 .timeline-form-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.6rem;align-items:start}
 .timeline-form-row textarea{min-height:5.2rem}
+.timeline-field{display:grid;gap:.35rem}
 .image-modal{position:fixed;inset:0;background:rgba(0,0,0,.86);z-index:9999;align-items:center;justify-content:center;padding:1rem;touch-action:none}
 .image-modal-inner{position:relative;max-width:92vw;max-height:92vh;display:flex;align-items:center;gap:.5rem}
 .image-modal-img{max-width:min(84vw,1200px);max-height:88vh;border-radius:10px;background:#fff;box-shadow:0 18px 40px rgba(0,0,0,.45);object-fit:contain;user-select:none;-webkit-user-drag:none;touch-action:none}
