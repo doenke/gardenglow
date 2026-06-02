@@ -13,20 +13,58 @@ def build_unique_upload_name(filename):
     return f"{uuid4().hex}_{sanitized}"
 
 
-def save_uploaded_attachment(file, upload_folder, allowed_exts, allowed_mime_types=None, max_size_bytes=None):
+def _file_extension(filename):
+    if not filename or '.' not in filename:
+        return None
+    return filename.rsplit('.', 1)[1].lower()
+
+
+def _detected_image_extension(file):
+    stream = file.stream
+    position = stream.tell()
+    header = stream.read(32)
+    stream.seek(position)
+
+    if header.startswith(b'\x89PNG\r\n\x1a\n'):
+        return 'png'
+    if header.startswith(b'\xff\xd8\xff'):
+        return 'jpg'
+    if header.startswith((b'GIF87a', b'GIF89a')):
+        return 'gif'
+    if len(header) >= 12 and header.startswith(b'RIFF') and header[8:12] == b'WEBP':
+        return 'webp'
+    return None
+
+
+def save_uploaded_attachment(
+    file,
+    upload_folder,
+    allowed_exts,
+    allowed_mime_types=None,
+    max_size_bytes=None,
+    require_image_content=False,
+):
     if not file or not file.filename:
         return None, None
 
     if '.' not in file.filename:
         return None, 'extension_not_allowed'
 
-    ext = file.filename.rsplit('.', 1)[1].lower()
+    ext = _file_extension(file.filename)
     if ext not in allowed_exts:
         return None, 'extension_not_allowed'
 
     mimetype = (file.mimetype or '').split(';', 1)[0].strip().lower()
     if allowed_mime_types and mimetype not in allowed_mime_types:
         return None, 'mime_not_allowed'
+
+    if require_image_content:
+        detected_ext = _detected_image_extension(file)
+        if not detected_ext:
+            return None, 'image_content_not_allowed'
+        matching_exts = {'jpg', 'jpeg'} if ext in {'jpg', 'jpeg'} else {ext}
+        if detected_ext not in matching_exts:
+            return None, 'image_content_not_allowed'
 
     if max_size_bytes is not None:
         file.stream.seek(0, os.SEEK_END)
