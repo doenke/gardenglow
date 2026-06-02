@@ -1,19 +1,20 @@
 # GardenGlow
 
 GardenGlow ist eine Progressive Web App (PWA) zur Verwaltung eines Gartenkatalogs.
-Die Anwendung verwaltet Pflanzorte, Pflanzen, Fotos und Kommentare – mit **ausschließlicher Anmeldung über OIDC (OpenID Connect)**.
+Die Anwendung verwaltet Pflanzorte, Pflanzen, Fotos und Kommentare – wahlweise mit OIDC (OpenID Connect) oder ohne OIDC automatisch mit dem Standardbenutzer **„Gärtner“**.
 
 ## Funktionsbeschreibung
 
 GardenGlow ist für den Betrieb in Containern ausgelegt und speichert alle Daten persistent in einem Volume.
-Nach dem Start meldet sich der Benutzer über einen externen OIDC-Provider an (kein lokaler Benutzername/Passwort-Login).
+Nach dem Start meldet sich der Benutzer bei gesetzter OIDC-Konfiguration über einen externen OIDC-Provider an. Ohne OIDC-Variablen wird automatisch der Standardbenutzer **„Gärtner“** verwendet; ein gesonderter Login ist dann nicht nötig.
 Nach erfolgreicher Anmeldung können Gartenbereiche (Pflanzorte) angelegt und darin Pflanzen verwaltet werden.
 Zu Pflanzen lassen sich Fotos mit Datum und Kommentar sowie reine Textkommentare hinterlegen.
 Zusätzlich ist die Anwendung als installierbare PWA nutzbar und enthält einen Healthcheck-Endpunkt für Monitoring.
 
 ## Features
 
-- OIDC-Login (OpenID Connect) als **einziger** Authentifizierungsweg
+- OIDC-Login (OpenID Connect) bei gesetzter OIDC-Konfiguration
+- Automatischer Standardbenutzer **„Gärtner“**, wenn keine OIDC-Variablen gesetzt sind
 - Benutzerprofil mit Name, E-Mail und Avatar (Avatar-Download vom OIDC-Profilbild)
 - Verwaltung von Pflanzorten und zugeordneten Pflanzen
 - Foto-Uploads inkl. Datum und Beschreibung
@@ -76,14 +77,14 @@ docker compose up --build
 - `HEADER_LOGO_URL` – URL eines optionalen Header-Logos (wenn leer oder nicht gesetzt, wird kein Logo angezeigt)
 - `DEBUG_MODE` – aktiviert mit `1`, `true`, `yes`, `on` oder `y` das vollständige Magic-/Taxonomie-Debugging. Ohne aktivierten Debug-Modus werden auf der Pflanzenseite keine Magic-Debug-Hinweise und kein Magic-Debuglog angezeigt. Bei aktivem Debug enthält die JSON-Antwort zusätzlich alle externen Webanfragen samt Headern, Status und vollständigem Antwortinhalt. Standard: `false`.
 
-### OIDC (Pflicht für Login)
+### OIDC (optional)
 
 - `OIDC_SERVER_METADATA_URL` – URL zur OIDC Discovery (`.well-known/openid-configuration`)
 - `OIDC_CLIENT_ID` – OIDC Client-ID
 - `OIDC_CLIENT_SECRET` – OIDC Client-Secret
 - `OIDC_LOGOUT_URL` *(optional)* – Externe Logout-URL des Identity-Providers
 
-> Hinweis: Ohne korrekt gesetzte OIDC-Variablen ist keine Anmeldung möglich, da GardenGlow keinen lokalen Passwort-Login anbietet.
+> Hinweis: Wenn keine der OIDC-Variablen gesetzt ist, startet GardenGlow ohne externen Login und meldet automatisch den Standardbenutzer **„Gärtner“** an. Sobald mindestens eine OIDC-Variable gesetzt ist, müssen `OIDC_SERVER_METADATA_URL`, `OIDC_CLIENT_ID` und `OIDC_CLIENT_SECRET` vollständig vorhanden sein.
 
 ## Webservice für Pflanzen-/Beet-Zahlen
 

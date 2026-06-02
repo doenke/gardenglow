@@ -9,6 +9,7 @@ from datetime import datetime
 from flask import Blueprint, current_app, g, render_template, request, redirect, url_for, session, jsonify, send_from_directory, flash
 from .models import db, User, Location, Plant, PlantPhoto, PlantNote, GardenMap, TimelineEntry, LightNeed, SoilProperty, PlantDatabaseIdentifier, plant_soil_property
 from .services.timeline_service import save_uploaded_attachment, set_single_title_entry, delete_timeline_entry, build_unique_upload_name
+from .auth import get_or_create_default_user, oidc_enabled
 from .taxonomy import service as taxonomy_service
 from .taxonomy.catalogs import get_database_catalog_by_key, get_database_catalogs
 from .taxonomy.resolvers.base import ExternalCall, normalize_scientific_name_for_lookup
@@ -524,6 +525,8 @@ def current_user():
 
     uid = session.get('user_id')
     user = User.query.get(uid) if uid else None
+    if user is None and not oidc_enabled():
+        user = get_or_create_default_user()
     g._current_user = user
     g._current_user_loaded = True
     return user
