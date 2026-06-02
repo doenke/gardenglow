@@ -1,7 +1,7 @@
 from flask import Flask
 from werkzeug.middleware.proxy_fix import ProxyFix
 from .models import db, LightNeed
-from .auth import auth_bp, oauth
+from .auth import OIDC_ENV_VARS, auth_bp, oauth, oidc_configured_from_env
 from .views import main_bp
 import os
 
@@ -45,14 +45,9 @@ def _validate_secret_key(secret_key):
 
 
 def _validate_oidc_config():
-    oidc_vars = [
-        'OIDC_SERVER_METADATA_URL',
-        'OIDC_CLIENT_ID',
-        'OIDC_CLIENT_SECRET',
-    ]
-    values = {name: os.getenv(name, '').strip() for name in oidc_vars}
+    values = {name: os.getenv(name, '').strip() for name in OIDC_ENV_VARS}
 
-    oidc_enabled = any(values.values())
+    oidc_enabled = oidc_configured_from_env()
     if not oidc_enabled:
         return
 
@@ -72,6 +67,7 @@ def create_app():
     _validate_oidc_config()
 
     app.config['SECRET_KEY'] = secret_key
+    app.config['OIDC_ENABLED'] = oidc_configured_from_env()
     app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL', 'sqlite:///garden.db')
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     app.config['UPLOAD_FOLDER'] = os.getenv('UPLOAD_FOLDER', '/data/uploads')
