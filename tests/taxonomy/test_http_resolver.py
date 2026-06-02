@@ -1,6 +1,7 @@
 import unittest
 from unittest.mock import Mock, patch
 
+import requests
 from flask import Flask
 
 from app.taxonomy.resolvers.base import ExternalCall
@@ -25,7 +26,6 @@ class ExternalCallHttpExecutionTest(unittest.TestCase):
         )
         response.raise_for_status.assert_called_once_with()
 
-
     def test_execute_external_call_captures_full_debug_when_enabled(self):
         call = ExternalCall(catalog='gbif', url='https://example.test/api', query={'q': 'Phlox'})
         response = Mock()
@@ -46,6 +46,28 @@ class ExternalCallHttpExecutionTest(unittest.TestCase):
         self.assertEqual(call.full_debug['headers']['Accept'], 'application/json')
         self.assertEqual(call.full_debug['timeout'], 3)
         self.assertEqual(captured[0]['response']['content'], '{"usageKey":12345}')
+
+    def test_execute_external_call_retries_ssl_errors_with_insecure_fallback_when_allowed(self):
+        call = ExternalCall(
+            catalog='wfo',
+            url='https://list.worldfloraonline.org/matching_rest.php',
+            query={'input_string': 'Brunnera macrophylla'},
+            allow_insecure_tls_fallback=True,
+        )
+        response = Mock()
+        response.raise_for_status = Mock()
+
+        with patch(
+            'app.taxonomy.resolvers.http.requests.get',
+            side_effect=[requests.exceptions.SSLError('certificate verify failed'), response],
+        ) as requests_get:
+            result = execute_external_call(call)
+
+        self.assertIs(result, response)
+        self.assertEqual(requests_get.call_count, 2)
+        self.assertNotIn('verify', requests_get.call_args_list[0].kwargs)
+        self.assertFalse(requests_get.call_args_list[1].kwargs['verify'])
+        response.raise_for_status.assert_called_once_with()
 
     def test_execute_external_call_omits_full_debug_by_default(self):
         call = ExternalCall(catalog='gbif', url='https://example.test/api', query={'q': 'Phlox'})

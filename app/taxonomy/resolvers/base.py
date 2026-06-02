@@ -14,6 +14,7 @@ class ExternalCall:
     query: dict[str, str] = field(default_factory=dict)
     request_url: str | None = None
     full_debug: dict[str, Any] | None = None
+    allow_insecure_tls_fallback: bool = False
 
     def __post_init__(self):
         self.query = {str(key): str(value) for key, value in dict(self.query or {}).items()}
@@ -29,6 +30,8 @@ class ExternalCall:
         }
         if self.full_debug is not None:
             payload['full_debug'] = self.full_debug
+        if self.allow_insecure_tls_fallback:
+            payload['allow_insecure_tls_fallback'] = True
         return payload
 
 

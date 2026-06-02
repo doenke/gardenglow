@@ -57,7 +57,7 @@ def _response_debug_payload(response):
     }
 
 
-def _record_full_debug(call, *, headers, timeout, duration_ms, response=None, error=None):
+def _record_full_debug(call, *, headers, timeout, duration_ms, response=None, error=None, verify=True):
     if not full_debug_enabled():
         return
 
@@ -69,6 +69,7 @@ def _record_full_debug(call, *, headers, timeout, duration_ms, response=None, er
         'headers': dict(headers or {}),
         'timeout': timeout,
         'duration_ms': duration_ms,
+        'verify_tls': verify,
     }
     if response is not None:
         entry['response'] = _response_debug_payload(response)
@@ -80,6 +81,17 @@ def _record_full_debug(call, *, headers, timeout, duration_ms, response=None, er
 
     call.full_debug = entry
     _append_full_debug_entry(entry)
+
+
+def _perform_get(call, request_headers, request_timeout, *, verify=True):
+    kwargs = {
+        'params': call.query,
+        'headers': request_headers,
+        'timeout': request_timeout,
+    }
+    if verify is False:
+        kwargs['verify'] = False
+    return requests.get(call.url, **kwargs)
 
 
 def execute_external_call(call: ExternalCall, headers=None, timeout=None):
@@ -98,13 +110,26 @@ def execute_external_call(call: ExternalCall, headers=None, timeout=None):
     started_at = time.perf_counter()
     response = None
     request_failed = False
+    verify = True
     try:
-        response = requests.get(
-            call.url,
-            params=call.query,
-            headers=request_headers,
-            timeout=request_timeout,
-        )
+        try:
+            response = _perform_get(call, request_headers, request_timeout)
+        except requests.exceptions.SSLError as error:
+            if not call.allow_insecure_tls_fallback:
+                raise
+            duration_ms = round((time.perf_counter() - started_at) * 1000, 1)
+            _record_full_debug(
+                call,
+                headers=request_headers,
+                timeout=request_timeout,
+                duration_ms=duration_ms,
+                response=response,
+                error=error,
+                verify=True,
+            )
+            started_at = time.perf_counter()
+            verify = False
+            response = _perform_get(call, request_headers, request_timeout, verify=False)
         response.raise_for_status()
         return response
     except requests.RequestException as error:
@@ -117,6 +142,7 @@ def execute_external_call(call: ExternalCall, headers=None, timeout=None):
             duration_ms=duration_ms,
             response=response,
             error=error,
+            verify=verify,
         )
         raise
     finally:
@@ -128,6 +154,7 @@ def execute_external_call(call: ExternalCall, headers=None, timeout=None):
                 timeout=request_timeout,
                 duration_ms=duration_ms,
                 response=response,
+                verify=verify,
             )
 
 
