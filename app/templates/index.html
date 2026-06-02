@@ -12,10 +12,9 @@
   <label class="sr-only" for="locations-search">Beete durchsuchen</label>
   <input type="search" id="locations-search" placeholder="z. B. Kräuterbeet">
 </div>
-<table>
+<table class="locations-table">
   <thead>
     <tr>
-      <th></th>
       <th>Beet</th>
       <th>Beschreibung</th>
       <th>Pflanzen</th>
@@ -23,22 +22,28 @@
   </thead>
   <tbody>
   {% for l in locations %}
+    {% set plant_count = location_plant_counts.get(l.id, 0) %}
     <tr data-row-link="/locations/{{ l.id }}">
-      <td data-label="Farbe">
-        {% if l.name != 'Papierkorb' %}
-        <button
-          type="button"
-          class="location-color-trigger color-dot"
-          style="background-color: {{ l.color or "#2f6d40" }};"
-          data-location-id="{{ l.id }}"
-          data-location-name="{{ l.name }}"
-          data-location-color="{{ l.color or '#2f6d40' }}"
-          aria-label="Farbe für {{ l.name }} ändern"></button>
-        {% endif %}
+      <td data-label="Beet" class="location-name-cell">
+        <div class="location-name-row">
+          <span class="location-name-main">
+            {% if l.name != 'Papierkorb' %}
+            <button
+              type="button"
+              class="location-color-trigger color-dot"
+              style="background-color: {{ l.color or '#2f6d40' }};"
+              data-location-id="{{ l.id }}"
+              data-location-name="{{ l.name }}"
+              data-location-color="{{ l.color or '#2f6d40' }}"
+              aria-label="Farbe für {{ l.name }} ändern"></button>
+            {% endif %}
+            <a class="table-row-link" href="/locations/{{ l.id }}">{{ l.name }}</a>
+          </span>
+          <span class="plant-count-badge plant-count-badge-mobile" aria-label="{{ plant_count }} Pflanzen">{{ plant_count }}</span>
+        </div>
       </td>
-      <td data-label="Beet"><a class="table-row-link" href="/locations/{{ l.id }}">{{ l.name }}</a></td>
-      <td data-label="Beschreibung">{{ l.description }}</td>
-      <td data-label="Pflanzen">{{ location_plant_counts.get(l.id, 0) }}</td>
+      <td data-label="Beschreibung" class="location-description-cell{% if not l.description %} is-empty{% endif %}">{{ l.description or '' }}</td>
+      <td data-label="Pflanzen" class="plant-count-cell"><span class="plant-count-badge" aria-label="{{ plant_count }} Pflanzen">{{ plant_count }}</span></td>
     </tr>
   {% endfor %}
   </tbody>
