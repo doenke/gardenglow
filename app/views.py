@@ -1250,11 +1250,7 @@ def update_masterdata(plant_id):
         changes.append(f"Bodeneigenschaften: {old_soil_display} → {new_soil_display}")
         plant.soil_properties = new_soil_properties
 
-    before_ids = {f"{entry.catalog.key}:{entry.taxonomy_id}" for entry in plant.database_identifiers if entry.catalog}
     upsert_plant_database_identifiers(plant, request.form)
-    after_ids = {f"{entry.catalog.key}:{entry.taxonomy_id}" for entry in plant.database_identifiers if entry.catalog}
-    if before_ids != after_ids:
-        changes.append('Datenbank-IDs wurden aktualisiert.')
 
     if changes:
         create_timeline_entry(

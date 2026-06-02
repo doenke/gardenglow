@@ -5,7 +5,7 @@ import unittest
 os.environ.setdefault('SECRET_KEY', 'x' * 40)
 
 from app import create_app
-from app.models import Location, Plant, PlantDatabaseIdentifier, User, db
+from app.models import Location, Plant, PlantDatabaseIdentifier, TimelineEntry, User, db
 
 
 class PlantDatabaseIdentifierViewTest(unittest.TestCase):
@@ -73,6 +73,26 @@ class PlantDatabaseIdentifierViewTest(unittest.TestCase):
                 catalog_key='wikipedia_de',
             ).one()
             self.assertEqual(identifier.taxonomy_id, 'Großblättriges_Kaukasusvergissmeinnicht')
+
+    def test_database_identifier_update_does_not_create_timeline_entry(self):
+        response = self.client.post(
+            f'/plants/{self.plant_id}/masterdata',
+            data={
+                'name': 'Brunnera',
+                'location_id': str(self.location_id),
+                'database_id_wikipedia_de': 'Brunnera_macrophylla',
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        with self.app.app_context():
+            identifier = PlantDatabaseIdentifier.query.filter_by(
+                plant_id=self.plant_id,
+                catalog_key='wikipedia_de',
+            ).one()
+            self.assertEqual(identifier.taxonomy_id, 'Brunnera_macrophylla')
+            timeline_entries = TimelineEntry.query.filter_by(scope_type='plant', scope_id=self.plant_id).all()
+            self.assertEqual(timeline_entries, [])
 
     def test_database_links_follow_catalog_display_order(self):
         with self.app.app_context():
