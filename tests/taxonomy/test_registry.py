@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import patch
 
-from app.taxonomy.catalogs import DatabaseCatalogConfig
+from app.taxonomy.catalogs import DatabaseCatalogConfig, get_database_catalog_by_key
 from app.taxonomy import registry
 from app.taxonomy import resolvers  # noqa: F401 - import triggers static resolver registration
 from app.taxonomy.resolvers.base import ResolverRequest, validate_common_config
@@ -40,6 +40,15 @@ class TaxonomyRegistryTest(unittest.TestCase):
                 resolver = registry.get_resolver_for_catalog(catalog)
 
                 self.assertIsInstance(resolver, expected_resolver_class)
+
+    def test_default_floraweb_catalog_uses_taxonomie_record_url(self):
+        catalog = get_database_catalog_by_key('floraweb')
+
+        self.assertIsNotNone(catalog)
+        self.assertEqual(
+            catalog.record_url_template,
+            'https://www.floraweb.de/php/taxonomie.php?taxon-id={id}',
+        )
 
 
 class TaxonomyResolverConfigTest(unittest.TestCase):

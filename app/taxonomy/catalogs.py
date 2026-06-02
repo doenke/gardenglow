@@ -37,7 +37,7 @@ _DEFAULT_DATABASE_CATALOGS = (
     DatabaseCatalogConfig(
         key='floraweb',
         label='FloraWeb',
-        record_url_template='https://www.floraweb.de/taxon/{id}',
+        record_url_template='https://www.floraweb.de/php/taxonomie.php?taxon-id={id}',
         search_url_template='https://www.floraweb.de/php/taxoquery.php?taxname={q}',
         icon_url='https://www.floraweb.de/favicon.ico',
     ),
