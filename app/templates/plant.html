@@ -238,12 +238,21 @@
       <div class="plant-map-wrapper">
         <img id="plant-map-image" src="/maps/{{ garden_map.filename }}" class="map-image">
         <button type="button" id="plant-position-edit-toggle" class="plant-position-edit-icon" aria-label="Position setzen" title="Position setzen">✏️</button>
+        <small id="plant-position-instructions" class="plant-position-instructions text-muted hidden">Klicke/tippe auf die Karte, um die Position zu setzen. Ziehe den Pflanzenmarker zum Verschieben.</small>
         <svg id="plant-map-overlay-base"></svg>
         <svg id="plant-map-overlay-markers"></svg>
       </div>
       <form method="post" action="/plants/{{ plant.id }}/position" class="grid mt-75">
-        <input type="hidden" id="plant-map-x" name="map_x" value="{{ plant.map_x if plant.map_x is not none else '' }}">
-        <input type="hidden" id="plant-map-y" name="map_y" value="{{ plant.map_y if plant.map_y is not none else '' }}">
+        <div class="field-pair">
+          <div class="field-pair-item">
+            <label for="plant-map-x">Breitengrad</label>
+            <input id="plant-map-x" type="number" step="any" min="-90" max="90" inputmode="decimal" name="map_x" value="{{ plant.map_x if plant.map_x is not none else '' }}" placeholder="z. B. 52.5200">
+          </div>
+          <div class="field-pair-item">
+            <label for="plant-map-y">Längengrad</label>
+            <input id="plant-map-y" type="number" step="any" min="-180" max="180" inputmode="decimal" name="map_y" value="{{ plant.map_y if plant.map_y is not none else '' }}" placeholder="z. B. 13.4050">
+          </div>
+        </div>
         <div class="actions-inline">
           <button type="submit" id="plant-position-save" class="hidden">Speichern</button>
         </div>
@@ -355,6 +364,7 @@
 .plant-title-search-link{display:inline-flex;align-items:center;justify-content:center;width:2rem;height:2rem;border-radius:999px;text-decoration:none;font-size:1.1rem;line-height:1;background:var(--surface-soft);border:1px solid var(--border)}
 .plant-title-search-link:hover,.plant-title-search-link:focus-visible{background:var(--accent-soft);outline:none}
 .plant-detail-layout{display:block}
+.text-muted{color:var(--muted)}
 .plant-top-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(260px,460px);gap:1rem;align-items:start}
 .plant-main-column{min-width:0}
 .plant-masterdata{min-width:0}
@@ -378,8 +388,10 @@
 #plant-map-overlay-base,#plant-map-overlay-markers{position:absolute;left:0;top:0;width:100%;height:100%;transform-origin:0 0}
 #plant-map-overlay-base{pointer-events:none}
 #plant-map-overlay-markers{pointer-events:none}
-#plant-map-overlay-markers .plant-marker{cursor:pointer;pointer-events:all}
-.plant-position-edit-icon{position:absolute;top:.5rem;right:.5rem;z-index:2;border:1px solid var(--border);background:var(--surface);border-radius:999px;padding:.35rem .5rem;line-height:1;cursor:pointer}
+#plant-map-overlay-markers .plant-marker{cursor:pointer;pointer-events:all;touch-action:none}
+#plant-map-overlay-markers .plant-marker:focus-visible{outline:2px solid var(--primary);outline-offset:3px}
+.plant-position-edit-icon{position:absolute;top:.5rem;right:.5rem;z-index:3;border:1px solid var(--border);background:var(--surface);border-radius:999px;padding:.35rem .5rem;line-height:1;cursor:pointer}
+.plant-position-instructions{position:absolute;top:.55rem;right:3rem;z-index:3;max-width:min(26rem,calc(100% - 4rem));padding:.35rem .5rem;border:1px solid var(--border);border-radius:999px;background:color-mix(in srgb,var(--surface) 92%,transparent);box-shadow:var(--shadow)}
 .light-need-group{display:grid;gap:.45rem;text-align:left;justify-items:start}
 .light-need-group legend{justify-self:start;text-align:left}
 .light-need-option{display:inline-flex;align-items:center;gap:.45rem;white-space:nowrap}
@@ -1003,7 +1015,7 @@ legend{padding:0 .4rem;font-weight:600;color:var(--muted);letter-spacing:.01em}
         const radius = isCurrentPlant ? 6 : 6;
         const color = isCurrentPlant ? '#d7263d' : '#2663eb';
         const stroke = isCurrentPlant ? '#ffffff' : '#dce7ff';
-        if (isCurrentPlant) { return `<circle class="plant-marker plant-marker-current" data-name="${entry.name}" cx="${x}" cy="${y}" r="${radius}" fill="${color}" stroke="${stroke}" stroke-width="1"><title>${entry.name}</title></circle>`; }
+        if (isCurrentPlant) { return `<circle class="plant-marker plant-marker-current" data-name="${entry.name}" cx="${x}" cy="${y}" r="${radius}" fill="${color}" stroke="${stroke}" stroke-width="1" tabindex="0" role="button" aria-label="Position von ${entry.name} ziehen"><title>${entry.name}</title></circle>`; }
         return `<a href="/plants/${entry.id}" aria-label="${entry.name}"><circle class="plant-marker" data-name="${entry.name}" cx="${x}" cy="${y}" r="${radius}" fill="${color}" stroke="${stroke}" stroke-width="1"><title>${entry.name}</title></circle></a>`;
       })
       .filter(Boolean).join('');
@@ -1034,46 +1046,62 @@ legend{padding:0 .4rem;font-weight:600;color:var(--muted);letter-spacing:.01em}
     return { x: normalizedX, y: normalizedY };
   };
 
+  const setCurrentMarkerPosition = (geoPoint) => {
+    if (!geoPoint) return;
+    mapX.value = geoPoint.x;
+    mapY.value = geoPoint.y;
+    const marker = plantsInLocation.find((entry) => Number(entry.id) === currentPlantId);
+    if (marker) { marker.map_x = geoPoint.x; marker.map_y = geoPoint.y; }
+    renderPlantMap();
+  };
+
+  const setCurrentMarkerFromPointer = (event) => {
+    const normalized = screenToMapCoords(event.clientX, event.clientY);
+    if (!normalized) return;
+    const g = toGeo(normalized.x, normalized.y);
+    setCurrentMarkerPosition(g);
+  };
+
   if (mapImage && baseOverlay && markerOverlay && mapX && mapY) {
     mapImage.addEventListener('load', renderPlantMap);
     if (mapImage.complete) renderPlantMap();
     window.addEventListener('resize', renderPlantMap);
-    markerOverlay.addEventListener('mousedown', (event) => {
-      if (event.target.closest('.plant-marker-current')) {
-        draggedCurrentMarker = true;
-        event.preventDefault();
-      }
+    markerOverlay.addEventListener('pointerdown', (event) => {
+      const currentMarkerElement = event.target.closest('.plant-marker-current');
+      if (!currentMarkerElement || !positionEditMode) return;
+      draggedCurrentMarker = true;
+      draggedCurrentMarkerPointerId = event.pointerId;
+      currentMarkerElement.setPointerCapture?.(event.pointerId);
+      event.preventDefault();
     });
 
-    window.addEventListener('mousemove', (event) => {
+    window.addEventListener('pointermove', (event) => {
       if (!positionEditMode || !draggedCurrentMarker) return;
-      const normalized = screenToMapCoords(event.clientX, event.clientY);
-      if (!normalized) return;
-      const g = toGeo(normalized.x, normalized.y);
-      if (!g) return;
-      const marker = plantsInLocation.find((entry) => Number(entry.id) === currentPlantId);
-      if (marker) { marker.map_x = g.x; marker.map_y = g.y; }
-      mapX.value = g.x;
-      mapY.value = g.y;
-      renderPlantMap();
+      setCurrentMarkerFromPointer(event);
     });
 
-    window.addEventListener('mouseup', () => {
+    window.addEventListener('pointerup', (event) => {
       if (!positionEditMode || !draggedCurrentMarker) return;
+      if (draggedCurrentMarkerPointerId !== null && event.pointerId !== draggedCurrentMarkerPointerId) return;
       draggedCurrentMarker = false;
+      draggedCurrentMarkerPointerId = null;
     });
 
-    markerOverlay.addEventListener('click', (event) => {
-      if (!positionEditMode || event.target.closest('.plant-marker-current')) return;
-      const normalized = screenToMapCoords(event.clientX, event.clientY);
-      if (!normalized) return;
-      const g = toGeo(normalized.x, normalized.y);
-      if (!g) return;
-      mapX.value = g.x;
-      mapY.value = g.y;
-      const marker = plantsInLocation.find((entry) => Number(entry.id) === currentPlantId);
-      if (marker) { marker.map_x = g.x; marker.map_y = g.y; }
-      renderPlantMap();
+    mapImage.closest('.plant-map-wrapper')?.addEventListener('pointerdown', (event) => {
+      if (!positionEditMode || event.target.closest('.plant-marker-current') || event.target.closest('button')) return;
+      event.preventDefault();
+      setCurrentMarkerFromPointer(event);
+    });
+
+    [mapX, mapY].forEach((field) => {
+      field.addEventListener('input', () => {
+        const x = Number(mapX.value);
+        const y = Number(mapY.value);
+        if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+        const marker = plantsInLocation.find((entry) => Number(entry.id) === currentPlantId);
+        if (marker) { marker.map_x = x; marker.map_y = y; }
+        renderPlantMap();
+      });
     });
   }
 
@@ -1103,13 +1131,17 @@ legend{padding:0 .4rem;font-weight:600;color:var(--muted);letter-spacing:.01em}
       positionEditMode = true;
       positionEditToggleButton.classList.add('hidden');
       positionSaveButton.classList.remove('hidden');
+      document.getElementById('plant-position-instructions')?.classList.remove('hidden');
     });
 
     if (positionForm) {
       positionForm.addEventListener('submit', () => {
         positionEditMode = false;
+        draggedCurrentMarker = false;
+        draggedCurrentMarkerPointerId = null;
         positionSaveButton.classList.add('hidden');
         positionEditToggleButton.classList.remove('hidden');
+        document.getElementById('plant-position-instructions')?.classList.add('hidden');
       });
     }
   }

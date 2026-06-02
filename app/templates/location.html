@@ -8,9 +8,10 @@
 {% endblock %}
 {% block content %}
 <section class="card">
-<div class="flex items-center gap-5 mb-35">
+<div class="flex items-center gap-5 mb-35 wrap">
   <h2 class="m-0">{{ location.name }}</h2>
   <button type="button" id="toggle-polygon-edit" aria-label="Polygon bearbeiten" title="Polygon bearbeiten" class="icon-btn">✏️</button>
+  <small id="polygon-edit-instructions" class="text-muted hidden">Klicke/tippe auf die Karte, um Punkte zu setzen. Ziehe Punkte zum Verschieben.</small>
 </div>
 {% if garden_map and garden_map.filename %}
 <div class="rel-inline mb-75">
@@ -23,6 +24,22 @@
 <form method="post" action="/locations/{{ location.id }}/map" id="polygon-form" class="grid hidden mb-1">
   <input type="hidden" name="polygon_points" id="polygon-points-field" value='{{ location.polygon_points or "[]" }}'>
   <label>Farbe <input type="color" name="color" value="{{ location.color or '#2f6d40' }}"></label>
+  <fieldset class="polygon-keyboard-controls">
+    <legend>Polygonpunkte per Tastatur bearbeiten</legend>
+    <div class="field-pair">
+      <label>Breitengrad
+        <input id="polygon-new-point-x" type="number" step="any" min="-90" max="90" inputmode="decimal" placeholder="z. B. 52.5200">
+      </label>
+      <label>Längengrad
+        <input id="polygon-new-point-y" type="number" step="any" min="-180" max="180" inputmode="decimal" placeholder="z. B. 13.4050">
+      </label>
+    </div>
+    <div class="flex gap-5 wrap">
+      <button type="button" id="add-polygon-point">Punkt hinzufügen</button>
+      <button type="button" id="remove-last-polygon-point">Letzten Punkt entfernen</button>
+    </div>
+    <div id="polygon-point-list" class="polygon-point-list" aria-live="polite"></div>
+  </fieldset>
   <div class="flex gap-5 wrap">
     <button type="submit">Polygon speichern</button>
     <button type="button" id="clear-polygon-points">Polygonpunkte löschen</button>
@@ -106,6 +123,12 @@
 .dialog-head{display:flex;align-items:center;justify-content:space-between;gap:1rem}
 .dialog-close{font-size:1.35rem;line-height:1;padding:.35rem .65rem}
 .plant-create-dialog .text-muted{color:var(--muted)}
+.text-muted{color:var(--muted)}
+.polygon-keyboard-controls{display:grid;gap:.65rem}
+.field-pair{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:.6rem}
+.polygon-point-list{display:grid;gap:.5rem}
+.polygon-point-row{display:grid;grid-template-columns:auto repeat(2,minmax(140px,1fr));gap:.5rem;align-items:end}
+@media (max-width:700px){.polygon-point-row{grid-template-columns:1fr}}
 </style>
 <script>
   const locationImage = document.getElementById('location-map-image');
@@ -180,7 +203,7 @@
       ? `<polygon points="${polygon}" fill="{{ location.color or '#2f6d40' }}66" stroke="{{ location.color or '#2f6d40' }}" stroke-width="2"></polygon>`
       : '';
     const pointMarkup = polygonEditEnabled
-      ? polygonPoints.map((point, index) => { const p = toPixel(Number(point.x), Number(point.y)); if (!p) return ''; return `<circle cx="${p.x * overlayWidth}" cy="${p.y * overlayHeight}" r="6" fill="#ffffff" stroke="{{ location.color or '#2f6d40' }}" stroke-width="2" data-point-index="${index}" style="cursor:move;pointer-events:all;"></circle>`; }).join('')
+      ? polygonPoints.map((point, index) => { const p = toPixel(Number(point.x), Number(point.y)); if (!p) return ''; return `<circle cx="${p.x * overlayWidth}" cy="${p.y * overlayHeight}" r="6" fill="#ffffff" stroke="{{ location.color or '#2f6d40' }}" stroke-width="2" data-point-index="${index}" tabindex="0" role="button" aria-label="Polygonpunkt ${index + 1} ziehen" style="cursor:move;pointer-events:all;"><title>Polygonpunkt ${index + 1}</title></circle>`; }).join('')
       : '';
     const markerMarkup = !polygonEditEnabled
       ? plantsById
@@ -238,15 +261,36 @@
 
   let polygonEditEnabled = polygonPoints.length === 0;
   let draggedPointIndex = null;
+  let draggedPointPointerId = null;
   const clamp01 = (value) => Math.max(0, Math.min(1, value));
   const syncPolygonField = () => {
     if (!polygonField) return;
     polygonField.value = JSON.stringify(polygonPoints);
   };
+  const syncPolygonPointList = () => {
+    const pointList = document.getElementById('polygon-point-list');
+    if (!pointList) return;
+    pointList.innerHTML = polygonPoints.map((point, index) => `
+      <div class="polygon-point-row">
+        <span>Punkt ${index + 1}</span>
+        <label>Breitengrad
+          <input type="number" step="any" min="-90" max="90" inputmode="decimal" value="${Number(point.x)}" data-polygon-coordinate="x" data-point-index="${index}">
+        </label>
+        <label>Längengrad
+          <input type="number" step="any" min="-180" max="180" inputmode="decimal" value="${Number(point.y)}" data-polygon-coordinate="y" data-point-index="${index}">
+        </label>
+      </div>`).join('') || '<small class="text-muted">Noch keine Polygonpunkte vorhanden.</small>';
+  };
+  const updatePolygon = () => {
+    syncPolygonField();
+    syncPolygonPointList();
+    renderOverlay();
+  };
   const applyPolygonEditMode = () => {
     if (polygonForm) {
       polygonForm.style.display = polygonEditEnabled ? 'grid' : 'none';
     }
+    document.getElementById('polygon-edit-instructions')?.classList.toggle('hidden', !polygonEditEnabled);
     if (togglePolygonEditButton) {
       togglePolygonEditButton.textContent = '✏️';
       togglePolygonEditButton.title = polygonEditEnabled ? 'Polygon-Bearbeitung beenden' : 'Polygon bearbeiten';
@@ -254,7 +298,7 @@
     }
   };
 
-  const handleMapClick = (event) => {
+  const addPolygonPointFromPointer = (event) => {
     if (!polygonEditEnabled || !locationImage || !locationOverlay || !polygonField) return;
     if (event.target?.dataset?.pointIndex !== undefined) return;
     const rect = locationImage.getBoundingClientRect();
@@ -263,8 +307,7 @@
     const g = toGeo(x, y);
     if (!g) return;
     polygonPoints.push(g);
-    syncPolygonField();
-    renderOverlay();
+    updatePolygon();
   };
 
   const handleDragMove = (event) => {
@@ -273,8 +316,7 @@
     const g = toGeo(clamp01((event.clientX - rect.left) / rect.width), clamp01((event.clientY - rect.top) / rect.height));
     if (!g) return;
     polygonPoints[draggedPointIndex] = g;
-    syncPolygonField();
-    renderOverlay();
+    updatePolygon();
   };
 
   if (locationImage && locationOverlay && polygonField) {
@@ -282,17 +324,24 @@
       syncOverlayGeometry();
       renderOverlay();
     });
-    locationImage.addEventListener('click', handleMapClick);
-    locationOverlay.addEventListener('mousedown', (event) => {
+    locationImage.addEventListener('pointerdown', addPolygonPointFromPointer);
+    locationOverlay.addEventListener('pointerdown', (event) => {
       if (!polygonEditEnabled) return;
       const pointIndex = Number(event.target?.dataset?.pointIndex);
       if (Number.isNaN(pointIndex)) return;
       draggedPointIndex = pointIndex;
+      draggedPointPointerId = event.pointerId;
+      event.target.setPointerCapture?.(event.pointerId);
       event.preventDefault();
     });
-    window.addEventListener('mousemove', handleDragMove);
-    window.addEventListener('mouseup', () => {
+    window.addEventListener('pointermove', (event) => {
+      if (draggedPointPointerId !== null && event.pointerId !== draggedPointPointerId) return;
+      handleDragMove(event);
+    });
+    window.addEventListener('pointerup', (event) => {
+      if (draggedPointPointerId !== null && event.pointerId !== draggedPointPointerId) return;
       draggedPointIndex = null;
+      draggedPointPointerId = null;
     });
     window.addEventListener('resize', () => {
       syncOverlayGeometry();
@@ -311,6 +360,7 @@
     togglePolygonEditButton.addEventListener('click', () => {
       polygonEditEnabled = !polygonEditEnabled;
       draggedPointIndex = null;
+      draggedPointPointerId = null;
       applyPolygonEditMode();
       renderOverlay();
     });
@@ -320,10 +370,37 @@
   if (clearPolygonPointsButton && polygonField) {
     clearPolygonPointsButton.addEventListener('click', () => {
       polygonPoints = [];
-      syncPolygonField();
-      renderOverlay();
+      updatePolygon();
     });
   }
+
+  document.getElementById('add-polygon-point')?.addEventListener('click', () => {
+    const xInput = document.getElementById('polygon-new-point-x');
+    const yInput = document.getElementById('polygon-new-point-y');
+    const x = Number(xInput?.value);
+    const y = Number(yInput?.value);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+    polygonPoints.push({ x, y });
+    if (xInput) xInput.value = '';
+    if (yInput) yInput.value = '';
+    updatePolygon();
+  });
+
+  document.getElementById('remove-last-polygon-point')?.addEventListener('click', () => {
+    polygonPoints.pop();
+    updatePolygon();
+  });
+
+  document.getElementById('polygon-point-list')?.addEventListener('input', (event) => {
+    const index = Number(event.target?.dataset?.pointIndex);
+    const coordinate = event.target?.dataset?.polygonCoordinate;
+    const value = Number(event.target?.value);
+    if (!Number.isInteger(index) || !['x', 'y'].includes(coordinate) || !Number.isFinite(value) || !polygonPoints[index]) return;
+    polygonPoints[index][coordinate] = value;
+    syncPolygonField();
+    renderOverlay();
+  });
+  syncPolygonPointList();
 
   const soilInput = document.getElementById('soil-property-input');
   const soilHidden = document.getElementById('soil-properties-hidden');
