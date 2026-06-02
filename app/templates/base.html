@@ -94,6 +94,10 @@
     .table-search input{margin:0}
     .table-search button{padding:.5rem .7rem;border-radius:10px}
     tbody tr[data-row-link]{cursor:pointer}
+    tbody tr[data-row-link]:hover td{background:color-mix(in srgb,var(--surface-soft) 82%, var(--primary) 18%)}
+    .table-row-link{display:inline-flex;align-items:center;min-height:1.6rem;color:var(--link);text-decoration:none}
+    .table-row-link:hover{text-decoration:underline}
+    .table-row-link:focus-visible{outline:3px solid color-mix(in srgb,var(--primary) 75%, #fff 25%);outline-offset:3px;border-radius:6px}
     .light-need-group{display:grid;gap:.45rem;text-align:left;justify-items:start}
     .light-need-group legend{justify-self:start;text-align:left}
     .light-need-option{display:inline-flex;align-items:center;gap:.45rem;white-space:nowrap}

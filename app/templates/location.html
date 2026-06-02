@@ -44,9 +44,9 @@
   <tbody>
     {% for p in plants %}
     <tr data-row-link="/plants/{{ p.id }}">
-      <td>{{ p.name }}</td>
-      <td>{{ p.common_name or '' }}</td>
-      <td>
+      <td data-label="Name"><a class="table-row-link" href="/plants/{{ p.id }}">{{ p.name }}</a></td>
+      <td data-label="Bürgerlicher Name">{{ p.common_name or '' }}</td>
+      <td data-label="Titelbild">
         {% if plant_title_images_by_id.get(p.id) %}
         <img src="/uploads/{{ plant_title_images_by_id.get(p.id) }}" alt="Titelbild von {{ p.name }}" class="thumb-60">
         {% else %}
