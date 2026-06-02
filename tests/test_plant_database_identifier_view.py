@@ -74,6 +74,34 @@ class PlantDatabaseIdentifierViewTest(unittest.TestCase):
             ).one()
             self.assertEqual(identifier.taxonomy_id, 'Großblättriges_Kaukasusvergissmeinnicht')
 
+    def test_database_links_follow_catalog_display_order(self):
+        with self.app.app_context():
+            PlantDatabaseIdentifier.query.filter_by(plant_id=self.plant_id).delete()
+            plant = Plant.query.get(self.plant_id)
+            plant.database_identifiers = [
+                PlantDatabaseIdentifier(catalog_key='floraweb', taxonomy_id='6666'),
+                PlantDatabaseIdentifier(catalog_key='gbif', taxonomy_id='1234'),
+                PlantDatabaseIdentifier(catalog_key='naturadb', taxonomy_id='brunnera-macrophylla'),
+                PlantDatabaseIdentifier(catalog_key='mein_schoener_garten', taxonomy_id='kaukasusvergissmeinnicht'),
+                PlantDatabaseIdentifier(catalog_key='wikipedia_de', taxonomy_id='Brunnera_macrophylla'),
+            ]
+            db.session.commit()
+
+        response = self.client.get(f'/plants/{self.plant_id}')
+
+        self.assertEqual(response.status_code, 200)
+        html = response.get_data(as_text=True)
+        wikipedia_index = html.index('title="Deutsche Wikipedia (Brunnera_macrophylla)"')
+        mein_schoener_garten_index = html.index('title="Mein schöner Garten (kaukasusvergissmeinnicht)"')
+        naturadb_index = html.index('title="NaturaDB (brunnera-macrophylla)"')
+        floraweb_index = html.index('title="FloraWeb (6666)"')
+        gbif_index = html.index('title="GBIF (1234)"')
+
+        self.assertLess(wikipedia_index, mein_schoener_garten_index)
+        self.assertLess(mein_schoener_garten_index, naturadb_index)
+        self.assertLess(naturadb_index, floraweb_index)
+        self.assertLess(floraweb_index, gbif_index)
+
 
 if __name__ == '__main__':
     unittest.main()

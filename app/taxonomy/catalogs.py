@@ -14,41 +14,6 @@ class DatabaseCatalogConfig:
 
 _DEFAULT_DATABASE_CATALOGS = (
     DatabaseCatalogConfig(
-        key='wfo',
-        label='WFO',
-        record_url_template='https://www.worldfloraonline.org/taxon/{id}',
-        search_url_template='https://www.worldfloraonline.org/search?query={q}',
-        icon_url='https://www.worldfloraonline.org/css/images/svgs/favicon.svg',
-    ),
-    DatabaseCatalogConfig(
-        key='powo_ipni',
-        label='POWO/IPNI-LSID',
-        record_url_template='https://powo.science.kew.org/taxon/{id}',
-        search_url_template='https://powo.science.kew.org/results?q={q}',
-        icon_url='https://powo.science.kew.org/img/powo-favicon.ico',
-    ),
-    DatabaseCatalogConfig(
-        key='gbif',
-        label='GBIF',
-        record_url_template='https://www.gbif.org/species/{id}',
-        search_url_template='https://www.gbif.org/species/search?q={q}',
-        icon_url='https://www.gbif.org/favicon.ico',
-    ),
-    DatabaseCatalogConfig(
-        key='floraweb',
-        label='FloraWeb',
-        record_url_template='https://www.floraweb.de/php/taxonomie.php?taxon-id={id}',
-        search_url_template='https://www.floraweb.de/php/taxoquery.php?taxname={q}',
-        icon_url='https://www.floraweb.de/favicon.ico',
-    ),
-    DatabaseCatalogConfig(
-        key='naturadb',
-        label='NaturaDB',
-        record_url_template='https://www.naturadb.de/pflanzen/{id}',
-        search_url_template='https://www.naturadb.de/suche?q={q}',
-        icon_url='https://www.naturadb.de/favicon.ico',
-    ),
-    DatabaseCatalogConfig(
         key='wikipedia_de',
         label='Deutsche Wikipedia',
         record_url_template='https://de.wikipedia.org/wiki/{id}',
@@ -61,6 +26,41 @@ _DEFAULT_DATABASE_CATALOGS = (
         record_url_template='https://www.mein-schoener-garten.de/pflanzen/{id}',
         search_url_template='https://www.mein-schoener-garten.de/suche?search_api_fulltext={q}',
         icon_url='https://www.mein-schoener-garten.de/favicon.ico',
+    ),
+    DatabaseCatalogConfig(
+        key='naturadb',
+        label='NaturaDB',
+        record_url_template='https://www.naturadb.de/pflanzen/{id}',
+        search_url_template='https://www.naturadb.de/suche?q={q}',
+        icon_url='https://www.naturadb.de/favicon.ico',
+    ),
+    DatabaseCatalogConfig(
+        key='floraweb',
+        label='FloraWeb',
+        record_url_template='https://www.floraweb.de/php/taxonomie.php?taxon-id={id}',
+        search_url_template='https://www.floraweb.de/php/taxoquery.php?taxname={q}',
+        icon_url='https://www.floraweb.de/favicon.ico',
+    ),
+    DatabaseCatalogConfig(
+        key='gbif',
+        label='GBIF',
+        record_url_template='https://www.gbif.org/species/{id}',
+        search_url_template='https://www.gbif.org/species/search?q={q}',
+        icon_url='https://www.gbif.org/favicon.ico',
+    ),
+    DatabaseCatalogConfig(
+        key='wfo',
+        label='WFO',
+        record_url_template='https://www.worldfloraonline.org/taxon/{id}',
+        search_url_template='https://www.worldfloraonline.org/search?query={q}',
+        icon_url='https://www.worldfloraonline.org/css/images/svgs/favicon.svg',
+    ),
+    DatabaseCatalogConfig(
+        key='powo_ipni',
+        label='POWO/IPNI-LSID',
+        record_url_template='https://powo.science.kew.org/taxon/{id}',
+        search_url_template='https://powo.science.kew.org/results?q={q}',
+        icon_url='https://powo.science.kew.org/img/powo-favicon.ico',
     ),
 )
 

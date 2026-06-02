@@ -97,7 +97,7 @@ class TaxonomySuggestViewTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(captured, {
             'scientific_name': 'Phlox paniculata',
-            'catalog_keys': ['wfo', 'powo_ipni', 'gbif', 'floraweb', 'naturadb', 'wikipedia_de', 'mein_schoener_garten'],
+            'catalog_keys': ['wikipedia_de', 'mein_schoener_garten', 'naturadb', 'floraweb', 'gbif', 'wfo', 'powo_ipni'],
         })
         suggest_for_all_enabled.assert_called_once()
         suggest_for_catalog.assert_not_called()
