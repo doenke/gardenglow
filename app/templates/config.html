@@ -18,28 +18,28 @@
 
   <h3>Kalibrierung</h3>
   <p class="mt-0">
-    Dezimaltrennzeichen: Du kannst Koordinaten mit <strong>Komma</strong> oder <strong>Punkt</strong> eingeben (z. B. <code>51,234567</code>).
+    Dezimaltrennzeichen: Du kannst Koordinaten mit <strong>Komma</strong> oder <strong>Punkt</strong> eingeben (z. B. <code>50,795600</code>).
   </p>
   <ol class="mb-1" style="margin-top:0.25rem;">
     <li>Lade auf <a href="https://www.geoportal.nrw/" target="_blank" rel="noopener noreferrer">geoportal.nrw</a> (oder einer anderen Quelle) ein Luftbild herunter und lade es oben hoch.</li>
     <li>Markiere im Luftbild zwei gut erkennbare Punkte, die möglichst weit auseinanderliegen (in X und Y).</li>
-    <li>Miss die exakten Koordinaten der beiden Punkte im Geoportal aus und trage sie hier ein, z. B. <code>Lat 51,234567</code> und <code>Lon 7,123456</code>.</li>
+    <li>Miss die exakten Koordinaten der beiden Punkte im Geoportal aus und trage sie hier ein, z. B. <code>Lat 50,795600</code> und <code>Lon 6,126900</code>.</li>
   </ol>
   <form method="post" action="/map/calibration" id="calibration-form" class="grid mb-1">
     <input type="hidden" name="calibration_points" id="calibration-points-input">
     <div><strong>Bildpunkte setzen:</strong> Nacheinander Punkt 1 und Punkt 2 im Bild anklicken.</div>
     <div class="grid grid-auto-200">
       <label>Punkt 1 – Koordinate X
-        <input type="text" id="p1-coord-x" placeholder="z. B. 52,520008">
+        <input type="text" id="p1-coord-x" placeholder="z. B. 50,795600">
       </label>
       <label>Punkt 1 – Koordinate Y
-        <input type="text" id="p1-coord-y" placeholder="z. B. 13,404954">
+        <input type="text" id="p1-coord-y" placeholder="z. B. 6,126900">
       </label>
       <label>Punkt 2 – Koordinate X
-        <input type="text" id="p2-coord-x" placeholder="z. B. 52,520500">
+        <input type="text" id="p2-coord-x" placeholder="z. B. 50,796100">
       </label>
       <label>Punkt 2 – Koordinate Y
-        <input type="text" id="p2-coord-y" placeholder="z. B. 13,405600">
+        <input type="text" id="p2-coord-y" placeholder="z. B. 6,127500">
       </label>
     </div>
     <button type="submit">Kalibrierung speichern</button>
@@ -53,10 +53,10 @@
       <legend>Grenzpunkte per Tastatur bearbeiten</legend>
       <div class="grid grid-auto-200">
         <label for="boundary-new-point-x">Koordinate X
-          <input id="boundary-new-point-x" type="text" inputmode="decimal" placeholder="z. B. 52,520008">
+          <input id="boundary-new-point-x" type="text" inputmode="decimal" placeholder="z. B. 50,795600">
         </label>
         <label for="boundary-new-point-y">Koordinate Y
-          <input id="boundary-new-point-y" type="text" inputmode="decimal" placeholder="z. B. 13,404954">
+          <input id="boundary-new-point-y" type="text" inputmode="decimal" placeholder="z. B. 6,126900">
         </label>
       </div>
       <div class="actions-inline">
