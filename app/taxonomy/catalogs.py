@@ -18,7 +18,7 @@ _DEFAULT_DATABASE_CATALOGS = (
         label='WFO',
         record_url_template='https://www.worldfloraonline.org/taxon/{id}',
         search_url_template='https://www.worldfloraonline.org/search?query={q}',
-        icon_url='https://www.worldfloraonline.org/favicon.ico',
+        icon_url='https://www.worldfloraonline.org/css/images/svgs/favicon.svg',
     ),
     DatabaseCatalogConfig(
         key='powo_ipni',
