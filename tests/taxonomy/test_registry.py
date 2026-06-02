@@ -201,12 +201,40 @@ class TaxonomyResolverConfigTest(unittest.TestCase):
 
     def test_mein_schoener_garten_next_data_extractor_prefers_matching_biological_name(self):
         payload = {
-            'items': [
-                {
-                    '__typename': 'NodePlant',
-                    'biologicalName': 'Phlox paniculata',
-                    'url': '/pflanzen/phlox/flammenblume',
+            'pageProps': {
+                'data': {
+                    'page': {
+                        'content': [
+                            {
+                                'items': [
+                                    {
+                                        '__typename': 'NodePlant',
+                                        'biologicalName': 'Phlox paniculata',
+                                        'url': '/pflanzen/phlox/flammenblume',
+                                    },
+                                    {
+                                        '__typename': 'NodePlant',
+                                        'biologicalName': 'Brunnera macrophylla',
+                                        'url': (
+                                            '/pflanzen/kaukasusvergissmeinnicht/'
+                                            'kaukasusvergissmeinnicht'
+                                        ),
+                                    },
+                                ],
+                            },
+                        ],
+                    },
                 },
+            },
+        }
+
+        suggestion = extract_next_data_taxonomy_id(payload, 'Brunnera macrophylla')
+
+        self.assertEqual(suggestion, 'kaukasusvergissmeinnicht/kaukasusvergissmeinnicht')
+
+    def test_mein_schoener_garten_next_data_extractor_ignores_plants_outside_page_content(self):
+        payload = {
+            'items': [
                 {
                     '__typename': 'NodePlant',
                     'biologicalName': 'Brunnera macrophylla',
@@ -216,11 +244,18 @@ class TaxonomyResolverConfigTest(unittest.TestCase):
                     ),
                 },
             ],
+            'pageProps': {
+                'data': {
+                    'page': {
+                        'content': [],
+                    },
+                },
+            },
         }
 
         suggestion = extract_next_data_taxonomy_id(payload, 'Brunnera macrophylla')
 
-        self.assertEqual(suggestion, 'kaukasusvergissmeinnicht/kaukasusvergissmeinnicht')
+        self.assertIsNone(suggestion)
 
     def test_common_config_validation_checks_required_keys(self):
         self.assertTrue(validate_common_config({'search_url': 'https://example.test/search'}, required=('search_url',)))
