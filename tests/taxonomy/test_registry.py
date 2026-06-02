@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import patch
 
-from app.taxonomy.catalogs import DatabaseCatalogConfig, get_database_catalog_by_key
+from app.taxonomy.catalogs import DatabaseCatalogConfig, get_database_catalog_by_key, get_database_catalogs
 from app.taxonomy import registry
 from app.taxonomy import resolvers  # noqa: F401 - import triggers static resolver registration
 from app.taxonomy.resolvers.base import ResolverRequest, validate_common_config
@@ -52,6 +52,22 @@ class TaxonomyRegistryTest(unittest.TestCase):
         self.assertEqual(
             catalog.record_url_template,
             'https://www.floraweb.de/php/taxonomie.php?taxon-id={id}',
+        )
+
+    def test_default_catalogs_use_preferred_display_order(self):
+        catalog_keys = [catalog.key for catalog in get_database_catalogs()]
+
+        self.assertEqual(
+            catalog_keys,
+            [
+                'wikipedia_de',
+                'mein_schoener_garten',
+                'naturadb',
+                'floraweb',
+                'gbif',
+                'wfo',
+                'powo_ipni',
+            ],
         )
 
 

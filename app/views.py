@@ -258,6 +258,10 @@ def get_catalog_configs():
     return get_database_catalogs()
 
 
+def _database_catalog_order():
+    return {catalog.key: index for index, catalog in enumerate(get_catalog_configs())}
+
+
 def _normalize_database_identifier_for_catalog(catalog_key, identifier):
     value = (identifier or '').strip()
     if catalog_key == 'wikipedia_de':
@@ -310,7 +314,15 @@ def _build_database_links_for_plant(plant):
             'url': url,
             'icon_url': (item.catalog.icon_url or '').strip(),
         })
-    return sorted(links, key=lambda link: ((link['catalog_label'] or '').lower(), link['display_identifier'].lower()))
+    catalog_order = _database_catalog_order()
+    return sorted(
+        links,
+        key=lambda link: (
+            catalog_order.get(link['catalog_key'], len(catalog_order)),
+            (link['catalog_label'] or '').lower(),
+            link['display_identifier'].lower(),
+        ),
+    )
 
 
 def _build_database_search_urls(catalogs, search_query):
