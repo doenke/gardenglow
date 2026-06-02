@@ -51,7 +51,7 @@
   <label class="sr-only" for="location-plants-search">Pflanzen durchsuchen</label>
   <input type="search" id="location-plants-search" placeholder="z. B. Tomate">
 </div>
-<table>
+<table class="location-plants-table">
   <thead>
     <tr>
       <th>Name</th>
@@ -61,14 +61,13 @@
   </thead>
   <tbody>
     {% for p in plants %}
-    <tr data-row-link="/plants/{{ p.id }}">
-      <td data-label="Name"><a class="table-row-link" href="/plants/{{ p.id }}">{{ p.name }}</a></td>
-      <td data-label="Bürgerlicher Name">{{ p.common_name or '' }}</td>
-      <td data-label="Titelbild">
-        {% if plant_title_images_by_id.get(p.id) %}
-        <img src="/uploads/{{ plant_title_images_by_id.get(p.id) }}" alt="Titelbild von {{ p.name }}" class="thumb-60">
-        {% else %}
-        -
+    {% set title_image = plant_title_images_by_id.get(p.id) %}
+    <tr data-row-link="/plants/{{ p.id }}" class="{% if title_image %}has-title-image{% else %}no-title-image{% endif %}">
+      <td data-label="Name" class="plant-table-name"><a class="table-row-link" href="/plants/{{ p.id }}">{{ p.name }}</a></td>
+      <td data-label="Bürgerlicher Name" class="plant-table-common-name{% if not p.common_name %} is-empty{% endif %}">{{ p.common_name or '' }}</td>
+      <td data-label="Titelbild" class="plant-table-title-image{% if not title_image %} is-empty{% endif %}">
+        {% if title_image %}
+        <img src="/uploads/{{ title_image }}" alt="Titelbild von {{ p.name }}" class="thumb-60">
         {% endif %}
       </td>
     </tr>
@@ -130,7 +129,18 @@
 .field-pair{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:.6rem}
 .polygon-point-list{display:grid;gap:.5rem}
 .polygon-point-row{display:grid;grid-template-columns:auto repeat(2,minmax(140px,1fr));gap:.5rem;align-items:end}
-@media (max-width:700px){.polygon-point-row{grid-template-columns:1fr}}
+@media (max-width:700px){
+  .location-plants-table tr{display:grid;grid-template-columns:auto 1fr;grid-template-rows:auto auto;gap:.15rem .75rem;align-items:center;background:var(--surface-soft);border:1px solid var(--border);border-radius:12px;padding:.7rem}
+  .location-plants-table td{border:0!important;border-radius:0!important;background:transparent;padding:0}
+  .location-plants-table td::before{content:none;display:none}
+  .location-plants-table .plant-table-title-image{grid-column:1;grid-row:1 / span 2;align-self:start}
+  .location-plants-table .plant-table-name{grid-column:2;grid-row:1;font-weight:700}
+  .location-plants-table .plant-table-common-name{grid-column:2;grid-row:2;color:var(--muted)}
+  .location-plants-table .is-empty{display:none}
+  .location-plants-table .no-title-image .plant-table-name,
+  .location-plants-table .no-title-image .plant-table-common-name{grid-column:1 / -1}
+  .polygon-point-row{grid-template-columns:1fr}
+}
 </style>
 <script>
   const locationImage = document.getElementById('location-map-image');
