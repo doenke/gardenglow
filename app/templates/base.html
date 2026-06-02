@@ -99,6 +99,11 @@
     .table-row-link{display:inline-flex;align-items:center;min-height:1.6rem;color:var(--link);text-decoration:none}
     .table-row-link:hover{text-decoration:underline}
     .table-row-link:focus-visible{outline:3px solid color-mix(in srgb,var(--primary) 75%, #fff 25%);outline-offset:3px;border-radius:6px}
+    .location-name-row{display:flex;align-items:center;justify-content:space-between;gap:.75rem}
+    .location-name-main{display:inline-flex;align-items:center;gap:.5rem;min-width:0}
+    .plant-count-badge{display:inline-grid;place-items:center;min-width:2rem;height:2rem;padding:0 .45rem;border-radius:999px;background:linear-gradient(135deg,var(--primary),var(--primary-dark));color:#fff;font-weight:800;line-height:1;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.12)}
+    .plant-count-badge-mobile{display:none;flex:0 0 auto}
+    .plant-count-cell{text-align:center}
     .light-need-group{display:grid;gap:.45rem;text-align:left;justify-items:start}
     .light-need-group legend{justify-self:start;text-align:left}
     .light-need-option{display:inline-flex;align-items:center;gap:.45rem;white-space:nowrap}
@@ -109,7 +114,7 @@
     .soil-sections{display:grid;gap:.45rem}
     .soil-section-label{margin:0;font-size:.82rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.02em}
         @media (max-width:900px){.page-wrap{padding:.8rem .75rem}.site-header{gap:.75rem;padding:.8rem .9rem}.brand{gap:.6rem}.brand img{height:38px}.brand h1{font-size:1.2rem}.avatar{width:38px;height:38px}}
-    @media (max-width:700px){table,thead,tbody,th,td,tr{display:block} thead{display:none} tr{margin-bottom:.7rem} td{border:1px solid var(--border)!important;border-radius:10px!important} td::before{content:attr(data-label);display:block;font-size:.75rem;color:var(--muted);margin-bottom:.2rem;font-weight:600}}
+    @media (max-width:700px){table,thead,tbody,th,td,tr{display:block} thead{display:none} tr{margin-bottom:.7rem} td{border:1px solid var(--border)!important;border-radius:10px!important} td::before{content:attr(data-label);display:block;font-size:.75rem;color:var(--muted);margin-bottom:.2rem;font-weight:600}.locations-table td::before{content:none;display:none}.locations-table .location-name-cell{padding:.75rem}.locations-table .location-description-cell.is-empty{display:none}.locations-table .plant-count-cell{display:none}.locations-table .plant-count-badge-mobile{display:inline-grid}.locations-table .location-name-row{width:100%}}
   </style>
 </head>
 <body>
