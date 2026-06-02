@@ -61,6 +61,7 @@ def search_page_html(scientific_name, config):
         catalog=config.get('catalog_key') or config.get('mode') or 'html_search',
         url=search_url,
         query={query_param: scientific_name},
+        allow_insecure_tls_fallback=bool(config.get('allow_insecure_tls_fallback')),
     )
     return fetch_text(call)
 
@@ -82,6 +83,7 @@ class HtmlSearchResolver(TaxonomyResolver):
             catalog=request.catalog_key,
             url=request.config.get('search_url'),
             query={query_param: request.scientific_name},
+            allow_insecure_tls_fallback=bool(request.config.get('allow_insecure_tls_fallback')),
         )
 
     def suggest_id(self, request: ResolverRequest):

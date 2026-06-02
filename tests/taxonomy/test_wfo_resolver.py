@@ -78,6 +78,23 @@ class WfoMatchApiExtractionTest(unittest.TestCase):
 
 class WfoResolverTest(unittest.TestCase):
 
+    def test_default_config_allows_tls_fallback_for_wfo_hosts(self):
+        config = WfoResolver().default_config()
+
+        self.assertTrue(config['allow_insecure_tls_fallback'])
+
+    def test_external_call_enables_tls_fallback_when_configured(self):
+        config = {
+            'catalog_key': 'wfo',
+            'match_url': 'https://list.worldfloraonline.org/matching_rest.php',
+            'input_string_param': 'input_string',
+            'allow_insecure_tls_fallback': True,
+        }
+
+        call = WfoResolver().debug_call('Brunnera macrophylla', config)
+
+        self.assertTrue(call.allow_insecure_tls_fallback)
+
     def test_resolve_uses_wfo_matching_api_when_configured(self):
         config = {
             'catalog_key': 'wfo',

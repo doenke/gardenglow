@@ -84,6 +84,7 @@ class WfoResolver(HtmlSearchResolver):
         'accept_single_candidate': True,
         'search_url': 'https://www.worldfloraonline.org/search',
         'query_param': 'query',
+        'allow_insecure_tls_fallback': True,
     }
     required_config_keys = ('match_url',)
 
@@ -96,6 +97,7 @@ class WfoResolver(HtmlSearchResolver):
                 catalog=request.catalog_key,
                 url=request.config.get('search_url'),
                 query={query_param: request.scientific_name},
+                allow_insecure_tls_fallback=bool(request.config.get('allow_insecure_tls_fallback')),
             )
         input_param = (request.config.get('input_string_param') or 'input_string').strip()
         query = {input_param: request.scientific_name}
@@ -105,6 +107,7 @@ class WfoResolver(HtmlSearchResolver):
             catalog=request.catalog_key,
             url=request.config.get('match_url'),
             query=query,
+            allow_insecure_tls_fallback=bool(request.config.get('allow_insecure_tls_fallback')),
         )
 
     def suggest_id(self, request):
