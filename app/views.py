@@ -8,7 +8,7 @@ from functools import wraps
 from datetime import datetime
 from flask import Blueprint, current_app, g, render_template, request, redirect, url_for, session, jsonify, send_from_directory, flash
 from .models import db, User, Location, Plant, PlantPhoto, PlantNote, GardenMap, TimelineEntry, LightNeed, SoilProperty, PlantDatabaseIdentifier, plant_soil_property
-from .services.timeline_service import save_uploaded_attachment, set_single_title_entry, delete_timeline_entry, build_unique_upload_name
+from .services.timeline_service import save_uploaded_attachment, set_single_title_entry, delete_timeline_entry
 from .auth import get_or_create_default_user, oidc_enabled
 from .taxonomy import service as taxonomy_service
 from .taxonomy.catalogs import get_database_catalog_by_key, get_database_catalogs
@@ -18,6 +18,13 @@ from .taxonomy.resolvers.http import execute_external_call, full_debug_enabled, 
 main_bp = Blueprint('main', __name__)
 ALLOWED = {'png', 'jpg', 'jpeg', 'webp', 'gif', 'pdf'}
 IMAGE_TYPES = {'png', 'jpg', 'jpeg', 'webp', 'gif'}
+MAP_IMAGE_ALLOWED = {'png', 'jpg', 'jpeg', 'webp', 'gif'}
+MAP_IMAGE_MIME_TYPES = {
+    'image/png',
+    'image/jpeg',
+    'image/webp',
+    'image/gif',
+}
 ALLOWED_ATTACHMENT_MIME_TYPES = {
     'image/png',
     'image/jpeg',
@@ -539,8 +546,14 @@ def login_required(f):
         return f(*args, **kwargs)
     return wrapped
 
-def allowed_file(filename):
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED
+def map_image_upload_error_message(upload_error):
+    if upload_error == 'too_large':
+        return 'Luftbild zu groß (max. 15 MB).'
+    if upload_error in {'mime_not_allowed', 'image_content_not_allowed'}:
+        return 'Luftbild-Dateityp nicht erlaubt. Bitte eine echte Bilddatei (PNG, JPG, WEBP oder GIF) hochladen.'
+    if upload_error == 'extension_not_allowed':
+        return 'Dateiendung nicht erlaubt. Bitte ein Luftbild als PNG, JPG, WEBP oder GIF hochladen.'
+    return None
 
 
 def widget_api_key_required(f):
@@ -993,12 +1006,25 @@ def maps(filename):
 @login_required
 def upload_map():
     file = request.files.get('map_image')
-    if file and file.filename and allowed_file(file.filename):
-        unique = build_unique_upload_name(file.filename)
-        file.save(os.path.join(current_app.config['MAP_FOLDER'], unique))
-        garden_map = get_or_create_garden_map()
-        garden_map.filename = unique
-        db.session.commit()
+    unique, upload_error = save_uploaded_attachment(
+        file,
+        current_app.config['MAP_FOLDER'],
+        MAP_IMAGE_ALLOWED,
+        MAP_IMAGE_MIME_TYPES,
+        current_app.config.get('MAX_ATTACHMENT_SIZE_BYTES'),
+        require_image_content=True,
+    )
+    if upload_error:
+        flash(map_image_upload_error_message(upload_error), 'error')
+        return redirect(request.referrer or url_for('main.config'))
+    if not unique:
+        flash('Bitte eine Luftbild-Datei auswählen.', 'warning')
+        return redirect(request.referrer or url_for('main.config'))
+
+    garden_map = get_or_create_garden_map()
+    garden_map.filename = unique
+    db.session.commit()
+    flash('Luftbild wurde hochgeladen.', 'success')
     return redirect(request.referrer or url_for('main.index'))
 
 

@@ -6,7 +6,8 @@
   <h3>Luftbild</h3>
   <form method="post" action="/map/upload" enctype="multipart/form-data" class="grid mb-1">
     <label for="map-image-upload">Luftbild-Datei</label>
-    <input id="map-image-upload" type="file" name="map_image" accept="image/*" required>
+    <input id="map-image-upload" type="file" name="map_image" accept="image/png,image/jpeg,image/webp,image/gif" required>
+    <small class="text-muted">Erlaubt sind PNG, JPG, WEBP und GIF.</small>
     <button>Luftbild hochladen</button>
   </form>
 
