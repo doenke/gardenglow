@@ -157,5 +157,4 @@ Wenn `SECRET_KEY` fehlt oder zu schwach ist, bricht die App mit einer klaren Kon
 
 ## Umgebungsvariablen
 
-- `COMMON_NAME_LOOKUP_LANG` steuert die Sprache für die automatische Suche des „Bürgerlichen Namens“ über Wikipedia. Standard: `de` (Deutsch).
 - `GARDENGLOW_FULL_DEBUG` schaltet das vollständige Magic-/Taxonomie-Debugging ein oder aus. Standardmäßig ist es aus; bei aktivem Wert (`1`, `true`, `yes`, `on`, `y`) werden externe Webanfragen inklusive komplettem Response-Content im Debug-Block der JSON-Antwort ausgegeben.

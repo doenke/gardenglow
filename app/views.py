@@ -145,7 +145,7 @@ def _guess_common_name_from_text(scientific_name, text):
 
 
 
-def _lookup_common_name_from_web(scientific_name, language_code='de', naturadb_id=None, wikipedia_id=None):
+def _lookup_common_name_from_web(scientific_name, naturadb_id=None, wikipedia_id=None):
     query = (scientific_name or '').strip()
     wikipedia_id = (wikipedia_id or '').strip()
     naturadb_id = (naturadb_id or '').strip()
@@ -155,14 +155,10 @@ def _lookup_common_name_from_web(scientific_name, language_code='de', naturadb_i
             return common_name, sources
 
     normalized_query = normalize_scientific_name_for_lookup(query)
-    language = (language_code or 'de').strip().lower()
     if not query:
         return None, []
 
-    if not re.fullmatch(r'[a-z]{2,10}', language):
-        language = 'de'
-
-    base_domain = f'https://{language}.wikipedia.org'
+    base_domain = 'https://de.wikipedia.org'
     search_url = f'{base_domain}/w/api.php'
     summary_url = f'{base_domain}/api/rest_v1/page/summary'
 
@@ -1090,10 +1086,8 @@ def suggest_common_name(plant_id):
         current_app.logger.info('[%s] common-name lookup aborted: missing source name', trace_id)
         return jsonify({'ok': False, 'error': 'Bitte zuerst einen Namen eingeben.', 'debug': _debug_payload(trace_id)}), 400
 
-    lookup_language = current_app.config.get('COMMON_NAME_LOOKUP_LANG', 'de')
     common_name, sources = _lookup_common_name_from_web(
         name_value,
-        language_code=lookup_language,
         naturadb_id=naturadb_id,
         wikipedia_id=wikipedia_id,
     )
@@ -1105,7 +1099,7 @@ def suggest_common_name(plant_id):
     confidence = 0.88 if common_name.lower() != name_value.lower() else 0.55
     duration_ms = round((time.perf_counter() - started_at) * 1000, 1)
     current_app.logger.info('[%s] common-name lookup success for "%s" -> "%s" (%sms, sources=%s)', trace_id, name_value, common_name, duration_ms, len(sources or []))
-    return jsonify({'ok': True, 'common_name': common_name, 'confidence': confidence, 'sources': sources, 'language': lookup_language, 'debug': _debug_payload(trace_id, duration_ms)})
+    return jsonify({'ok': True, 'common_name': common_name, 'confidence': confidence, 'sources': sources, 'language': 'de', 'debug': _debug_payload(trace_id, duration_ms)})
 
 
 def upsert_plant_database_identifiers(plant, form):
