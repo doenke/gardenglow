@@ -79,7 +79,7 @@
   <label class="sr-only" for="index-plants-search">Pflanzen durchsuchen</label>
   <input type="search" id="index-plants-search" placeholder="z. B. Tomate">
 </div>
-<table>
+<table class="index-plants-table">
   <thead>
     <tr>
       <th>Pflanze</th>
@@ -90,9 +90,9 @@
   <tbody>
   {% for plant, location in plants %}
     <tr data-row-link="/plants/{{ plant.id }}">
-      <td data-label="Pflanze"><a class="table-row-link" href="/plants/{{ plant.id }}">{{ plant.name }}</a></td>
-      <td data-label="Bürgerlicher Name">{{ plant.common_name or '' }}</td>
-      <td data-label="Beet"><a href="/locations/{{ location.id }}">{{ location.name }}</a></td>
+      <td data-label="Pflanze" class="index-plant-name-cell"><a class="table-row-link" href="/plants/{{ plant.id }}">{{ plant.name }}</a></td>
+      <td data-label="Bürgerlicher Name" class="index-plant-common-name-cell{% if not plant.common_name %} is-empty{% endif %}">{{ plant.common_name or '' }}</td>
+      <td data-label="Beet" class="index-plant-location-cell"><a class="index-plant-location-link" href="/locations/{{ location.id }}">{{ location.name }}</a></td>
     </tr>
   {% else %}
     <tr>
