@@ -84,10 +84,10 @@
 <script>
   const allLocations = [
     {% for l in locations %}
-      {id: {{ l.id }}, color: "{{ l.color or '#2f6d40' }}", polygon: {{ (l.polygon_points or '[]') | safe }} },
+      {id: {{ l.id }}, color: {{ (l.color or '#2f6d40') | tojson }}, polygon: {{ (l.polygon_points | stored_points) | tojson }} },
     {% endfor %}
   ];
-  const calibrationPoints = {{ ((garden_map.calibration_points or '[]') if garden_map else '[]') | safe }};
+  const calibrationPoints = {{ (garden_map.calibration_points | stored_points if garden_map else []) | tojson }};
   const toGeo = (px, py) => {
     if (!Array.isArray(activeCalibration) || activeCalibration.length < 2) return null;
     const [p1,p2]=activeCalibration;
@@ -102,7 +102,7 @@
     if (nums.some((n)=>!Number.isFinite(n)) || Number(p2.coord_x)===Number(p1.coord_x) || Number(p2.coord_y)===Number(p1.coord_y)) return null;
     return {x:Number(p1.x)+((gx-Number(p1.coord_x))/(Number(p2.coord_x)-Number(p1.coord_x)))*(Number(p2.x)-Number(p1.x)), y:Number(p1.y)+((gy-Number(p1.coord_y))/(Number(p2.coord_y)-Number(p1.coord_y)))*(Number(p2.y)-Number(p1.y))};
   };
-  const boundaryPoints = {{ ((garden_map.boundary_points or '[]') if garden_map else '[]') | safe }};
+  const boundaryPoints = {{ (garden_map.boundary_points | stored_points if garden_map else []) | tojson }};
 
   const img = document.getElementById('overview-map-image');
   const svg = document.getElementById('overview-map-overlay');

@@ -3,6 +3,7 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 from .models import db, LightNeed
 from .auth import OIDC_ENV_VARS, auth_bp, oauth, oidc_configured_from_env
 from .views import main_bp
+from .map_data import parse_stored_points
 import os
 
 
@@ -88,6 +89,8 @@ def create_app():
 
     db.init_app(app)
     oauth.init_app(app)
+
+    app.jinja_env.filters['stored_points'] = parse_stored_points
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(main_bp)

@@ -100,8 +100,8 @@
 
 
 <script>
-  const gardenBoundary = {{ ((garden_map.boundary_points or '[]') if garden_map else '[]') | safe }};
-  const calibrationPoints = {{ ((garden_map.calibration_points or '[]') if garden_map else '[]') | safe }};
+  const gardenBoundary = {{ (garden_map.boundary_points | stored_points if garden_map else []) | tojson }};
+  const calibrationPoints = {{ (garden_map.calibration_points | stored_points if garden_map else []) | tojson }};
   const toPixel = (gx, gy) => { if (!Array.isArray(calibrationPoints)||calibrationPoints.length<2) return null; const [p1,p2]=calibrationPoints; return {x:Number(p1.x)+((gx-Number(p1.coord_x))/(Number(p2.coord_x)-Number(p1.coord_x)))*(Number(p2.x)-Number(p1.x)), y:Number(p1.y)+((gy-Number(p1.coord_y))/(Number(p2.coord_y)-Number(p1.coord_y)))*(Number(p2.y)-Number(p1.y))}; };
   const locationPolygons = [
     {% for l in locations %}
@@ -109,7 +109,7 @@
         id: {{ l.id }},
         name: {{ l.name|tojson }},
         color: {{ (l.color or '#2f6d40')|tojson }},
-        polygon: {{ (l.polygon_points or '[]') | safe }},
+        polygon: {{ (l.polygon_points | stored_points) | tojson }},
       },
     {% endfor %}
   ];
