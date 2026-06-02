@@ -88,6 +88,32 @@ class TaxonomyResolverConfigTest(unittest.TestCase):
 
         self.assertEqual(suggestion, 'Großblättriges_Kaukasusvergissmeinnicht')
 
+    def test_floraweb_resolver_extracts_name_use_id_from_search_results(self):
+        resolver = FlorawebResolver()
+        request = ResolverRequest(
+            'floraweb',
+            'Brunnera macrophylla',
+            {
+                'catalog_key': 'floraweb',
+                'mode': 'floraweb_search',
+                'search_url': 'https://www.floraweb.de/php/taxoquery.php',
+                'query_param': 'taxname',
+            },
+        )
+        page_html = '''
+            <h2>Trefferliste</h2>
+            <p>Ihre Suche nach <strong>'Brunnera macrophylla'</strong> ergab 1 Treffer.</p>
+            <a href="/php/artenhome.php?name-use-id=6666" title="zum Pflanzensteckbrief">
+                <span class="taxname-main">Brunnera macrophylla (Adams) I. M. Johnst.</span>
+            </a>
+            <a class="atlas" href="/webkarten/karte.html?taxon-id=6666" title="direkt zur Atlaskarte"></a>
+        '''
+
+        with patch('app.taxonomy.resolvers.html_search.fetch_text', return_value=page_html):
+            suggestion = resolver.suggest_id(request)
+
+        self.assertEqual(suggestion, '6666')
+
     def test_common_config_validation_checks_required_keys(self):
         self.assertTrue(validate_common_config({'search_url': 'https://example.test/search'}, required=('search_url',)))
         self.assertFalse(validate_common_config({'search_url': '   '}, required=('search_url',)))

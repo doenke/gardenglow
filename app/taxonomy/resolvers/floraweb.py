@@ -11,6 +11,8 @@ class FlorawebResolver(HtmlSearchResolver):
     }
 
     patterns = [
+        r'[?&]name-use-id=([0-9]+)',
+        r'[?&]taxon-id=([0-9]+)',
         r'/taxon/([A-Za-z0-9\-]+)',
         r'/pflanze/([A-Za-z0-9\-]+)',
         r'[?&]taxnr=([0-9]+)',
