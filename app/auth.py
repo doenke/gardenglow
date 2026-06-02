@@ -20,6 +20,8 @@ ALLOWED_AVATAR_CONTENT_TYPES = {
     'image/gif',
 }
 DEFAULT_AVATAR_EXTENSION = '.jpg'
+DEFAULT_MAX_AVATAR_SIZE_BYTES = 5 * 1024 * 1024
+AVATAR_DOWNLOAD_CHUNK_SIZE = 64 * 1024
 OIDC_ENV_VARS = (
     'OIDC_SERVER_METADATA_URL',
     'OIDC_CLIENT_ID',
@@ -27,6 +29,10 @@ OIDC_ENV_VARS = (
 )
 DEFAULT_LOCAL_USER_SUB = 'local-default-gardener'
 DEFAULT_LOCAL_USER_NAME = 'Gärtner'
+
+
+class AvatarDownloadTooLargeError(RuntimeError):
+    pass
 
 
 def oidc_configured_from_env():
@@ -90,13 +96,7 @@ def login():
 
 
 
-def _download_avatar(user, avatar_url):
-    if not avatar_url:
-        return
-
-    avatar_folder = current_app.config['AVATAR_FOLDER']
-    os.makedirs(avatar_folder, exist_ok=True)
-
+def _avatar_extension_from_url(avatar_url):
     url_extension = os.path.splitext(urlparse(avatar_url).path)[1].lower()
     ext = (
         url_extension
@@ -105,32 +105,80 @@ def _download_avatar(user, avatar_url):
     )
     if url_extension and url_extension not in ALLOWED_AVATAR_EXTENSIONS:
         current_app.logger.warning(
-            'Rejected avatar extension %s for %s; using %s fallback',
+            'Rejected avatar extension %s; using %s fallback',
             url_extension,
-            user.sub,
             DEFAULT_AVATAR_EXTENSION,
         )
+    return ext
 
-    filename = f"{user.sub}_{uuid4().hex}{ext}"
-    target = os.path.join(avatar_folder, filename)
+
+def _avatar_target_path(avatar_folder, filename):
+    avatar_folder_abs = os.path.abspath(avatar_folder)
+    target = os.path.abspath(os.path.join(avatar_folder_abs, filename))
+    if os.path.commonpath([avatar_folder_abs, target]) != avatar_folder_abs:
+        raise ValueError('Avatar target path escapes AVATAR_FOLDER')
+    return target
+
+
+def _stream_avatar_to_file(response, target, max_size_bytes):
+    bytes_written = 0
+    with open(target, 'wb') as f:
+        for chunk in response.iter_content(chunk_size=AVATAR_DOWNLOAD_CHUNK_SIZE):
+            if not chunk:
+                continue
+            bytes_written += len(chunk)
+            if bytes_written > max_size_bytes:
+                raise AvatarDownloadTooLargeError
+            f.write(chunk)
+
+
+def _download_avatar(user, avatar_url):
+    if not avatar_url:
+        return
+
+    avatar_folder = current_app.config['AVATAR_FOLDER']
+    os.makedirs(avatar_folder, exist_ok=True)
+
+    ext = _avatar_extension_from_url(avatar_url)
+    filename = f"avatar_{uuid4().hex}{ext}"
+    target = _avatar_target_path(avatar_folder, filename)
+    max_size_bytes = current_app.config['MAX_AVATAR_SIZE_BYTES']
 
     try:
-        res = requests.get(avatar_url, timeout=10)
-        res.raise_for_status()
-        content_type = res.headers.get('Content-Type', '').split(';', 1)[0].strip().lower()
-        if content_type and content_type not in ALLOWED_AVATAR_CONTENT_TYPES:
-            current_app.logger.warning(
-                'Rejected avatar for %s due to invalid Content-Type: %s',
-                user.sub,
-                content_type,
-            )
-            return
+        with requests.get(avatar_url, timeout=10, stream=True) as res:
+            res.raise_for_status()
+            content_type = res.headers.get('Content-Type', '').split(';', 1)[0].strip().lower()
+            if content_type and content_type not in ALLOWED_AVATAR_CONTENT_TYPES:
+                current_app.logger.warning(
+                    'Rejected avatar for %s due to invalid Content-Type: %s',
+                    user.sub,
+                    content_type,
+                )
+                return
 
-        with open(target, 'wb') as f:
-            f.write(res.content)
+            content_length = res.headers.get('Content-Length')
+            if content_length and int(content_length) > max_size_bytes:
+                current_app.logger.warning(
+                    'Rejected avatar for %s because Content-Length exceeds %s bytes',
+                    user.sub,
+                    max_size_bytes,
+                )
+                return
+
+            _stream_avatar_to_file(res, target, max_size_bytes)
         user.avatar_filename = filename
-    except requests.RequestException:
+    except AvatarDownloadTooLargeError:
+        current_app.logger.warning(
+            'Rejected avatar for %s because it exceeds %s bytes',
+            user.sub,
+            max_size_bytes,
+        )
+        if os.path.exists(target):
+            os.remove(target)
+    except (OSError, ValueError, requests.RequestException):
         current_app.logger.warning('Could not download avatar for %s', user.sub)
+        if os.path.exists(target):
+            os.remove(target)
 
 @auth_bp.route('/auth/callback')
 def auth_callback():

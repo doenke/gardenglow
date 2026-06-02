@@ -1,7 +1,7 @@
 from flask import Flask
 from werkzeug.middleware.proxy_fix import ProxyFix
 from .models import db, LightNeed
-from .auth import OIDC_ENV_VARS, auth_bp, oauth, oidc_configured_from_env
+from .auth import DEFAULT_MAX_AVATAR_SIZE_BYTES, OIDC_ENV_VARS, auth_bp, oauth, oidc_configured_from_env
 from .views import main_bp
 from .map_data import parse_stored_points
 import os
@@ -78,6 +78,10 @@ def create_app():
     )
     app.config['MAX_CONTENT_LENGTH'] = app.config['MAX_ATTACHMENT_SIZE_BYTES']
     app.config['AVATAR_FOLDER'] = os.getenv('AVATAR_FOLDER', '/data/avatars')
+    app.config['MAX_AVATAR_SIZE_BYTES'] = max(
+        0,
+        int(os.getenv('MAX_AVATAR_SIZE_BYTES', str(DEFAULT_MAX_AVATAR_SIZE_BYTES))),
+    )
     app.config['MAP_FOLDER'] = os.getenv('MAP_FOLDER', '/data/maps')
     app.config['WIDGET_API_KEY'] = os.getenv('WIDGET_API_KEY', '').strip()
     app.config['STATS_UPLOAD_CACHE_TTL_SECONDS'] = max(0, int(os.getenv('STATS_UPLOAD_CACHE_TTL_SECONDS', '60')))

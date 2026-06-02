@@ -72,6 +72,7 @@ docker compose up --build
 - `UPLOAD_FOLDER` – Verzeichnis für hochgeladene Pflanzenfotos
 - `MAX_ATTACHMENT_SIZE_BYTES` – Maximalgröße pro Dateiupload (Standard: `15728640` = 15 MiB)
 - `AVATAR_FOLDER` – Verzeichnis für lokal gespeicherte Benutzer-Avatare
+- `MAX_AVATAR_SIZE_BYTES` – Maximalgröße für vom OIDC-Profil heruntergeladene Avatare (Standard: `5242880` = 5 MiB)
 - `MAP_FOLDER` – Verzeichnis für Karten-/Lageplan-Dateien
 - `WIDGET_API_KEY` – API-Key für den Statistik-Webservice `/api/stats`
 - `HEADER_LOGO_URL` – URL eines optionalen Header-Logos (wenn leer oder nicht gesetzt, wird kein Logo angezeigt)
