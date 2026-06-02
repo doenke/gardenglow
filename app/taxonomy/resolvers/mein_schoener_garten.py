@@ -42,11 +42,27 @@ def _iter_node_plants(value):
             yield from _iter_node_plants(child)
 
 
+def _next_data_page_content(payload):
+    if not isinstance(payload, dict):
+        return None
+    page_props = payload.get("pageProps")
+    if not isinstance(page_props, dict):
+        return None
+    data = page_props.get("data")
+    if not isinstance(data, dict):
+        return None
+    page = data.get("page")
+    if not isinstance(page, dict):
+        return None
+    return page.get("content")
+
+
 def extract_next_data_taxonomy_id(payload, scientific_name):
     requested_name = _normalized_name(scientific_name)
     first_slug = None
+    content = _next_data_page_content(payload)
 
-    for plant in _iter_node_plants(payload):
+    for plant in _iter_node_plants(content):
         slug = _slug_from_plant_url(plant.get("url"))
         if not slug:
             continue
