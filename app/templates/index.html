@@ -9,7 +9,8 @@
 {% endif %}
 <h2 class="m-0">Beete</h2>
 <div class="table-search">
-  <input type="search" id="locations-search" placeholder="Beete durchsuchen">
+  <label class="sr-only" for="locations-search">Beete durchsuchen</label>
+  <input type="search" id="locations-search" placeholder="z. B. Kräuterbeet">
 </div>
 <table>
   <thead>
@@ -59,15 +60,18 @@
 </div>
 
 <form method="post" action="/locations/new" id="new-location-form" class="grid hidden mt-1">
-  <input name="name" placeholder="Name" required>
-  <input name="description" placeholder="Beschreibung">
+  <label for="new-location-name">Name</label>
+  <input id="new-location-name" name="name" placeholder="z. B. Kräuterbeet" required>
+  <label for="new-location-description">Beschreibung</label>
+  <input id="new-location-description" name="description" placeholder="z. B. sonnig, nahe der Terrasse">
   <label class="color-field">Farbe <input class="color-input-dot color-dot-lg" type="color" name="color" value="#2f6d40"></label>
   <button>anlegen</button>
 </form>
 
 <h2 class="m-0">Alle Pflanzen</h2>
 <div class="table-search">
-  <input type="search" id="index-plants-search" placeholder="Pflanzen durchsuchen">
+  <label class="sr-only" for="index-plants-search">Pflanzen durchsuchen</label>
+  <input type="search" id="index-plants-search" placeholder="z. B. Tomate">
 </div>
 <table>
   <thead>
