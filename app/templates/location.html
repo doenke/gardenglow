@@ -14,18 +14,15 @@
     <button type="button" id="toggle-polygon-edit" aria-label="Polygon bearbeiten" title="Polygon bearbeiten" class="icon-btn">✏️</button>
     <small id="polygon-edit-instructions" class="text-muted hidden">Klicke/tippe auf die Karte, um Punkte zu setzen. Ziehe Punkte zum Verschieben.</small>
   </div>
+  {% if soil_moisture_current is not none %}
   <aside class="soil-moisture-card" aria-label="Aktuelle Bodenfeuchte">
     <span class="soil-moisture-card-title">Bodenfeuchte</span>
-    {% if soil_moisture_current is not none %}
-      <strong>{{ soil_moisture_current_label }}</strong>
-    {% else %}
-      <strong>—</strong>
-      <small>{{ soil_moisture_current_label }}</small>
-    {% endif %}
+    <strong>{{ soil_moisture_current_label }}</strong>
     {% if soil_moisture_sensor_values and soil_moisture_sensor_values|length > 1 %}
       <small>{{ soil_moisture_sensor_values|length }} Sensoren · Durchschnitt</small>
     {% endif %}
   </aside>
+  {% endif %}
 </div>
 {% if garden_map and garden_map.filename %}
 <div class="rel-inline mb-75">
@@ -95,6 +92,7 @@
   <a class="btn secondary" href="/sensors?location_id={{ location.id }}">Sensor verknüpfen</a>
 </div>
 
+{% if soil_moisture_has_series_data %}
 <section class="soil-moisture-history" aria-labelledby="soil-moisture-history-title">
   <div class="soil-moisture-history-head">
     <div>
@@ -136,6 +134,7 @@
   </div>
   {% endif %}
 </section>
+{% endif %}
 
 <dialog id="plant-create-dialog" class="plant-create-dialog" aria-labelledby="plant-create-dialog-title">
   <form method="post" action="/locations/{{ location.id }}/plants/new" id="plant-create-form" class="grid">
