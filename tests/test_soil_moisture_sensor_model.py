@@ -263,6 +263,44 @@ class SoilMoistureSensorModelTest(unittest.TestCase):
         self.assertEqual(payload['series'][0]['points'][0]['value'], 35.2)
         self.assertNotIn('Für den gewählten Zeitraum wurden keine Bodenfeuchte-Daten gefunden.', payload['hints'])
 
+    def test_location_soil_moisture_payload_includes_weather_series(self):
+        class FakeAdapter:
+            def query_sensor(self, source, start, stop):
+                if source.key == 'temperature':
+                    return [{'time': '2026-06-01T12:00:00+00:00', 'value': 21.5}]
+                if source.key == 'rainfall':
+                    return [{'time': '2026-06-01T12:00:00+00:00', 'value': 4.2}]
+                return [{'time': '2026-06-01T12:00:00+00:00', 'value': 35.2}]
+
+        with self.app.app_context():
+            db.session.add(InfluxIntegrationConfig(
+                influx_url='https://influx.local',
+                influx_org='Garten',
+                influx_bucket='soil',
+                influx_token='token',
+                temperature_homeassistant_entity_id='sensor.aussentemperatur',
+                temperature_influx_field='value',
+                temperature_influx_tags='{"entity_id":"aussentemperatur","domain":"sensor"}',
+                rainfall_homeassistant_entity_id='sensor.regenmenge',
+                rainfall_influx_field='value',
+                rainfall_influx_tags='{"entity_id":"regenmenge","domain":"sensor"}',
+            ))
+            db.session.commit()
+
+        with patch('app.views.influx_service.get_sensor_time_series_adapter', return_value=FakeAdapter()), \
+                patch('app.views.latest_sensor_value', return_value={'time': '2026-06-03T08:00:00Z', 'value': 35.2}):
+            response = self.client.get(f'/locations/{self.location_id}/soil-moisture')
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertEqual(payload['weather_series']['temperature']['label'], 'Temperatur')
+        self.assertEqual(payload['weather_series']['temperature']['unit'], '°C')
+        self.assertEqual(payload['weather_series']['temperature']['points'][0]['value'], 21.5)
+        self.assertEqual(payload['weather_series']['rainfall']['label'], 'Regenmenge')
+        self.assertEqual(payload['weather_series']['rainfall']['unit'], 'mm')
+        self.assertEqual(payload['weather_series']['rainfall']['points'][0]['value'], 4.2)
+        self.assertTrue(payload['has_series_data'])
+
     def test_location_detail_hides_soil_moisture_when_influx_fails(self):
         class FailingAdapter:
             def query_sensor(self, sensor, start, stop):

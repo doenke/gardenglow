@@ -1,6 +1,7 @@
 from flask import Flask
+from sqlalchemy import inspect
 from werkzeug.middleware.proxy_fix import ProxyFix
-from .models import db, LightNeed
+from .models import db, LightNeed, InfluxIntegrationConfig
 from .auth import DEFAULT_MAX_AVATAR_SIZE_BYTES, OIDC_ENV_VARS, auth_bp, oauth, oidc_configured_from_env
 from .views import main_bp
 from .map_data import parse_stored_points
@@ -109,6 +110,7 @@ def create_app():
 
     with app.app_context():
         db.create_all()
+        _ensure_influx_integration_config_columns()
         _seed_light_needs()
 
         os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
@@ -130,3 +132,35 @@ def _seed_light_needs():
         if key not in existing:
             db.session.add(LightNeed(key=key, label=label))
     db.session.commit()
+
+
+def _ensure_influx_integration_config_columns():
+    """Add newly introduced integration columns to existing SQLite databases."""
+    inspector = inspect(db.engine)
+    if InfluxIntegrationConfig.__tablename__ not in inspector.get_table_names():
+        return
+
+    existing_columns = {column['name'] for column in inspector.get_columns(InfluxIntegrationConfig.__tablename__)}
+    desired_columns = {
+        'temperature_homeassistant_entity_id': 'VARCHAR(255)',
+        'temperature_influx_measurement': 'VARCHAR(255)',
+        'temperature_influx_field': 'VARCHAR(255)',
+        'temperature_influx_tags': 'TEXT',
+        'rainfall_homeassistant_entity_id': 'VARCHAR(255)',
+        'rainfall_influx_measurement': 'VARCHAR(255)',
+        'rainfall_influx_field': 'VARCHAR(255)',
+        'rainfall_influx_tags': 'TEXT',
+    }
+    missing_columns = [
+        (name, sql_type)
+        for name, sql_type in desired_columns.items()
+        if name not in existing_columns
+    ]
+    if not missing_columns:
+        return
+
+    with db.engine.begin() as connection:
+        for name, sql_type in missing_columns:
+            connection.exec_driver_sql(
+                f'ALTER TABLE {InfluxIntegrationConfig.__tablename__} ADD COLUMN {name} {sql_type}'
+            )

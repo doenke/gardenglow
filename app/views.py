@@ -8,6 +8,7 @@ import sqlite3
 import subprocess
 import zipfile
 from io import BytesIO
+from types import SimpleNamespace
 from urllib.parse import quote, unquote, urljoin
 
 import requests
@@ -86,6 +87,10 @@ SOIL_MOISTURE_RANGE_OPTIONS = [
 ]
 SOIL_MOISTURE_RANGE_BY_KEY = {item['key']: item for item in SOIL_MOISTURE_RANGE_OPTIONS}
 DEFAULT_SOIL_MOISTURE_RANGE = '7d'
+WEATHER_SERIES_DEFINITIONS = {
+    'temperature': {'label': 'Temperatur', 'unit': '°C'},
+    'rainfall': {'label': 'Regenmenge', 'unit': 'mm'},
+}
 
 ENVIRONMENT_VARIABLES = [
     {'name': 'SECRET_KEY', 'config_key': 'SECRET_KEY', 'default': None, 'sensitive': True},
@@ -1215,6 +1220,7 @@ def _sensor_influx_config():
             org=(stored_config.influx_org or '').strip(),
             bucket=(stored_config.influx_bucket or '').strip(),
             timeout_seconds=stored_config.timeout_seconds or influx_service.DEFAULT_TIMEOUT_SECONDS,
+            verify_tls=stored_config.verify_tls,
         )
     return influx_service.InfluxIntegrationConfig.from_app_config()
 
@@ -1239,6 +1245,102 @@ def _location_soil_moisture_sensors(location_id):
 
 def _empty_soil_moisture_series(sensors):
     return [{'sensor_id': sensor.id, 'name': sensor.name, 'points': []} for sensor in sensors]
+
+
+def _weather_series_config(config, kind):
+    entity_id = (getattr(config, f'{kind}_homeassistant_entity_id', None) or '').strip()
+    measurement = (getattr(config, f'{kind}_influx_measurement', None) or '').strip()
+    field = (getattr(config, f'{kind}_influx_field', None) or '').strip()
+    tags = (getattr(config, f'{kind}_influx_tags', None) or '').strip()
+    if not any((entity_id, measurement, field, tags)):
+        return None
+
+    defaults = influx_service.homeassistant_entity_influx_defaults(entity_id) if entity_id else {}
+    definition = WEATHER_SERIES_DEFINITIONS[kind]
+    return {
+        'kind': kind,
+        'label': definition['label'],
+        'unit': definition['unit'],
+        'configured': True,
+        'source': SimpleNamespace(
+            key=kind,
+            influx_measurement=measurement or defaults.get('measurement'),
+            influx_field=field or defaults.get('field'),
+            influx_tags=tags or defaults.get('tags'),
+        ),
+        'points': [],
+    }
+
+
+def _empty_weather_series(config=None):
+    config = config if config is not None else _first_influx_integration_config()
+    series = {}
+    for kind, definition in WEATHER_SERIES_DEFINITIONS.items():
+        configured = _weather_series_config(config, kind) if config else None
+        series[kind] = {
+            'kind': kind,
+            'label': definition['label'],
+            'unit': definition['unit'],
+            'configured': bool(configured),
+            'points': [],
+        }
+    return series
+
+
+def _load_weather_series(lookback):
+    stored_config = _first_influx_integration_config()
+    series = _empty_weather_series(stored_config)
+    configured_series = [
+        _weather_series_config(stored_config, kind)
+        for kind in WEATHER_SERIES_DEFINITIONS
+    ] if stored_config else []
+    configured_series = [item for item in configured_series if item]
+    hints = []
+    if not configured_series:
+        return series, hints
+
+    config = _sensor_influx_config()
+    if not config.enabled:
+        hints.append('InfluxDB ist nicht vollständig konfiguriert; Wetterdaten können nicht geladen werden.')
+        return series, hints
+
+    adapter = influx_service.get_sensor_time_series_adapter(config)
+    stop = datetime.now(timezone.utc)
+    start = stop - lookback
+    errors = []
+    for item in configured_series:
+        try:
+            item['points'] = adapter.query_sensor(item['source'], start, stop)
+        except Exception as exc:  # pragma: no cover - concrete InfluxDB failures are integration-specific
+            errors.append(f"{item['label']}: {exc}")
+        public_item = {key: value for key, value in item.items() if key != 'source'}
+        series[item['kind']] = public_item
+
+    if errors:
+        hints.append('InfluxDB-Fehler beim Laden der Wetterdaten: ' + '; '.join(errors))
+    return series, hints
+
+
+def _apply_weather_series_form(config, form):
+    for kind in WEATHER_SERIES_DEFINITIONS:
+        entity_id = (form.get(f'{kind}_homeassistant_entity_id') or '').strip()
+        defaults = influx_service.homeassistant_entity_influx_defaults(entity_id) if entity_id else {}
+        setattr(config, f'{kind}_homeassistant_entity_id', entity_id or None)
+        setattr(
+            config,
+            f'{kind}_influx_measurement',
+            (form.get(f'{kind}_influx_measurement') or '').strip() or defaults.get('measurement') or None,
+        )
+        setattr(
+            config,
+            f'{kind}_influx_field',
+            (form.get(f'{kind}_influx_field') or '').strip() or defaults.get('field') or None,
+        )
+        setattr(
+            config,
+            f'{kind}_influx_tags',
+            (form.get(f'{kind}_influx_tags') or '').strip() or defaults.get('tags') or None,
+        )
 
 
 def _load_location_soil_moisture_series(location_id, lookback):
@@ -1281,6 +1383,7 @@ def _influx_service_config_from_db_or_app():
         org=(influx_config.influx_org or '').strip(),
         bucket=(influx_config.influx_bucket or '').strip(),
         timeout_seconds=influx_config.timeout_seconds,
+        verify_tls=influx_config.verify_tls,
     )
 
 
@@ -1530,6 +1633,17 @@ def save_homeassistant_config():
     db.session.commit()
     flash('Homeassistant-Konfiguration wurde gespeichert.', 'success')
     return redirect(url_for('main.config', _anchor='homeassistant-config'))
+
+
+@main_bp.route('/config/weather-sensors', methods=['POST'])
+@login_required
+def save_weather_sensor_config():
+    influx_config = _ensure_influx_integration_config()
+    _apply_weather_series_form(influx_config, request.form)
+    influx_config.updated_at = utc_now()
+    db.session.commit()
+    flash('Wetterdaten-Konfiguration wurde gespeichert.', 'success')
+    return redirect(url_for('main.config', _anchor='weather-sensors-config'))
 
 
 @main_bp.route('/config/connection-options', methods=['POST'])
@@ -1801,6 +1915,8 @@ def location_detail(location_id):
     other_locations = Location.query.filter(Location.id != loc.id).order_by(*location_sort_criteria()).all()
     soil_moisture_range_key, _soil_moisture_lookback = _selected_soil_moisture_range()
     soil_moisture_sensors = _location_soil_moisture_sensors(loc.id)
+    weather_series = _empty_weather_series()
+    show_moisture_history = bool(soil_moisture_sensors) or any(item['configured'] for item in weather_series.values())
     soil_moisture_series = _empty_soil_moisture_series(soil_moisture_sensors)
     return render_template(
         'location.html',
@@ -1818,8 +1934,10 @@ def location_detail(location_id):
         top_soil_properties=get_top_soil_property_labels(),
         soil_property_suggestions=SoilProperty.query.order_by(SoilProperty.label.asc()).all(),
         soil_moisture_series=soil_moisture_series,
-        soil_moisture_hints=['Bodenfeuchte-Daten werden im Hintergrund geladen.'],
+        weather_series=weather_series,
+        soil_moisture_hints=['Bodenfeuchte-Daten werden im Hintergrund geladen.'] if show_moisture_history else [],
         soil_moisture_sensors=soil_moisture_sensors,
+        show_moisture_history=show_moisture_history,
         soil_moisture_range_key=soil_moisture_range_key,
         soil_moisture_range_options=SOIL_MOISTURE_RANGE_OPTIONS,
         soil_moisture_current=None,
@@ -1846,17 +1964,22 @@ def location_soil_moisture_data(location_id):
         loc.id,
         soil_moisture_lookback,
     )
+    weather_series, weather_hints = _load_weather_series(soil_moisture_lookback)
+    soil_moisture_hints.extend(weather_hints)
     soil_moisture_current, soil_moisture_current_label, soil_moisture_sensor_values = _soil_moisture_current_for_location(loc)
 
     return jsonify({
         'range_key': soil_moisture_range_key,
         'series': soil_moisture_series,
+        'weather_series': weather_series,
         'hints': soil_moisture_hints,
         'sensors': [
             {'sensor_id': sensor.id, 'name': sensor.name}
             for sensor in soil_moisture_sensors
         ],
-        'has_series_data': any(sensor_series['points'] for sensor_series in soil_moisture_series),
+        'has_series_data': any(sensor_series['points'] for sensor_series in soil_moisture_series) or any(
+            weather_item.get('points') for weather_item in weather_series.values()
+        ),
         'current': _serialize_soil_moisture_current_value(
             soil_moisture_current,
             soil_moisture_current_label,
