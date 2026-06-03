@@ -82,6 +82,7 @@ SOIL_MOISTURE_RANGE_OPTIONS = [
     {'key': '24h', 'label': '24 Stunden', 'delta': timedelta(hours=24)},
     {'key': '7d', 'label': '7 Tage', 'delta': timedelta(days=7)},
     {'key': '30d', 'label': '30 Tage', 'delta': timedelta(days=30)},
+    {'key': '1y', 'label': '1 Jahr', 'delta': timedelta(days=365)},
 ]
 SOIL_MOISTURE_RANGE_BY_KEY = {item['key']: item for item in SOIL_MOISTURE_RANGE_OPTIONS}
 DEFAULT_SOIL_MOISTURE_RANGE = '7d'
