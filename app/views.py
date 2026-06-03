@@ -805,6 +805,7 @@ def location_detail(location_id):
 @login_required
 def new_location_timeline_entry(location_id):
     location = Location.query.get_or_404(location_id)
+    title = (request.form.get('title') or '').strip()
     description = (request.form.get('description') or '').strip()
     attachment = request.files.get('attachment')
 
@@ -815,9 +816,6 @@ def new_location_timeline_entry(location_id):
         ALLOWED_ATTACHMENT_MIME_TYPES,
         current_app.config.get('MAX_ATTACHMENT_SIZE_BYTES'),
     )
-    if not description:
-        flash('Bitte Beschreibung eingeben.', 'warning')
-        return redirect(url_for('main.location_detail', location_id=location.id))
     if upload_error == 'too_large':
         flash('Datei zu groß (max. 15 MB).', 'error')
         return redirect(url_for('main.location_detail', location_id=location.id))
@@ -827,19 +825,19 @@ def new_location_timeline_entry(location_id):
     if upload_error == 'extension_not_allowed':
         flash('Dateiendung nicht erlaubt. Bitte Bild oder PDF hochladen.', 'error')
         return redirect(url_for('main.location_detail', location_id=location.id))
-    if not unique:
-        flash('Bitte eine Datei auswählen.', 'warning')
     attachment_kind = None
     if unique:
         ext = unique.rsplit('.', 1)[1].lower()
         attachment_kind = 'image' if ext in IMAGE_TYPES else 'pdf'
 
-    if not description and not unique:
+    if not title and not description and not unique:
+        flash('Bitte Titel, Beschreibung oder Datei angeben.', 'warning')
         return redirect(url_for('main.location_detail', location_id=location.id))
 
     create_timeline_entry(
         scope_type='location',
         scope_id=location.id,
+        title=title or None,
         description=description or None,
         attachment_filename=unique,
         attachment_kind=attachment_kind,

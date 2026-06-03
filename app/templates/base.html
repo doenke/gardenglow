@@ -39,6 +39,15 @@
     input::placeholder,textarea::placeholder{color:var(--muted);opacity:1}
     textarea{min-height:90px;resize:vertical}
     textarea.timeline-description-compact{min-height:2.55rem;height:2.55rem;resize:vertical}
+    .timeline-panel{display:flex;flex-direction:column;gap:.85rem}
+    .timeline-panel-title{margin:0}
+    .timeline-toolbar{display:flex;flex-direction:column;gap:.6rem}
+    .timeline-toolbar-title{margin:0;font-size:1rem}
+    .timeline-form{margin:0}
+    .timeline-form-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.6rem;align-items:start}
+    .timeline-form-row textarea:not(.timeline-description-compact){min-height:5.2rem}
+    .timeline-field{display:grid;gap:.35rem}
+    .timeline-submit{align-self:end}
     a{color:var(--link);font-weight:600;text-underline-offset:2px}
     a:hover{color:var(--link-hover)}
     p,li,label,small,summary{color:var(--text)}
@@ -113,6 +122,7 @@
     .soil-sections{display:grid;gap:.45rem}
     .soil-section-label{margin:0;font-size:.82rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.02em}
         @media (max-width:900px){.page-wrap{padding:.8rem .75rem}.site-header{gap:.75rem;padding:.8rem .9rem}.brand{gap:.6rem}.brand img{height:38px}.brand h1{font-size:1.2rem}.avatar{width:38px;height:38px}}
+    @media (max-width:640px){.timeline-form-row{grid-template-columns:1fr}}
     @media (max-width:700px){table,thead,tbody,th,td,tr{display:block} thead{display:none} tr{margin-bottom:.7rem} td{border:1px solid var(--border)!important;border-radius:10px!important} td::before{content:attr(data-label);display:block;font-size:.75rem;color:var(--muted);margin-bottom:.2rem;font-weight:600}.locations-table td::before{content:none;display:none}.locations-table .location-name-cell{padding:.75rem}.locations-table .location-description-cell.is-empty{display:none}.locations-table .plant-count-cell{display:none}.locations-table .plant-count-badge-mobile{display:inline-grid}.locations-table .location-name-row{width:100%}.index-plants-table tr{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.18rem .65rem;margin-bottom:.55rem;padding:.65rem .75rem;background:var(--surface-soft);border:1px solid var(--border);border-radius:10px}.index-plants-table td{border:0!important;border-radius:0!important;background:transparent;padding:0}.index-plants-table td::before{content:none;display:none}.index-plants-table .index-plant-common-name-cell.is-empty{display:none}.index-plants-table .index-plant-name-cell{grid-column:1;min-width:0;font-weight:700}.index-plants-table .index-plant-common-name-cell{grid-column:1;font-size:.88rem;color:var(--muted);line-height:1.25}.index-plants-table .index-plant-location-cell{grid-column:2;grid-row:1 / span 2;align-self:center;white-space:nowrap}.index-plants-table .index-plant-location-link{display:inline-flex;align-items:center;max-width:38vw;overflow:hidden;text-overflow:ellipsis;border:1px solid var(--border);border-radius:999px;padding:.18rem .5rem;background:var(--surface);font-size:.82rem;text-decoration:none}.index-plants-table tr:hover{background:color-mix(in srgb,var(--surface-soft) 82%, var(--primary) 18%)}}
   </style>
 </head>

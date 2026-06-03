@@ -93,19 +93,35 @@
   </form>
 </dialog>
 
-<h3>Timeline</h3>
-<form method="post" action="/locations/{{ location.id }}/timeline/new" enctype="multipart/form-data" class="grid mb-1">
-  <label for="location-timeline-description">Beschreibung</label>
-  <textarea id="location-timeline-description" name="description" class="timeline-description-compact" rows="1" placeholder="z. B. Beet vorbereitet oder gemulcht"></textarea>
-  <label for="location-timeline-attachment">Foto oder PDF anhängen</label>
-  <input id="location-timeline-attachment" type="file" name="attachment" accept="image/*,application/pdf">
-  <small class="text-muted">Text, Bild oder beides möglich.</small>
-  <button>Eintrag hinzufügen</button>
-</form>
+<section class="timeline-panel">
+  <h3 class="timeline-panel-title">Timeline</h3>
+  <div class="timeline-toolbar">
+    <h4 class="timeline-toolbar-title">Neues Event</h4>
+    <form method="post" action="/locations/{{ location.id }}/timeline/new" enctype="multipart/form-data" class="grid timeline-form">
+      <div class="timeline-form-row">
+        <div class="timeline-field">
+          <label for="location-timeline-title">Titel</label>
+          <input id="location-timeline-title" name="title" placeholder="z. B. Beet vorbereitet">
+        </div>
+        <div class="timeline-field">
+          <label for="location-timeline-description">Beschreibung</label>
+          <textarea id="location-timeline-description" name="description" class="timeline-description-compact" rows="1" placeholder="z. B. Kompost eingearbeitet und gemulcht"></textarea>
+        </div>
+      </div>
+      <div class="timeline-form-row">
+        <div class="timeline-field">
+          <label for="location-timeline-attachment">Foto oder PDF anhängen</label>
+          <input id="location-timeline-attachment" type="file" name="attachment" accept="image/*,application/pdf" capture="environment">
+        </div>
+        <button class="timeline-submit">Speichern</button>
+      </div>
+    </form>
+  </div>
+
 {% for entry in timeline_entries %}
 {% set header_html = None %}
 {% set meta_text = entry.created_at.strftime('%d.%m.%Y %H:%M') ~ (' · Titelbeitrag' if entry.is_title_entry else '') %}
-{% set entry_title = None %}
+{% set entry_title = entry.title %}
 {% set entry_text = entry.description %}
 {% set image_url = '/uploads/' ~ entry.attachment_filename if entry.attachment_filename and entry.attachment_kind == 'image' else None %}
 {% set image_alt = 'Timeline-Foto' %}
@@ -118,6 +134,7 @@
 {% else %}
 <p>Noch keine Timeline-Einträge vorhanden.</p>
 {% endfor %}
+</section>
 <style>
 .plant-create-dialog{width:min(92vw,440px);border:1px solid var(--border);border-radius:16px;background:var(--surface);color:var(--text);box-shadow:var(--shadow);padding:1rem}
 .plant-create-dialog::backdrop{background:rgba(0,0,0,.45);backdrop-filter:blur(2px)}
