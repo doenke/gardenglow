@@ -582,7 +582,7 @@ def get_selected_sensor_locations(form):
 
 
 def apply_sensor_form(sensor, form):
-    name = (form.get('name') or '').strip()
+    name = (form.get('sensor_label') or form.get('name') or '').strip()
     if not name:
         return False, 'Bitte einen Sensornamen angeben.'
 
@@ -1854,6 +1854,7 @@ def sensors():
         locations=locations,
         selected_location=selected_location,
         selected_location_id=selected_location.id if selected_location else selected_location_id,
+        garden_map=GardenMap.query.order_by(GardenMap.id.asc()).first(),
         user=current_user(),
     )
 
@@ -1882,6 +1883,7 @@ def sensor_detail(sensor_id):
         sensor=sensor,
         locations=locations,
         selected_location_ids={location.id for location in sensor.locations},
+        garden_map=GardenMap.query.order_by(GardenMap.id.asc()).first(),
         user=current_user(),
     )
 
