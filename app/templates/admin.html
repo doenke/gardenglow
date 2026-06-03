@@ -28,6 +28,29 @@
 </section>
 
 <section class="card">
+  <h2>Umgebungsvariablen</h2>
+  <p class="text-muted mt-0">Effektive Konfiguration der Anwendung. Sensible Werte werden maskiert angezeigt.</p>
+  <table class="admin-env-table">
+    <thead>
+      <tr>
+        <th>Variable</th>
+        <th>Wert</th>
+        <th>Quelle</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for variable in environment_variables %}
+      <tr>
+        <td data-label="Variable"><code>{{ variable.name }}</code></td>
+        <td data-label="Wert" class="admin-breakable">{{ variable.value or '—' }}{% if variable.sensitive and variable.value %}<br><small class="text-muted">sensibler Wert maskiert</small>{% endif %}</td>
+        <td data-label="Quelle"><span class="admin-source-badge{% if variable.is_set %} is-set{% endif %}">{{ variable.source }}</span></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<section class="card">
   <h2>Speicherverbrauch je Upload-Ordner</h2>
   <table>
     <thead>
@@ -60,8 +83,14 @@
   {% for folder in upload_folders %}
     {% if folder.orphan_files %}
       {% set has_orphans = true %}
-      <h3>{{ folder.label }}</h3>
-      <table>
+      <div class="admin-section-header">
+        <h3>{{ folder.label }}</h3>
+        <form method="post" action="{{ url_for('main.delete_all_orphan_uploads') }}" onsubmit="return confirm('Alle verwaisten Uploads in diesem Bereich wirklich löschen?');">
+          <input type="hidden" name="folder_key" value="{{ folder.key }}">
+          <button type="submit" class="btn danger">Alle verwaisten Uploads löschen</button>
+        </form>
+      </div>
+      <table class="admin-orphan-table">
         <thead>
           <tr>
             <th>Datei</th>
@@ -73,7 +102,7 @@
         <tbody>
           {% for file in folder.orphan_files %}
           <tr>
-            <td data-label="Datei">{{ file.filename }}</td>
+            <td data-label="Datei" class="admin-breakable admin-filename-cell">{{ file.filename }}</td>
             <td data-label="Größe">{{ file.size_human }}</td>
             <td data-label="Geändert (UTC)">{{ file.mtime.strftime('%Y-%m-%d %H:%M:%S') }}</td>
             <td data-label="Aktion">
@@ -125,5 +154,15 @@
 .admin-summary-card{display:grid;gap:.25rem;padding:1rem;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface-soft)}
 .admin-summary-card strong{font-size:1.35rem}
 .admin-summary-label{font-size:.78rem;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:700}
+.admin-section-header{display:flex;justify-content:space-between;align-items:center;gap:.75rem;flex-wrap:wrap;margin:.75rem 0 .35rem}
+.admin-section-header h3{margin:0}
+.admin-section-header form{margin:0}
+.admin-breakable{overflow-wrap:anywhere;word-break:break-word;min-width:0}
+.admin-filename-cell{max-width:clamp(180px,42vw,520px)}
+.admin-orphan-table,.admin-env-table{table-layout:fixed}
+.admin-source-badge{display:inline-flex;align-items:center;border:1px solid var(--border);border-radius:999px;padding:.18rem .55rem;background:var(--surface);font-size:.82rem;font-weight:700;color:var(--muted);white-space:nowrap}
+.admin-source-badge.is-set{background:color-mix(in srgb,var(--primary) 14%, var(--surface));color:var(--text);border-color:color-mix(in srgb,var(--primary) 40%, var(--border))}
+.admin-env-table th:nth-child(1){width:28%}.admin-env-table th:nth-child(3){width:7.5rem}
+.admin-orphan-table th:nth-child(1){width:52%}.admin-orphan-table th:nth-child(2){width:8rem}.admin-orphan-table th:nth-child(3){width:11rem}.admin-orphan-table th:nth-child(4){width:8rem}
 </style>
 {% endblock %}
