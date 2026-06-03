@@ -1,4 +1,6 @@
+import json
 import os
+import re
 import tempfile
 import unittest
 
@@ -41,6 +43,7 @@ class SoilMoistureSensorModelTest(unittest.TestCase):
             db.session.commit()
             self.user_id = self.user.id
             self.location_id = self.location.id
+            self.plant_id = self.plant.id
             self.sensor_id = self.sensor.id
 
         with self.client.session_transaction() as session:
@@ -145,9 +148,24 @@ class SoilMoistureSensorModelTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         html = response.get_data(as_text=True)
+        marker_match = re.search(r'const plantsById = (.*?);', html)
+        self.assertIsNotNone(marker_match)
+        location_plant_markers = json.loads(marker_match.group(1))
+
+        self.assertEqual(location_plant_markers, [
+            {'id': self.plant_id, 'name': 'Minze', 'map_x': 10, 'map_y': 20},
+        ])
+        self.assertNotIn({
+            'id': self.sensor_id,
+            'name': 'Bodenfeuchte Sensor 1',
+            'map_x': 30,
+            'map_y': 40,
+        }, location_plant_markers)
         self.assertIn('Minze', html)
         self.assertNotIn('Bodenfeuchte Sensor 1', html)
         self.assertNotIn('soil-sensor-1', html)
+        self.assertNotIn('/sensors/{}'.format(self.sensor_id), html)
+        self.assertNotIn('class=\"soil-moisture-sensor-marker\"', html)
 
 
 if __name__ == '__main__':

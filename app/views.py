@@ -1328,7 +1328,7 @@ def new_location():
 @login_required
 def location_detail(location_id):
     loc = session_get_or_404(Location, location_id)
-    plants = Plant.query.filter_by(location_id=loc.id).all()
+    plants = Plant.query.filter_by(location_id=loc.id).order_by(Plant.name.asc()).all()
     plant_ids = [plant.id for plant in plants]
     plant_title_images_by_id = {}
     if plant_ids:
