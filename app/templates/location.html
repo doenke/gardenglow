@@ -8,10 +8,24 @@
 {% endblock %}
 {% block content %}
 <section class="card">
-<div class="flex items-center gap-5 mb-35 wrap">
-  <h2 class="m-0">{{ location.name }}</h2>
-  <button type="button" id="toggle-polygon-edit" aria-label="Polygon bearbeiten" title="Polygon bearbeiten" class="icon-btn">✏️</button>
-  <small id="polygon-edit-instructions" class="text-muted hidden">Klicke/tippe auf die Karte, um Punkte zu setzen. Ziehe Punkte zum Verschieben.</small>
+<div class="location-title-row mb-35">
+  <div class="flex items-center gap-5 wrap">
+    <h2 class="m-0">{{ location.name }}</h2>
+    <button type="button" id="toggle-polygon-edit" aria-label="Polygon bearbeiten" title="Polygon bearbeiten" class="icon-btn">✏️</button>
+    <small id="polygon-edit-instructions" class="text-muted hidden">Klicke/tippe auf die Karte, um Punkte zu setzen. Ziehe Punkte zum Verschieben.</small>
+  </div>
+  <aside class="soil-moisture-card" aria-label="Aktuelle Bodenfeuchte">
+    <span class="soil-moisture-card-title">Bodenfeuchte</span>
+    {% if soil_moisture_current is not none %}
+      <strong>{{ soil_moisture_current_label }}</strong>
+    {% else %}
+      <strong>—</strong>
+      <small>{{ soil_moisture_current_label }}</small>
+    {% endif %}
+    {% if soil_moisture_sensor_values and soil_moisture_sensor_values|length > 1 %}
+      <small>{{ soil_moisture_sensor_values|length }} Sensoren · Durchschnitt</small>
+    {% endif %}
+  </aside>
 </div>
 {% if garden_map and garden_map.filename %}
 <div class="rel-inline mb-75">
@@ -141,6 +155,10 @@
 {% endfor %}
 </section>
 <style>
+.location-title-row{display:flex;align-items:flex-start;justify-content:space-between;gap:.8rem;flex-wrap:wrap}
+.soil-moisture-card{display:grid;gap:.1rem;min-width:170px;padding:.65rem .8rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-soft)}
+.soil-moisture-card-title,.soil-moisture-card small{color:var(--muted);font-size:.82rem}
+.soil-moisture-card strong{font-size:1.35rem;line-height:1.1}
 .plant-create-dialog{width:min(92vw,440px);border:1px solid var(--border);border-radius:16px;background:var(--surface);color:var(--text);box-shadow:var(--shadow);padding:1rem}
 .plant-create-dialog::backdrop{background:rgba(0,0,0,.45);backdrop-filter:blur(2px)}
 .dialog-head{display:flex;align-items:center;justify-content:space-between;gap:1rem}
