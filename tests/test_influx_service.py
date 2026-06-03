@@ -5,6 +5,7 @@ import unittest
 from app.services.influx_service import (
     FluxInfluxQueryAdapter,
     InfluxIntegrationConfig,
+    homeassistant_entity_influx_defaults,
     normalize_flux_result,
     parse_influx_tags,
 )
@@ -58,6 +59,42 @@ class InfluxServiceTest(unittest.TestCase):
         self.assertIn('r._field == "percent"', query)
         self.assertIn('r["entity_id"] == "sensor.soil_1"', query)
         self.assertIn('|> keep(columns: ["_time", "_value"])', query)
+
+    def test_homeassistant_entity_defaults_match_homeassistant_influx_schema(self):
+        defaults = homeassistant_entity_influx_defaults('sensor.third_reality_inc_3rsm0347z_bodenfeuchtigkeit')
+
+        self.assertEqual(
+            defaults,
+            {
+                'measurement': '',
+                'field': 'value',
+                'tags': '{"entity_id":"third_reality_inc_3rsm0347z_bodenfeuchtigkeit","domain":"sensor"}',
+            },
+        )
+
+        config = InfluxIntegrationConfig(
+            url='http://influxdb:8086',
+            token='token',
+            org='garden',
+            bucket='Homeassistant',
+        )
+        sensor = SimpleNamespace(
+            key='sensor-third-reality',
+            influx_measurement=defaults['measurement'],
+            influx_field=defaults['field'],
+            influx_tags=defaults['tags'],
+        )
+
+        query = FluxInfluxQueryAdapter(config).build_sensor_query(
+            sensor,
+            datetime(2026, 6, 1, tzinfo=timezone.utc),
+            datetime(2026, 6, 2, tzinfo=timezone.utc),
+        )
+
+        self.assertNotIn('r._measurement ==', query)
+        self.assertIn('r._field == "value"', query)
+        self.assertIn('r["entity_id"] == "third_reality_inc_3rsm0347z_bodenfeuchtigkeit"', query)
+        self.assertIn('r["domain"] == "sensor"', query)
 
     def test_build_latest_sensor_value_query_limits_to_newest_value(self):
         config = InfluxIntegrationConfig(
