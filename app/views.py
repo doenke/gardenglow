@@ -11,7 +11,7 @@ import requests
 from functools import wraps
 from datetime import datetime, timezone
 from flask import Blueprint, abort, current_app, g, render_template, request, redirect, url_for, session, jsonify, send_from_directory, flash, send_file
-from .models import db, utc_now, User, Location, Plant, PlantPhoto, PlantNote, GardenMap, TimelineEntry, LightNeed, SoilProperty, SoilMoistureSensor, PlantDatabaseIdentifier, plant_soil_property
+from .models import db, utc_now, User, Location, Plant, PlantPhoto, PlantNote, GardenMap, TimelineEntry, LightNeed, SoilProperty, SoilMoistureSensor, PlantDatabaseIdentifier, InfluxIntegrationConfig, plant_soil_property
 from .map_data import MapPointValidationError, parse_stored_points, validate_calibration_points, validate_polygon_points
 from .services.timeline_service import save_uploaded_attachment, set_single_title_entry, delete_timeline_entry, build_unique_upload_name
 from .auth import get_or_create_default_user, oidc_enabled
@@ -1063,18 +1063,78 @@ def index():
     )
 
 
+def _first_influx_integration_config():
+    return InfluxIntegrationConfig.query.order_by(InfluxIntegrationConfig.id.asc()).first()
+
+
+def _form_bool(name):
+    return (request.form.get(name) or '').strip().lower() in {'1', 'true', 'yes', 'on', 'y'}
+
+
+def _form_int(name, default, minimum=None, maximum=None):
+    raw_value = (request.form.get(name) or '').strip()
+    if not raw_value:
+        return default
+    try:
+        value = int(raw_value)
+    except ValueError:
+        raise ValueError(f'{name} muss eine ganze Zahl sein.')
+    if minimum is not None and value < minimum:
+        raise ValueError(f'{name} muss mindestens {minimum} sein.')
+    if maximum is not None and value > maximum:
+        raise ValueError(f'{name} darf höchstens {maximum} sein.')
+    return value
+
+
 @main_bp.route('/config')
 @login_required
 def config():
     user = current_user()
     garden_map = GardenMap.query.order_by(GardenMap.id.asc()).first()
     locations = Location.query.order_by(*location_sort_criteria()).all()
+    influx_config = _first_influx_integration_config()
     return render_template(
         'config.html',
         user=user,
         garden_map=garden_map,
         locations=locations,
+        influx_config=influx_config,
     )
+
+
+@main_bp.route('/config/influx', methods=['POST'])
+@login_required
+def save_influx_config():
+    influx_config = _first_influx_integration_config()
+    if influx_config is None:
+        influx_config = InfluxIntegrationConfig()
+        db.session.add(influx_config)
+
+    try:
+        timeout_seconds = _form_int('timeout_seconds', default=10, minimum=1, maximum=300)
+    except ValueError as error:
+        flash(str(error), 'error')
+        return redirect(url_for('main.config'))
+
+    influx_config.influx_url = (request.form.get('influx_url') or '').strip()
+    influx_config.influx_org = (request.form.get('influx_org') or '').strip()
+    influx_config.influx_bucket = (request.form.get('influx_bucket') or '').strip()
+    influx_config.homeassistant_url = (request.form.get('homeassistant_url') or '').strip()
+    influx_config.verify_tls = _form_bool('verify_tls')
+    influx_config.timeout_seconds = timeout_seconds
+    influx_config.updated_at = utc_now()
+
+    influx_token = (request.form.get('influx_token') or '').strip()
+    if influx_token:
+        influx_config.influx_token = influx_token
+
+    homeassistant_token = (request.form.get('homeassistant_token') or '').strip()
+    if homeassistant_token:
+        influx_config.homeassistant_token = homeassistant_token
+
+    db.session.commit()
+    flash('Homeassistant-/InfluxDB-Konfiguration wurde gespeichert.', 'success')
+    return redirect(url_for('main.config'))
 
 
 
