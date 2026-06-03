@@ -1,0 +1,113 @@
+import os
+import shutil
+import tempfile
+import unittest
+import zipfile
+from io import BytesIO
+
+os.environ.setdefault('SECRET_KEY', 'x' * 40)
+
+from app import create_app
+from app.models import GardenMap, TimelineEntry, User, db
+
+
+class AdminViewTest(unittest.TestCase):
+    def setUp(self):
+        self.temp_dir = tempfile.mkdtemp()
+        self.db_path = os.path.join(self.temp_dir, 'test.sqlite')
+        self.upload_folder = os.path.join(self.temp_dir, 'uploads')
+        self.avatar_folder = os.path.join(self.temp_dir, 'avatars')
+        self.map_folder = os.path.join(self.temp_dir, 'maps')
+        self.backup_folder = os.path.join(self.temp_dir, 'backups')
+        os.environ['DATABASE_URL'] = f'sqlite:///{self.db_path}'
+        os.environ['UPLOAD_FOLDER'] = self.upload_folder
+        os.environ['AVATAR_FOLDER'] = self.avatar_folder
+        os.environ['MAP_FOLDER'] = self.map_folder
+        os.environ['BACKUP_FOLDER'] = self.backup_folder
+        os.environ['APP_VERSION'] = 'test-version'
+        os.environ['GIT_COMMIT'] = 'test-commit'
+        self.app = create_app()
+        self.app.config.update(TESTING=True)
+        self.client = self.app.test_client()
+
+        os.makedirs(self.backup_folder, exist_ok=True)
+        with open(os.path.join(self.upload_folder, 'referenced.jpg'), 'wb') as f:
+            f.write(b'referenced')
+        with open(os.path.join(self.upload_folder, 'orphan.jpg'), 'wb') as f:
+            f.write(b'orphan')
+        with open(os.path.join(self.avatar_folder, 'avatar.png'), 'wb') as f:
+            f.write(b'avatar')
+        with open(os.path.join(self.map_folder, 'map.png'), 'wb') as f:
+            f.write(b'map')
+        with open(os.path.join(self.backup_folder, 'backup.sqlite'), 'wb') as f:
+            f.write(b'backup')
+
+        with self.app.app_context():
+            self.user = User(sub='test-user', name='Test User', avatar_filename='avatar.png')
+            db.session.add(self.user)
+            db.session.flush()
+            db.session.add(TimelineEntry(scope_type='plant', scope_id=1, attachment_filename='referenced.jpg', attachment_kind='image', creator_id=self.user.id))
+            db.session.add(GardenMap(filename='map.png', calibration_points='[]', boundary_points='[]'))
+            db.session.commit()
+            self.user_id = self.user.id
+
+        with self.client.session_transaction() as session:
+            session['user_id'] = self.user_id
+
+    def tearDown(self):
+        with self.app.app_context():
+            db.session.remove()
+            db.drop_all()
+        for key in ('DATABASE_URL', 'UPLOAD_FOLDER', 'AVATAR_FOLDER', 'MAP_FOLDER', 'BACKUP_FOLDER', 'APP_VERSION', 'GIT_COMMIT'):
+            os.environ.pop(key, None)
+        shutil.rmtree(self.temp_dir)
+
+    def test_admin_page_lists_storage_orphans_backups_and_version(self):
+        response = self.client.get('/admin')
+
+        self.assertEqual(response.status_code, 200)
+        html = response.get_data(as_text=True)
+        self.assertIn('Admin &amp; Wartung', html)
+        self.assertIn('orphan.jpg', html)
+        self.assertNotIn('referenced.jpg</td>', html)
+        self.assertIn('backup.sqlite', html)
+        self.assertIn('test-version', html)
+        self.assertIn('test-commit', html)
+
+    def test_orphan_file_can_be_deleted(self):
+        response = self.client.post(
+            '/admin/orphan-upload/delete',
+            data={'folder_key': 'uploads', 'filename': 'orphan.jpg'},
+            follow_redirects=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(os.path.exists(os.path.join(self.upload_folder, 'orphan.jpg')))
+        self.assertTrue(os.path.exists(os.path.join(self.upload_folder, 'referenced.jpg')))
+        self.assertIn('wurde gelöscht', response.get_data(as_text=True))
+
+    def test_referenced_file_is_not_deleted_as_orphan(self):
+        response = self.client.post(
+            '/admin/orphan-upload/delete',
+            data={'folder_key': 'uploads', 'filename': 'referenced.jpg'},
+            follow_redirects=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(os.path.exists(os.path.join(self.upload_folder, 'referenced.jpg')))
+        self.assertIn('nicht als verwaist erkannt', response.get_data(as_text=True))
+
+    def test_data_export_downloads_zip_with_json_payload(self):
+        response = self.client.get('/admin/export')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.mimetype, 'application/zip')
+        with zipfile.ZipFile(BytesIO(response.data)) as archive:
+            self.assertIn('garden-export.json', archive.namelist())
+            payload = archive.read('garden-export.json').decode('utf-8')
+        self.assertIn('test-version', payload)
+        self.assertIn('timeline_entry', payload)
+
+
+if __name__ == '__main__':
+    unittest.main()

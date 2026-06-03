@@ -74,6 +74,9 @@ docker compose up --build
 - `AVATAR_FOLDER` – Verzeichnis für lokal gespeicherte Benutzer-Avatare
 - `MAX_AVATAR_SIZE_BYTES` – Maximalgröße für vom OIDC-Profil heruntergeladene Avatare (Standard: `5242880` = 5 MiB)
 - `MAP_FOLDER` – Verzeichnis für Karten-/Lageplan-Dateien
+- `BACKUP_FOLDER` – Verzeichnis, aus dem die Admin-/Wartungsseite die letzten Backups anzeigt (Standard: `/data/backups`)
+- `APP_VERSION` – optionale Versionsanzeige auf der Admin-/Wartungsseite
+- `GIT_COMMIT` – optionaler Git-Commit für die Admin-/Wartungsseite; wenn leer, wird der aktuelle Commit per `git rev-parse --short HEAD` ermittelt
 - `WIDGET_API_KEY` – API-Key für den Statistik-Webservice `/api/stats`
 - `HEADER_LOGO_URL` – URL eines optionalen Header-Logos (wenn leer oder nicht gesetzt, wird kein Logo angezeigt)
 - `DEBUG_MODE` – aktiviert mit `1`, `true`, `yes`, `on` oder `y` das vollständige Magic-/Taxonomie-Debugging. Ohne aktivierten Debug-Modus werden auf der Pflanzenseite keine Magic-Debug-Hinweise und kein Magic-Debuglog angezeigt. Bei aktivem Debug enthält die JSON-Antwort zusätzlich alle externen Webanfragen samt Headern, Status und vollständigem Antwortinhalt. Standard: `false`.

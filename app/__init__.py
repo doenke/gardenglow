@@ -83,6 +83,9 @@ def create_app():
         int(os.getenv('MAX_AVATAR_SIZE_BYTES', str(DEFAULT_MAX_AVATAR_SIZE_BYTES))),
     )
     app.config['MAP_FOLDER'] = os.getenv('MAP_FOLDER', '/data/maps')
+    app.config['BACKUP_FOLDER'] = os.getenv('BACKUP_FOLDER', '/data/backups')
+    app.config['APP_VERSION'] = os.getenv('APP_VERSION', '').strip()
+    app.config['GIT_COMMIT'] = os.getenv('GIT_COMMIT', '').strip()
     app.config['WIDGET_API_KEY'] = os.getenv('WIDGET_API_KEY', '').strip()
     app.config['STATS_UPLOAD_CACHE_TTL_SECONDS'] = max(0, int(os.getenv('STATS_UPLOAD_CACHE_TTL_SECONDS', '60')))
     app.config['HEADER_LOGO_URL'] = os.getenv('HEADER_LOGO_URL', '').strip()
