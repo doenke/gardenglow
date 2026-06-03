@@ -1,9 +1,31 @@
 {% extends 'base.html' %}
 {% block content %}
-<section class="card">
-  <h2>Konfiguration</h2>
+<header class="card config-hero">
+  <p class="page-eyebrow">Einstellungen</p>
+  <h2 class="m-0">Konfiguration</h2>
+  <p class="text-muted mt-0 mb-0">Springe direkt zum passenden Kapitel und bearbeite Integrationen, Luftbild, Kalibrierung und Grundstücksgrenze getrennt voneinander.</p>
+</header>
 
-  <h3>Homeassistant / InfluxDB</h3>
+<nav class="card config-toc" aria-labelledby="config-toc-heading">
+  <h3 id="config-toc-heading" class="mt-0">Inhaltsverzeichnis</h3>
+  <div class="config-toc-links">
+    <a href="#influxdb-config">InfluxDB</a>
+    <a href="#homeassistant-config">Homeassistant</a>
+    <a href="#connection-options">Verbindungsoptionen</a>
+    <a href="#map-upload">Luftbild</a>
+    {% if garden_map and garden_map.filename %}
+      <a href="#map-calibration">Kalibrierung</a>
+      <a href="#map-boundary">Grundstücksgrenze</a>
+    {% endif %}
+  </div>
+</nav>
+
+<section id="influxdb-config" class="card config-section">
+  <div class="config-section-head">
+    <p class="page-eyebrow">Integration</p>
+    <h3 class="m-0">InfluxDB</h3>
+    <p class="text-muted mt-0 mb-0">Konfiguriert die Zeitreihen-Datenbank für Sensorwerte und Messhistorien.</p>
+  </div>
   <form method="post" action="/config/influx" class="grid mb-1">
     <div class="grid grid-auto-200">
       <label for="influx-url">InfluxDB-URL
@@ -15,22 +37,50 @@
       <label for="influx-bucket">InfluxDB-Bucket
         <input id="influx-bucket" type="text" name="influx_bucket" value="{{ influx_config.influx_bucket if influx_config else '' }}">
       </label>
-      <label for="homeassistant-url">Homeassistant-URL (optional)
-        <input id="homeassistant-url" type="url" name="homeassistant_url" value="{{ influx_config.homeassistant_url if influx_config else '' }}" placeholder="https://homeassistant.example.local:8123">
-      </label>
     </div>
-
-    <div class="grid grid-auto-200">
-      <label for="influx-token">InfluxDB-Token
-        <input id="influx-token" type="password" name="influx_token" value="" placeholder="{% if influx_config and influx_config.has_influx_token %}Gespeicherter Token bleibt erhalten{% else %}Token eintragen{% endif %}" autocomplete="new-password">
-        <small class="text-muted">Token werden nicht im Klartext angezeigt. Leer lassen, um den gespeicherten Wert beizubehalten.</small>
-      </label>
-      <label for="homeassistant-token">Homeassistant-Token (optional)
-        <input id="homeassistant-token" type="password" name="homeassistant_token" value="" placeholder="{% if influx_config and influx_config.has_homeassistant_token %}Gespeicherter Token bleibt erhalten{% else %}Optionaler Token{% endif %}" autocomplete="new-password">
-        <small class="text-muted">Nur ausfüllen, wenn ein neuer Homeassistant-Token gespeichert werden soll.</small>
-      </label>
+    <label for="influx-token">InfluxDB-Token
+      <input id="influx-token" type="password" name="influx_token" value="" placeholder="{% if influx_config and influx_config.has_influx_token %}Gespeicherter Token bleibt erhalten{% else %}Token eintragen{% endif %}" autocomplete="new-password">
+      <small class="text-muted">Token werden nicht im Klartext angezeigt. Leer lassen, um den gespeicherten Wert beizubehalten.</small>
+    </label>
+    <div class="actions-inline">
+      <button type="submit">InfluxDB-Konfiguration speichern</button>
     </div>
+  </form>
+  <form method="post" action="/config/influx/test">
+    <button type="submit" class="btn secondary">InfluxDB-Verbindung testen</button>
+  </form>
+</section>
 
+<section id="homeassistant-config" class="card config-section">
+  <div class="config-section-head">
+    <p class="page-eyebrow">Integration</p>
+    <h3 class="m-0">Homeassistant</h3>
+    <p class="text-muted mt-0 mb-0">Konfiguriert den optionalen Zugriff auf die Homeassistant-API separat von InfluxDB.</p>
+  </div>
+  <form method="post" action="/config/homeassistant" class="grid mb-1">
+    <label for="homeassistant-url">Homeassistant-URL
+      <input id="homeassistant-url" type="url" name="homeassistant_url" value="{{ influx_config.homeassistant_url if influx_config else '' }}" placeholder="https://homeassistant.example.local:8123">
+    </label>
+    <label for="homeassistant-token">Homeassistant-Token (optional)
+      <input id="homeassistant-token" type="password" name="homeassistant_token" value="" placeholder="{% if influx_config and influx_config.has_homeassistant_token %}Gespeicherter Token bleibt erhalten{% else %}Optionaler Token{% endif %}" autocomplete="new-password">
+      <small class="text-muted">Nur ausfüllen, wenn ein neuer Homeassistant-Token gespeichert werden soll.</small>
+    </label>
+    <div class="actions-inline">
+      <button type="submit">Homeassistant-Konfiguration speichern</button>
+    </div>
+  </form>
+  <form method="post" action="/config/homeassistant/test">
+    <button type="submit" class="btn secondary">Homeassistant-Verbindung testen</button>
+  </form>
+</section>
+
+<section id="connection-options" class="card config-section">
+  <div class="config-section-head">
+    <p class="page-eyebrow">Gemeinsam</p>
+    <h3 class="m-0">Verbindungsoptionen</h3>
+    <p class="text-muted mt-0 mb-0">Diese Werte gelten für die Verbindungstests und API-Aufrufe von InfluxDB und Homeassistant.</p>
+  </div>
+  <form method="post" action="/config/connection-options" class="grid mb-1">
     <div class="grid grid-auto-200">
       <label for="timeout-seconds">Timeout (Sekunden)
         <input id="timeout-seconds" type="number" name="timeout_seconds" min="1" max="300" step="1" value="{{ influx_config.timeout_seconds if influx_config else 10 }}">
@@ -40,37 +90,44 @@
         TLS-Zertifikate verifizieren
       </label>
     </div>
-
     {% if influx_config %}
       <small class="text-muted">Erstellt: {{ influx_config.created_at.strftime('%Y-%m-%d %H:%M') if influx_config.created_at else 'unbekannt' }} · Aktualisiert: {{ influx_config.updated_at.strftime('%Y-%m-%d %H:%M') if influx_config.updated_at else 'unbekannt' }}</small>
     {% endif %}
-    <button type="submit">Homeassistant-/InfluxDB-Konfiguration speichern</button>
+    <button type="submit">Verbindungsoptionen speichern</button>
   </form>
+</section>
 
-  <div class="grid grid-auto-200 mb-1" aria-label="Verbindungstests">
-    <form method="post" action="/config/influx/test">
-      <button type="submit">InfluxDB-Verbindung testen</button>
-    </form>
-    <form method="post" action="/config/homeassistant/test">
-      <button type="submit">Homeassistant-Verbindung testen</button>
-    </form>
+<section id="map-upload" class="card config-section">
+  <div class="config-section-head">
+    <p class="page-eyebrow">Karte</p>
+    <h3 class="m-0">Luftbild</h3>
+    <p class="text-muted mt-0 mb-0">Lade das Luftbild hoch, das später für Kalibrierung und Grundstücksgrenze verwendet wird.</p>
   </div>
-
-  <h3>Luftbild</h3>
   <form method="post" action="/map/upload" enctype="multipart/form-data" class="grid mb-1">
     <label for="map-image-upload">Luftbild-Datei</label>
     <input id="map-image-upload" type="file" name="map_image" accept="image/png,image/jpeg,image/webp,image/gif" required>
     <small class="text-muted">Erlaubt sind PNG, JPG, WEBP und GIF.</small>
     <button>Luftbild hochladen</button>
   </form>
+</section>
 
-  {% if garden_map and garden_map.filename %}
+{% if garden_map and garden_map.filename %}
+<section id="map-preview" class="card config-section">
+  <div class="config-section-head">
+    <p class="page-eyebrow">Karte</p>
+    <h3 class="m-0">Vorschau</h3>
+  </div>
   <div class="rel-inline mb-1 line-0">
     <img id="overview-map-image" src="/maps/{{ garden_map.filename }}" alt="Luftbild des Gartens zur Kalibrierung und Grundstücksgrenze" class="map-image">
     <svg id="overview-map-overlay" class="map-overlay overlay-no-pointer" preserveAspectRatio="none"></svg>
   </div>
+</section>
 
-  <h3>Kalibrierung</h3>
+<section id="map-calibration" class="card config-section">
+  <div class="config-section-head">
+    <p class="page-eyebrow">Karte</p>
+    <h3 class="m-0">Kalibrierung</h3>
+  </div>
   <p class="mt-0">
     Dezimaltrennzeichen: Du kannst Koordinaten mit <strong>Komma</strong> oder <strong>Punkt</strong> eingeben (z. B. <code>50,795600</code>).
   </p>
@@ -98,8 +155,13 @@
     </div>
     <button type="submit">Kalibrierung speichern</button>
   </form>
+</section>
 
-  <h3>Grundstücksgrenze</h3>
+<section id="map-boundary" class="card config-section">
+  <div class="config-section-head">
+    <p class="page-eyebrow">Karte</p>
+    <h3 class="m-0">Grundstücksgrenze</h3>
+  </div>
   <form method="post" action="/map/boundary" id="boundary-form" class="grid mb-1">
     <input type="hidden" name="boundary_points" id="boundary-points-input">
     <div><strong>Polygon setzen:</strong> Aktiviere „Grenzpunkt per Karte setzen“ und klicke/tippe anschließend ins Luftbild. Alternativ kannst du Punkte per Koordinatenfeld hinzufügen oder bestehende Punkte direkt bearbeiten.</div>
@@ -125,13 +187,22 @@
       <button type="submit">Grundstücksgrenze speichern</button>
     </div>
   </form>
-  {% endif %}
 </section>
+{% endif %}
 
 <style>
+.config-hero,.config-toc,.config-section{margin-bottom:1rem}
+.page-eyebrow{margin:0 0 .25rem;color:var(--muted);font-size:.78rem;font-weight:800;letter-spacing:.08em;text-transform:uppercase}
+.config-toc{position:sticky;top:.75rem;z-index:5}
+.config-toc-links{display:flex;flex-wrap:wrap;gap:.5rem}
+.config-toc-links a{display:inline-flex;align-items:center;border:1px solid var(--border);border-radius:999px;background:var(--surface-soft);padding:.45rem .75rem;text-decoration:none}
+.config-section{scroll-margin-top:1rem}
+.config-section-head{display:grid;gap:.25rem;margin-bottom:.85rem}
+.check-row{display:flex;align-items:center;gap:.55rem;min-height:2.55rem}
+.check-row input{width:auto}
 .boundary-point-list{display:grid;gap:.5rem}
 .boundary-point-row{display:grid;grid-template-columns:auto repeat(2,minmax(140px,1fr));gap:.5rem;align-items:end}
-@media (max-width:700px){.boundary-point-row{grid-template-columns:1fr}}
+@media (max-width:700px){.config-toc{position:static}.boundary-point-row{grid-template-columns:1fr}}
 </style>
 
 <script>

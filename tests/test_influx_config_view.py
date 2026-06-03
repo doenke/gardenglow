@@ -79,7 +79,9 @@ class InfluxConfigViewTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         html = response.get_data(as_text=True)
-        self.assertIn('Homeassistant / InfluxDB', html)
+        self.assertIn('id="influxdb-config"', html)
+        self.assertIn('id="homeassistant-config"', html)
+        self.assertIn('Inhaltsverzeichnis', html)
         self.assertIn('https://old-influx.local', html)
         self.assertIn('Gespeicherter Token bleibt erhalten', html)
         self.assertNotIn('old-influx-token', html)
@@ -112,8 +114,53 @@ class InfluxConfigViewTest(unittest.TestCase):
         html = response.get_data(as_text=True)
         self.assertIn('action="/config/influx/test"', html)
         self.assertIn('InfluxDB-Verbindung testen', html)
+        self.assertIn('action="/config/homeassistant"', html)
         self.assertIn('action="/config/homeassistant/test"', html)
         self.assertIn('Homeassistant-Verbindung testen', html)
+        self.assertIn('action="/config/connection-options"', html)
+
+    def test_homeassistant_config_saves_without_changing_influx_values(self):
+        with self.app.app_context():
+            db.session.add(InfluxIntegrationConfig(
+                influx_url='https://influx.local',
+                influx_org='Garten',
+                influx_bucket='soil',
+                influx_token='old-influx-token',
+            ))
+            db.session.commit()
+
+        response = self.client.post(
+            '/config/homeassistant',
+            data={
+                'homeassistant_url': 'https://ha.local:8123',
+                'homeassistant_token': 'new-ha-token',
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('#homeassistant-config', response.headers['Location'])
+        with self.app.app_context():
+            config = InfluxIntegrationConfig.query.one()
+            self.assertEqual(config.influx_url, 'https://influx.local')
+            self.assertEqual(config.influx_token, 'old-influx-token')
+            self.assertEqual(config.homeassistant_url, 'https://ha.local:8123')
+            self.assertEqual(config.homeassistant_token, 'new-ha-token')
+
+    def test_connection_options_save_separately(self):
+        response = self.client.post(
+            '/config/connection-options',
+            data={
+                'timeout_seconds': '23',
+                'verify_tls': '1',
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('#connection-options', response.headers['Location'])
+        with self.app.app_context():
+            config = InfluxIntegrationConfig.query.one()
+            self.assertEqual(config.timeout_seconds, 23)
+            self.assertTrue(config.verify_tls)
 
     def test_influx_connection_test_uses_saved_config(self):
         with self.app.app_context():
