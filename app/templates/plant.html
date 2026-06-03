@@ -94,25 +94,25 @@
         <label for="plant-name">Name</label>
         <div class="magic-field-row">
           <input id="plant-name" name="name" value="{{ plant.name }}" required>
-          <button type="button" id="magic-all" class="btn secondary" title="Alle Automatikfunktionen der Reihe nach ausführen" aria-label="Alle passenden Felder automatisch ausfüllen"><span aria-hidden="true">➡️</span> Alle ausfüllen</button>
+          <button type="button" id="magic-all" class="btn secondary" title="Alle Automatikfunktionen der Reihe nach ausführen" aria-label="Alle passenden Felder automatisch ausfüllen"><span aria-hidden="true">➡️</span></button>
           <small id="magic-all-status" class="muted" aria-live="polite"></small>
         </div>
         <label for="plant-cultivar">Sorte/Kultivar</label>
         <div class="magic-field-row">
           <input id="plant-cultivar" name="cultivar" value="{{ plant.cultivar or '' }}">
-          <button type="button" id="magic-cultivar" class="btn secondary" title="Kultivar aus dem Namen übernehmen" aria-label="Kultivar aus dem Namen übernehmen"><span aria-hidden="true">🪄</span> Kultivar übernehmen</button>
+          <button type="button" id="magic-cultivar" class="btn secondary" title="Kultivar aus dem Namen übernehmen" aria-label="Kultivar aus dem Namen übernehmen"><span aria-hidden="true">🪄</span></button>
           <small id="magic-cultivar-status" class="muted" aria-live="polite"></small>
         </div>
         <label for="plant-scientific-name">Wissenschaftlicher Name</label>
         <div class="magic-field-row">
           <input id="plant-scientific-name" name="scientific_name" value="{{ plant.scientific_name or '' }}">
-          <button type="button" id="magic-scientific-name" class="btn secondary" title="Wissenschaftlichen Namen aus dem Namen übernehmen" aria-label="Wissenschaftlichen Namen aus dem Namen übernehmen"><span aria-hidden="true">🪄</span> Namen übernehmen</button>
+          <button type="button" id="magic-scientific-name" class="btn secondary" title="Wissenschaftlichen Namen aus dem Namen übernehmen" aria-label="Wissenschaftlichen Namen aus dem Namen übernehmen"><span aria-hidden="true">🪄</span></button>
           <small id="magic-scientific-name-status" class="muted" aria-live="polite"></small>
         </div>
         <label for="plant-common-name">Bürgerlicher Name</label>
         <div class="magic-field-row">
           <input id="plant-common-name" name="common_name" value="{{ plant.common_name or '' }}">
-          <button type="button" id="magic-common-name" class="btn secondary" title="Bürgerlichen Namen automatisch suchen" aria-label="Bürgerlichen Namen automatisch suchen"><span aria-hidden="true">🪄</span> Namen suchen</button>
+          <button type="button" id="magic-common-name" class="btn secondary" title="Bürgerlichen Namen automatisch suchen" aria-label="Bürgerlichen Namen automatisch suchen"><span aria-hidden="true">🪄</span></button>
           <small id="magic-common-name-status" class="muted" aria-live="polite"></small>
         </div>
         {% if debug_enabled %}<small id="magic-debug-last-common-name" class="muted"></small>{% endif %}
@@ -204,6 +204,9 @@
       </fieldset>
           <fieldset class="form-section database-id-section">
         <legend>Datenbank-IDs/-Slugs</legend>
+        <div class="database-id-toolbar">
+          <button type="button" id="magic-all-slugs" class="btn secondary magic-all-slugs" title="Alle Datenbank-IDs und Slugs automatisch suchen" aria-label="Alle Datenbank-IDs und Slugs automatisch suchen"><span aria-hidden="true">🪄</span> Alle Slugs suchen</button>
+        </div>
         <div class="database-id-grid">
           {% for catalog in database_catalogs %}
           {% set catalog_search_url = database_search_urls.get(catalog.key) %}
@@ -216,7 +219,7 @@
               {% else %}
               <span class="btn secondary database-search-link disabled" title="Kein Suchlink für {{ catalog.label }} konfiguriert" aria-hidden="true">🔎</span>
               {% endif %}
-              <button type="button" class="btn secondary magic-db-id" data-catalog-key="{{ catalog.key }}" title="{{ catalog.label }}-ID/Slug suchen" aria-label="{{ catalog.label }}-ID oder Slug automatisch suchen"><span aria-hidden="true">🪄</span> ID suchen</button>
+              <button type="button" class="btn secondary magic-db-id" data-catalog-key="{{ catalog.key }}" title="{{ catalog.label }}-ID/Slug suchen" aria-label="{{ catalog.label }}-ID oder Slug automatisch suchen"><span aria-hidden="true">🪄</span></button>
               <small id="magic-db-{{ catalog.key }}-status" class="muted" aria-live="polite"></small>
             </span>
           </div>
@@ -411,6 +414,8 @@
 .form-section + .form-section{margin-top:.35rem}
 .database-id-section{grid-column:1 / -1}
 .database-id-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:.65rem}
+.database-id-toolbar{display:flex;align-items:center;justify-content:flex-start}
+.magic-all-slugs{font-size:1.05rem;padding:.7rem 1rem;min-height:2.9rem}
 fieldset{border:1px solid var(--border);border-radius:10px}
 legend{padding:0 .4rem;font-weight:600;color:var(--muted);letter-spacing:.01em}
 .chip-row{display:flex;flex-wrap:wrap;gap:.4rem}
@@ -428,7 +433,7 @@ legend{padding:0 .4rem;font-weight:600;color:var(--muted);letter-spacing:.01em}
 .database-id-row .btn{min-height:100%}
 .database-search-link{display:inline-flex;align-items:center;justify-content:center;min-width:2.25rem;padding:.45rem .5rem;text-decoration:none}
 .database-search-link.disabled{opacity:.45;cursor:not-allowed}
-#magic-common-name,#magic-cultivar,#magic-scientific-name,#magic-all{min-width:2.6rem;padding:.45rem .55rem}
+#magic-common-name,#magic-cultivar,#magic-scientific-name,#magic-all,.magic-db-id{min-width:2.6rem;padding:.45rem .55rem}
 #plant-masterdata-form input.is-dirty:not([type="checkbox"]):not([type="radio"]),
 #plant-masterdata-form textarea.is-dirty,
 #plant-masterdata-form select.is-dirty{
@@ -461,8 +466,10 @@ legend{padding:0 .4rem;font-weight:600;color:var(--muted);letter-spacing:.01em}
 .image-modal-close{position:absolute;top:-.5rem;right:-.5rem;font-size:1.4rem;line-height:1;padding:.45rem .6rem;min-width:44px;min-height:44px;border-radius:999px;background:rgba(0,0,0,.5);border:1px solid rgba(255,255,255,.32);text-shadow:none}
 @media (max-width: 640px){
   .field-pair{grid-template-columns:1fr}
-  .database-id-row{grid-template-columns:minmax(0,1fr) auto}
+  .database-id-row{grid-template-columns:minmax(11rem,1fr) auto}
   .database-id-label{grid-column:1 / -1;padding-right:0}
+  .database-id-row input{min-width:11rem}
+  .database-id-actions{min-width:auto}
   .timeline-form-row{grid-template-columns:1fr}
   .image-modal{padding:0;background:#000;overscroll-behavior:none}
   .image-modal-inner{width:100vw;height:100dvh;max-width:none;max-height:none;display:grid;grid-template-columns:1fr;grid-template-rows:1fr}
@@ -598,6 +605,7 @@ legend{padding:0 .4rem;font-weight:600;color:var(--muted);letter-spacing:.01em}
   const commonNameInput = document.getElementById('plant-common-name');
   const nameInput = document.getElementById('plant-name');
   const magicAllButton = document.getElementById('magic-all');
+  const magicAllSlugsButton = document.getElementById('magic-all-slugs');
   const magicCultivarButton = document.getElementById('magic-cultivar');
   const magicScientificNameButton = document.getElementById('magic-scientific-name');
   const cultivarInput = document.getElementById('plant-cultivar');
@@ -809,9 +817,40 @@ legend{padding:0 .4rem;font-weight:600;color:var(--muted);letter-spacing:.01em}
     }
   };
 
+  const getOrderedTaxonomyButtons = () => {
+    const orderedCatalogKeys = ['naturadb', 'wikipedia_de'];
+    return [
+      ...orderedCatalogKeys.map((key) => magicIdButtons.find((button) => button.dataset.catalogKey === key)).filter(Boolean),
+      ...magicIdButtons.filter((button) => !orderedCatalogKeys.includes(button.dataset.catalogKey)),
+    ];
+  };
+
   magicIdButtons.forEach((magicIdsButton) => {
     magicIdsButton.addEventListener('click', () => runTaxonomyMagic(magicIdsButton));
   });
+
+  if (magicAllSlugsButton) {
+    magicAllSlugsButton.addEventListener('click', async () => {
+      magicAllSlugsButton.disabled = true;
+      const oldHtml = magicAllSlugsButton.innerHTML;
+      magicAllSlugsButton.textContent = '…';
+      setMagicStatus(idsStatus, 'Slug-Suche läuft …');
+      try {
+        let successCount = 0;
+        for (const button of getOrderedTaxonomyButtons()) {
+          if (await runTaxonomyMagic(button)) successCount += 1;
+        }
+        setMagicStatus(idsStatus, `Slug-Suche abgeschlossen: ${successCount} Treffer übernommen.`);
+        pushMagicDebugLog('Alle Slugs', `Durchlauf abgeschlossen: ${successCount} Treffer.`);
+      } catch (error) {
+        setMagicStatus(idsStatus, error.message || 'Slug-Suche fehlgeschlagen.');
+        pushMagicDebugLog('Alle Slugs', `Fehler: ${error.message || 'Unbekannt'}`);
+      } finally {
+        magicAllSlugsButton.disabled = false;
+        magicAllSlugsButton.innerHTML = oldHtml;
+      }
+    });
+  }
 
   const runCommonNameMagic = async () => {
     if (!magicButton || !commonNameInput || !nameInput) return false;
@@ -896,12 +935,7 @@ legend{padding:0 .4rem;font-weight:600;color:var(--muted);letter-spacing:.01em}
         let successCount = 0;
         if (await runCultivarMagic()) successCount += 1;
         if (await runScientificNameMagic()) successCount += 1;
-        const orderedCatalogKeys = ['naturadb', 'wikipedia_de'];
-        const orderedButtons = [
-          ...orderedCatalogKeys.map((key) => magicIdButtons.find((button) => button.dataset.catalogKey === key)).filter(Boolean),
-          ...magicIdButtons.filter((button) => !orderedCatalogKeys.includes(button.dataset.catalogKey)),
-        ];
-        for (const button of orderedButtons) {
+        for (const button of getOrderedTaxonomyButtons()) {
           if (await runTaxonomyMagic(button)) successCount += 1;
         }
         if (await runCommonNameMagic()) successCount += 1;
