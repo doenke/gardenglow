@@ -141,9 +141,12 @@ class SoilMoistureSensorModelTest(unittest.TestCase):
         self.assertIn('/sensors/{}/edit'.format(self.sensor_id), sensor_response.get_data(as_text=True))
         self.assertIn('soil_moisture', sensor_response.get_data(as_text=True))
         self.assertEqual(location_response.status_code, 200)
-        self.assertIn('/sensors?location_id={}'.format(self.location_id), location_response.get_data(as_text=True))
-        self.assertIn('Sensor verknüpfen', location_response.get_data(as_text=True))
-        self.assertIn('Bodenfeuchte-Verlauf', location_response.get_data(as_text=True))
+        location_html = location_response.get_data(as_text=True)
+        self.assertIn('/sensors?location_id={}'.format(self.location_id), location_html)
+        self.assertIn('Zur Sensorseite dieses Beets', location_html)
+        self.assertNotIn('Sensor verknüpfen', location_html)
+        self.assertNotIn('Bodenfeuchte-Sensor anlegen</a>', location_html)
+        self.assertIn('Bodenfeuchte-Verlauf', location_html)
         self.assertIn('InfluxDB ist nicht vollständig konfiguriert', location_response.get_data(as_text=True))
 
     def test_location_detail_renders_soil_moisture_series_for_linked_sensors(self):
