@@ -92,6 +92,11 @@ def create_app():
     app.config['HEADER_LOGO_URL'] = os.getenv('HEADER_LOGO_URL', '').strip()
     app.config['COMMON_NAME_LOOKUP_LANG'] = os.getenv('COMMON_NAME_LOOKUP_LANG', 'de').strip().lower() or 'de'
     app.config['DEBUG_MODE'] = (os.getenv('DEBUG_MODE', 'false') or '').strip().lower() in {'1', 'true', 'yes', 'on', 'y'}
+    app.config['INFLUX_URL'] = os.getenv('INFLUX_URL', '').strip()
+    app.config['INFLUX_TOKEN'] = os.getenv('INFLUX_TOKEN', '').strip()
+    app.config['INFLUX_ORG'] = os.getenv('INFLUX_ORG', '').strip()
+    app.config['INFLUX_BUCKET'] = os.getenv('INFLUX_BUCKET', '').strip()
+    app.config['INFLUX_TIMEOUT_SECONDS'] = max(0.1, float(os.getenv('INFLUX_TIMEOUT_SECONDS', '5')))
 
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_port=1, x_prefix=1)
 
