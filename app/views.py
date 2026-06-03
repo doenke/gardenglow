@@ -17,6 +17,7 @@ from flask import Blueprint, abort, current_app, g, render_template, request, re
 from .models import db, utc_now, User, Location, Plant, PlantPhoto, PlantNote, GardenMap, TimelineEntry, LightNeed, SoilProperty, SoilMoistureSensor, PlantDatabaseIdentifier, InfluxIntegrationConfig, plant_soil_property, soil_moisture_sensor_location
 from .map_data import MapPointValidationError, parse_stored_points, validate_calibration_points, validate_polygon_points
 from .services.timeline_service import save_uploaded_attachment, set_single_title_entry, delete_timeline_entry, build_unique_upload_name
+from .services import influx_service
 from .services.influx_service import FluxInfluxQueryAdapter, InfluxIntegrationConfig as InfluxServiceConfig, get_sensor_time_series_adapter, latest_sensor_value
 from .auth import get_or_create_default_user, oidc_enabled
 from .taxonomy import service as taxonomy_service
