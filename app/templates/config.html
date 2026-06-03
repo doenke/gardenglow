@@ -3,22 +3,19 @@
 <header class="card config-hero">
   <p class="page-eyebrow">Einstellungen</p>
   <h2 class="m-0">Konfiguration</h2>
-  <p class="text-muted mt-0 mb-0">Springe direkt zum passenden Kapitel und bearbeite Integrationen, Luftbild, Kalibrierung und Grundstücksgrenze getrennt voneinander.</p>
+  <nav class="config-toc" aria-label="Konfigurationsbereiche">
+    <div class="config-toc-links">
+      <a href="#influxdb-config">InfluxDB</a>
+      <a href="#homeassistant-config">Homeassistant</a>
+      <a href="#connection-options">Verbindungsoptionen</a>
+      <a href="#map-upload">Luftbild</a>
+      {% if garden_map and garden_map.filename %}
+        <a href="#map-calibration">Kalibrierung</a>
+        <a href="#map-boundary">Grundstücksgrenze</a>
+      {% endif %}
+    </div>
+  </nav>
 </header>
-
-<nav class="card config-toc" aria-labelledby="config-toc-heading">
-  <h3 id="config-toc-heading" class="mt-0">Inhaltsverzeichnis</h3>
-  <div class="config-toc-links">
-    <a href="#influxdb-config">InfluxDB</a>
-    <a href="#homeassistant-config">Homeassistant</a>
-    <a href="#connection-options">Verbindungsoptionen</a>
-    <a href="#map-upload">Luftbild</a>
-    {% if garden_map and garden_map.filename %}
-      <a href="#map-calibration">Kalibrierung</a>
-      <a href="#map-boundary">Grundstücksgrenze</a>
-    {% endif %}
-  </div>
-</nav>
 
 <section id="influxdb-config" class="card config-section">
   <div class="config-section-head">
@@ -191,9 +188,9 @@
 {% endif %}
 
 <style>
-.config-hero,.config-toc,.config-section{margin-bottom:1rem}
+.config-hero,.config-section{margin-bottom:1rem}
+.config-hero{display:grid;gap:.75rem}
 .page-eyebrow{margin:0 0 .25rem;color:var(--muted);font-size:.78rem;font-weight:800;letter-spacing:.08em;text-transform:uppercase}
-.config-toc{position:sticky;top:.75rem;z-index:5}
 .config-toc-links{display:flex;flex-wrap:wrap;gap:.5rem}
 .config-toc-links a{display:inline-flex;align-items:center;border:1px solid var(--border);border-radius:999px;background:var(--surface-soft);padding:.45rem .75rem;text-decoration:none}
 .config-section{scroll-margin-top:1rem}
@@ -202,7 +199,7 @@
 .check-row input{width:auto}
 .boundary-point-list{display:grid;gap:.5rem}
 .boundary-point-row{display:grid;grid-template-columns:auto repeat(2,minmax(140px,1fr));gap:.5rem;align-items:end}
-@media (max-width:700px){.config-toc{position:static}.boundary-point-row{grid-template-columns:1fr}}
+@media (max-width:700px){.boundary-point-row{grid-template-columns:1fr}}
 </style>
 
 <script>
