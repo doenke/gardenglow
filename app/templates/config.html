@@ -47,6 +47,15 @@
     <button type="submit">Homeassistant-/InfluxDB-Konfiguration speichern</button>
   </form>
 
+  <div class="grid grid-auto-200 mb-1" aria-label="Verbindungstests">
+    <form method="post" action="/config/influx/test">
+      <button type="submit">InfluxDB-Verbindung testen</button>
+    </form>
+    <form method="post" action="/config/homeassistant/test">
+      <button type="submit">Homeassistant-Verbindung testen</button>
+    </form>
+  </div>
+
   <h3>Luftbild</h3>
   <form method="post" action="/map/upload" enctype="multipart/form-data" class="grid mb-1">
     <label for="map-image-upload">Luftbild-Datei</label>
