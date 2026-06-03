@@ -59,6 +59,24 @@ class InfluxServiceTest(unittest.TestCase):
         self.assertIn('r["entity_id"] == "sensor.soil_1"', query)
         self.assertIn('|> keep(columns: ["_time", "_value"])', query)
 
+    def test_build_latest_sensor_value_query_limits_to_newest_value(self):
+        config = InfluxIntegrationConfig(
+            url='http://influxdb:8086',
+            token='token',
+            org='garden',
+            bucket='sensors',
+        )
+        sensor = SimpleNamespace(key='soil-1', influx_measurement='soil_moisture')
+
+        query = FluxInfluxQueryAdapter(config).build_latest_sensor_value_query(
+            sensor,
+            datetime(2026, 6, 1, tzinfo=timezone.utc),
+            datetime(2026, 6, 2, tzinfo=timezone.utc),
+        )
+
+        self.assertIn('r._measurement == "soil_moisture"', query)
+        self.assertTrue(query.rstrip().endswith('|> last()'))
+
     def test_normalize_flux_result_returns_ui_friendly_points(self):
         tables = [SimpleNamespace(records=[FakeRecord(datetime(2026, 6, 1, 12, tzinfo=timezone.utc), 42.1)])]
 
