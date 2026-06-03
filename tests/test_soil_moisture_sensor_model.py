@@ -188,6 +188,13 @@ class SoilMoistureSensorModelTest(unittest.TestCase):
             db.session.commit()
 
         with patch('app.views.influx_service.get_sensor_time_series_adapter', return_value=FailingAdapter()):
+            response = self.client.get(f'/locations/{self.location_id}')
+
+        self.assertEqual(response.status_code, 200)
+        html = response.get_data(as_text=True)
+        self.assertIn('InfluxDB-Fehler beim Laden einzelner Sensoren', html)
+        self.assertIn('Influx nicht erreichbar', html)
+
     def test_location_detail_renders_aggregated_current_soil_moisture(self):
         with self.app.app_context():
             first_sensor = db.session.get(SoilMoistureSensor, self.sensor_id)
@@ -233,10 +240,6 @@ class SoilMoistureSensorModelTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         html = response.get_data(as_text=True)
-        self.assertIn('InfluxDB-Fehler beim Laden einzelner Sensoren', html)
-        self.assertIn('Influx nicht erreichbar', html)
-
-    def test_location_markers_do_not_include_soil_moisture_sensor_keys(self):
         self.assertIn('Bodenfeuchte', html)
         self.assertIn('37,5 %', html)
         self.assertIn('2 Sensoren · Durchschnitt', html)
