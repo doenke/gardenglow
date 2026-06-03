@@ -58,8 +58,8 @@
       <button type="button" id="close-sensor-create-dialog" class="btn secondary dialog-close" aria-label="Dialog schließen">×</button>
     </div>
 
-    <label for="sensor-name">Name</label>
-    <input id="sensor-name" name="name" placeholder="z. B. Sensor Hochbeet 1" required autofocus>
+    <label for="sensor-label">Sensor-Bezeichnung</label>
+    <input id="sensor-label" name="sensor_label" placeholder="z. B. Sensor Hochbeet 1" autocomplete="off" data-1p-ignore required autofocus>
 
     <label for="sensor-homeassistant-entity-id">Homeassistant Entity-ID</label>
     <input id="sensor-homeassistant-entity-id" name="homeassistant_entity_id" placeholder="z. B. sensor.hochbeet_1_bodenfeuchte">
@@ -75,14 +75,24 @@
       <textarea id="sensor-influx-tags" name="influx_tags" placeholder='{"entity_id":"bodenfeuchtigkeit","domain":"sensor"}'></textarea>
     </fieldset>
 
-    <div class="field-pair">
-      <label for="sensor-map-x">map_x
-        <input id="sensor-map-x" name="map_x" type="number" step="any" inputmode="decimal" placeholder="z. B. 52.5200">
-      </label>
-      <label for="sensor-map-y">map_y
-        <input id="sensor-map-y" name="map_y" type="number" step="any" inputmode="decimal" placeholder="z. B. 13.4050">
-      </label>
-    </div>
+    <fieldset class="grid sensor-fieldset sensor-position-fieldset">
+      <legend>Position</legend>
+      <p class="text-muted m-0">Klicke/tippe in die komplette Luftbild-Übersicht, um die Sensorposition zu setzen.</p>
+      <div class="field-pair">
+        <label for="sensor-map-x">Breitengrad
+          <input id="sensor-map-x" name="map_x" type="number" step="any" inputmode="decimal" placeholder="z. B. 52.5200">
+        </label>
+        <label for="sensor-map-y">Längengrad
+          <input id="sensor-map-y" name="map_y" type="number" step="any" inputmode="decimal" placeholder="z. B. 13.4050">
+        </label>
+      </div>
+      {% if garden_map and garden_map.filename %}
+      <div class="sensor-map-picker" data-map-picker data-map-x-input="sensor-map-x" data-map-y-input="sensor-map-y">
+        <img id="sensor-create-map-image" src="/maps/{{ garden_map.filename }}" alt="Luftbild zur Positionsauswahl des Sensors" class="map-image sensor-map-image">
+        <svg id="sensor-create-map-overlay" class="sensor-map-overlay" aria-hidden="true"></svg>
+      </div>
+      {% endif %}
+    </fieldset>
 
     <label for="sensor-location-ids">Beete</label>
     <select id="sensor-location-ids" name="location_ids" multiple required size="{{ [locations|length, 6]|min }}">
@@ -103,6 +113,11 @@
 .sensor-dialog{width:min(92vw,620px);border:1px solid var(--border);border-radius:16px;background:var(--surface);color:var(--text);box-shadow:var(--shadow);padding:1rem}
 .sensor-dialog::backdrop{background:rgba(0,0,0,.45);backdrop-filter:blur(2px)}
 .sensor-fieldset{border:1px solid var(--border);border-radius:12px;padding:.8rem}
+.sensor-position-fieldset{gap:.65rem}
+.sensor-map-picker{position:relative;width:100%;max-width:100%;background:var(--surface-soft);border:1px solid var(--border);border-radius:10px;overflow:hidden;cursor:crosshair}
+.sensor-map-image{width:100%;border-radius:0}
+.sensor-map-overlay{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+.sensor-map-marker{filter:drop-shadow(0 1px 2px rgba(0,0,0,.35))}
 </style>
 <script>
   const sensorCreateDialog = document.getElementById('sensor-create-dialog');
@@ -111,7 +126,7 @@
     document.getElementById('close-sensor-create-dialog'),
     document.getElementById('cancel-sensor-create-dialog'),
   ].filter(Boolean);
-  const sensorNameInput = document.getElementById('sensor-name');
+  const sensorNameInput = document.getElementById('sensor-label');
 
   const openSensorCreateDialog = () => {
     if (!sensorCreateDialog) return;
@@ -165,6 +180,83 @@
     entityInput.addEventListener('input', applyHomeassistantDefaults);
     entityInput.addEventListener('change', applyHomeassistantDefaults);
   }
+
+
+  const calibrationPoints = {{ (garden_map.calibration_points | stored_points if garden_map else []) | tojson }};
+  const toGeo = (px, py) => {
+    if (!Array.isArray(calibrationPoints) || calibrationPoints.length < 2) return null;
+    const [p1, p2] = calibrationPoints;
+    return {
+      x: Number(p1.coord_x) + ((px - Number(p1.x)) / (Number(p2.x) - Number(p1.x))) * (Number(p2.coord_x) - Number(p1.coord_x)),
+      y: Number(p1.coord_y) + ((py - Number(p1.y)) / (Number(p2.y) - Number(p1.y))) * (Number(p2.coord_y) - Number(p1.coord_y)),
+    };
+  };
+  const toPixel = (gx, gy) => {
+    if (!Array.isArray(calibrationPoints) || calibrationPoints.length < 2) return null;
+    const [p1, p2] = calibrationPoints;
+    return {
+      x: Number(p1.x) + ((gx - Number(p1.coord_x)) / (Number(p2.coord_x) - Number(p1.coord_x))) * (Number(p2.x) - Number(p1.x)),
+      y: Number(p1.y) + ((gy - Number(p1.coord_y)) / (Number(p2.coord_y) - Number(p1.coord_y))) * (Number(p2.y) - Number(p1.y)),
+    };
+  };
+
+  const setupSensorMapPicker = (picker) => {
+    const image = picker.querySelector('img');
+    const overlay = picker.querySelector('svg');
+    const mapXInput = document.getElementById(picker.dataset.mapXInput);
+    const mapYInput = document.getElementById(picker.dataset.mapYInput);
+    if (!image || !overlay || !mapXInput || !mapYInput) return;
+
+    const renderMarker = () => {
+      const x = Number(mapXInput.value);
+      const y = Number(mapYInput.value);
+      if (!Number.isFinite(x) || !Number.isFinite(y)) {
+        overlay.innerHTML = '';
+        return;
+      }
+      const point = toPixel(x, y);
+      if (!point) {
+        overlay.innerHTML = '';
+        return;
+      }
+      const width = image.clientWidth || image.naturalWidth;
+      const height = image.clientHeight || image.naturalHeight;
+      const cx = point.x * width;
+      const cy = point.y * height;
+      overlay.innerHTML = `<circle class="sensor-map-marker" cx="${cx}" cy="${cy}" r="7" fill="#d7263d" stroke="#fff" stroke-width="2"><title>Sensorposition</title></circle>`;
+    };
+
+    const syncOverlay = () => {
+      const width = image.clientWidth || image.naturalWidth;
+      const height = image.clientHeight || image.naturalHeight;
+      overlay.setAttribute('viewBox', `0 0 ${width} ${height}`);
+      overlay.style.width = `${width}px`;
+      overlay.style.height = `${height}px`;
+      renderMarker();
+    };
+
+    const setFromPointer = (event) => {
+      const rect = image.getBoundingClientRect();
+      const normalizedX = (event.clientX - rect.left) / rect.width;
+      const normalizedY = (event.clientY - rect.top) / rect.height;
+      const geo = toGeo(normalizedX, normalizedY);
+      if (!geo) return;
+      mapXInput.value = geo.x;
+      mapYInput.value = geo.y;
+      renderMarker();
+    };
+
+    picker.addEventListener('pointerdown', (event) => {
+      event.preventDefault();
+      setFromPointer(event);
+    });
+    [mapXInput, mapYInput].forEach((input) => input.addEventListener('input', renderMarker));
+    image.addEventListener('load', syncOverlay);
+    if (image.complete) syncOverlay();
+    window.addEventListener('resize', syncOverlay);
+  };
+
+  document.querySelectorAll('[data-map-picker]').forEach(setupSensorMapPicker);
 
   {% if selected_location_id %}openSensorCreateDialog();{% endif %}
 </script>
