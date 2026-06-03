@@ -3,6 +3,50 @@
 <section class="card">
   <h2>Konfiguration</h2>
 
+  <h3>Homeassistant / InfluxDB</h3>
+  <form method="post" action="/config/influx" class="grid mb-1">
+    <div class="grid grid-auto-200">
+      <label for="influx-url">InfluxDB-URL
+        <input id="influx-url" type="url" name="influx_url" value="{{ influx_config.influx_url if influx_config else '' }}" placeholder="https://influxdb.example.local:8086">
+      </label>
+      <label for="influx-org">InfluxDB-Org
+        <input id="influx-org" type="text" name="influx_org" value="{{ influx_config.influx_org if influx_config else '' }}" autocomplete="organization">
+      </label>
+      <label for="influx-bucket">InfluxDB-Bucket
+        <input id="influx-bucket" type="text" name="influx_bucket" value="{{ influx_config.influx_bucket if influx_config else '' }}">
+      </label>
+      <label for="homeassistant-url">Homeassistant-URL (optional)
+        <input id="homeassistant-url" type="url" name="homeassistant_url" value="{{ influx_config.homeassistant_url if influx_config else '' }}" placeholder="https://homeassistant.example.local:8123">
+      </label>
+    </div>
+
+    <div class="grid grid-auto-200">
+      <label for="influx-token">InfluxDB-Token
+        <input id="influx-token" type="password" name="influx_token" value="" placeholder="{% if influx_config and influx_config.has_influx_token %}Gespeicherter Token bleibt erhalten{% else %}Token eintragen{% endif %}" autocomplete="new-password">
+        <small class="text-muted">Token werden nicht im Klartext angezeigt. Leer lassen, um den gespeicherten Wert beizubehalten.</small>
+      </label>
+      <label for="homeassistant-token">Homeassistant-Token (optional)
+        <input id="homeassistant-token" type="password" name="homeassistant_token" value="" placeholder="{% if influx_config and influx_config.has_homeassistant_token %}Gespeicherter Token bleibt erhalten{% else %}Optionaler Token{% endif %}" autocomplete="new-password">
+        <small class="text-muted">Nur ausfüllen, wenn ein neuer Homeassistant-Token gespeichert werden soll.</small>
+      </label>
+    </div>
+
+    <div class="grid grid-auto-200">
+      <label for="timeout-seconds">Timeout (Sekunden)
+        <input id="timeout-seconds" type="number" name="timeout_seconds" min="1" max="300" step="1" value="{{ influx_config.timeout_seconds if influx_config else 10 }}">
+      </label>
+      <label class="check-row">
+        <input type="checkbox" name="verify_tls" value="1" {% if not influx_config or influx_config.verify_tls %}checked{% endif %}>
+        TLS-Zertifikate verifizieren
+      </label>
+    </div>
+
+    {% if influx_config %}
+      <small class="text-muted">Erstellt: {{ influx_config.created_at.strftime('%Y-%m-%d %H:%M') if influx_config.created_at else 'unbekannt' }} · Aktualisiert: {{ influx_config.updated_at.strftime('%Y-%m-%d %H:%M') if influx_config.updated_at else 'unbekannt' }}</small>
+    {% endif %}
+    <button type="submit">Homeassistant-/InfluxDB-Konfiguration speichern</button>
+  </form>
+
   <h3>Luftbild</h3>
   <form method="post" action="/map/upload" enctype="multipart/form-data" class="grid mb-1">
     <label for="map-image-upload">Luftbild-Datei</label>

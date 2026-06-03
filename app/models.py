@@ -83,6 +83,30 @@ class SoilMoistureSensor(db.Model):
     )
 
 
+class InfluxIntegrationConfig(db.Model):
+    __tablename__ = 'influx_integration_config'
+
+    id = db.Column(db.Integer, primary_key=True)
+    influx_url = db.Column(db.String(1024), nullable=False, default='')
+    influx_org = db.Column(db.String(255), nullable=False, default='')
+    influx_bucket = db.Column(db.String(255), nullable=False, default='')
+    influx_token = db.Column(db.Text)
+    homeassistant_url = db.Column(db.String(1024), nullable=False, default='')
+    homeassistant_token = db.Column(db.Text)
+    verify_tls = db.Column(db.Boolean, nullable=False, default=True)
+    timeout_seconds = db.Column(db.Integer, nullable=False, default=10)
+    created_at = db.Column(db.DateTime(timezone=True), default=utc_now, nullable=False)
+    updated_at = db.Column(db.DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False)
+
+    @property
+    def has_influx_token(self):
+        return bool((self.influx_token or '').strip())
+
+    @property
+    def has_homeassistant_token(self):
+        return bool((self.homeassistant_token or '').strip())
+
+
 class Plant(db.Model):
     __table_args__ = (
         db.Index('ix_plant_location_id', 'location_id'),
