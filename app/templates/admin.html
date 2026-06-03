@@ -23,6 +23,9 @@
   </div>
 
   <div class="actions-inline mb-1">
+    <form method="post" action="{{ url_for('main.create_backup') }}" onsubmit="return confirm('Jetzt ein neues Datenbank-Backup anlegen?');">
+      <button type="submit" class="btn">Backup anlegen</button>
+    </form>
     <a class="btn" href="{{ url_for('main.export_data') }}">Daten exportieren</a>
   </div>
 </section>

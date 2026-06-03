@@ -2,6 +2,7 @@ import os
 import time
 import re
 import json
+import sqlite3
 import subprocess
 import zipfile
 from io import BytesIO
@@ -887,6 +888,50 @@ def _backup_report(limit=5):
     }
 
 
+def _create_sqlite_backup():
+    backup_folder = current_app.config.get('BACKUP_FOLDER')
+    if not backup_folder:
+        raise RuntimeError('Backup-Ordner ist nicht konfiguriert.')
+
+    db_path = _database_file_path()
+    if not db_path or not os.path.isfile(db_path):
+        raise RuntimeError('Es ist keine lokale SQLite-Datenbank für ein Backup verfügbar.')
+
+    os.makedirs(backup_folder, exist_ok=True)
+    timestamp = utc_now().strftime('%Y%m%d-%H%M%S')
+    base_filename = f'garden-backup-{timestamp}.sqlite'
+    backup_path = os.path.join(backup_folder, base_filename)
+    counter = 2
+    while os.path.exists(backup_path):
+        backup_path = os.path.join(backup_folder, f'garden-backup-{timestamp}-{counter}.sqlite')
+        counter += 1
+
+    source = None
+    destination = None
+    try:
+        source = sqlite3.connect(db_path)
+        destination = sqlite3.connect(backup_path)
+        source.backup(destination)
+        destination.close()
+        source.close()
+    except sqlite3.Error as exc:
+        if destination is not None:
+            destination.close()
+        if source is not None:
+            source.close()
+        if os.path.exists(backup_path):
+            try:
+                os.remove(backup_path)
+            except OSError:
+                pass
+        raise RuntimeError('Backup konnte nicht erstellt werden.') from exc
+
+    return {
+        'filename': os.path.basename(backup_path),
+        'path': backup_path,
+        'size_bytes': os.path.getsize(backup_path),
+    }
+
 def _git_commit():
     configured = (current_app.config.get('GIT_COMMIT') or '').strip()
     if configured:
@@ -1155,6 +1200,19 @@ def admin():
         version_info=_app_version_info(),
         environment_variables=_environment_variable_report(),
     )
+
+
+@main_bp.route('/admin/backup/create', methods=['POST'])
+@login_required
+def create_backup():
+    try:
+        backup = _create_sqlite_backup()
+        flash(f'Backup „{backup["filename"]}“ wurde erstellt.', 'success')
+    except RuntimeError as exc:
+        flash(str(exc), 'error')
+    except OSError:
+        flash('Backup konnte nicht erstellt werden.', 'error')
+    return redirect(url_for('main.admin'))
 
 
 def _safe_orphan_target(folder_path, filename):
