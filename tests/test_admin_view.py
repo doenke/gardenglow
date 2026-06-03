@@ -1,5 +1,6 @@
 import os
 import shutil
+import sqlite3
 import tempfile
 import unittest
 import zipfile
@@ -80,7 +81,27 @@ class AdminViewTest(unittest.TestCase):
         self.assertIn('MAX_ATTACHMENT_SIZE_BYTES', html)
         self.assertIn('Default', html)
         self.assertIn('Alle verwaisten Uploads löschen', html)
+        self.assertIn('Backup anlegen', html)
+        self.assertIn('/admin/backup/create', html)
         self.assertIn('admin-breakable admin-filename-cell', html)
+
+    def test_backup_can_be_created_from_admin_page(self):
+        response = self.client.post('/admin/backup/create', follow_redirects=True)
+
+        self.assertEqual(response.status_code, 200)
+        html = response.get_data(as_text=True)
+        self.assertIn('Backup „garden-backup-', html)
+        backup_files = [
+            filename for filename in os.listdir(self.backup_folder)
+            if filename.startswith('garden-backup-') and filename.endswith('.sqlite')
+        ]
+        self.assertEqual(len(backup_files), 1)
+        self.assertIn(backup_files[0], html)
+
+        backup_path = os.path.join(self.backup_folder, backup_files[0])
+        with sqlite3.connect(backup_path) as connection:
+            row = connection.execute("select name from user where sub = 'test-user'").fetchone()
+        self.assertEqual(row, ('Test User',))
 
     def test_orphan_file_can_be_deleted(self):
         response = self.client.post(
