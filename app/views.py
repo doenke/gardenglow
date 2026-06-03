@@ -11,9 +11,9 @@ from urllib.parse import quote, unquote
 
 import requests
 from functools import wraps
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from flask import Blueprint, abort, current_app, g, render_template, request, redirect, url_for, session, jsonify, send_from_directory, flash, send_file
-from .models import db, utc_now, User, Location, Plant, PlantPhoto, PlantNote, GardenMap, TimelineEntry, LightNeed, SoilProperty, SoilMoistureSensor, PlantDatabaseIdentifier, InfluxIntegrationConfig, plant_soil_property
+from .models import db, utc_now, User, Location, Plant, PlantPhoto, PlantNote, GardenMap, TimelineEntry, LightNeed, SoilProperty, SoilMoistureSensor, PlantDatabaseIdentifier, InfluxIntegrationConfig, plant_soil_property, soil_moisture_sensor_location
 from .map_data import MapPointValidationError, parse_stored_points, validate_calibration_points, validate_polygon_points
 from .services.timeline_service import save_uploaded_attachment, set_single_title_entry, delete_timeline_entry, build_unique_upload_name
 from .services.influx_service import InfluxIntegrationConfig as InfluxServiceConfig, get_sensor_time_series_adapter, latest_sensor_value
@@ -76,6 +76,13 @@ LIGHT_NEED_OPTIONS = [
 ]
 LIGHT_NEED_KEY_TO_LABEL = {item['key']: item['label'] for item in LIGHT_NEED_OPTIONS}
 LIGHT_NEED_ICON_BY_KEY = {item['key']: item['icon'] for item in LIGHT_NEED_OPTIONS}
+SOIL_MOISTURE_RANGE_OPTIONS = [
+    {'key': '24h', 'label': '24 Stunden', 'delta': timedelta(hours=24)},
+    {'key': '7d', 'label': '7 Tage', 'delta': timedelta(days=7)},
+    {'key': '30d', 'label': '30 Tage', 'delta': timedelta(days=30)},
+]
+SOIL_MOISTURE_RANGE_BY_KEY = {item['key']: item for item in SOIL_MOISTURE_RANGE_OPTIONS}
+DEFAULT_SOIL_MOISTURE_RANGE = '7d'
 
 ENVIRONMENT_VARIABLES = [
     {'name': 'SECRET_KEY', 'config_key': 'SECRET_KEY', 'default': None, 'sensitive': True},
@@ -1119,6 +1126,72 @@ def _first_influx_integration_config():
     return InfluxIntegrationConfig.query.order_by(InfluxIntegrationConfig.id.asc()).first()
 
 
+def _sensor_influx_config():
+    stored_config = _first_influx_integration_config()
+    if stored_config and any((
+        stored_config.influx_url,
+        stored_config.influx_token,
+        stored_config.influx_org,
+        stored_config.influx_bucket,
+    )):
+        return influx_service.InfluxIntegrationConfig(
+            url=(stored_config.influx_url or '').strip(),
+            token=(stored_config.influx_token or '').strip(),
+            org=(stored_config.influx_org or '').strip(),
+            bucket=(stored_config.influx_bucket or '').strip(),
+            timeout_seconds=stored_config.timeout_seconds or influx_service.DEFAULT_TIMEOUT_SECONDS,
+        )
+    return influx_service.InfluxIntegrationConfig.from_app_config()
+
+
+def _selected_soil_moisture_range():
+    selected_key = (request.args.get('moisture_range') or DEFAULT_SOIL_MOISTURE_RANGE).strip()
+    if selected_key not in SOIL_MOISTURE_RANGE_BY_KEY:
+        selected_key = DEFAULT_SOIL_MOISTURE_RANGE
+    return selected_key, SOIL_MOISTURE_RANGE_BY_KEY[selected_key]['delta']
+
+
+def _location_soil_moisture_sensors(location_id):
+    return (
+        SoilMoistureSensor.query
+        .join(soil_moisture_sensor_location, SoilMoistureSensor.id == soil_moisture_sensor_location.c.sensor_id)
+        .filter(soil_moisture_sensor_location.c.location_id == location_id)
+        .filter(SoilMoistureSensor.is_active.is_(True))
+        .order_by(SoilMoistureSensor.name.asc(), SoilMoistureSensor.id.asc())
+        .all()
+    )
+
+
+def _load_location_soil_moisture_series(location_id, lookback):
+    sensors = _location_soil_moisture_sensors(location_id)
+    series = [{'sensor_id': sensor.id, 'name': sensor.name, 'points': []} for sensor in sensors]
+    hints = []
+
+    if not sensors:
+        hints.append('Für dieses Beet sind keine Bodenfeuchte-Sensoren verknüpft.')
+        return series, hints, sensors
+
+    config = _sensor_influx_config()
+    if not config.enabled:
+        hints.append('InfluxDB ist nicht vollständig konfiguriert; es können keine Verlaufsdaten geladen werden.')
+        return series, hints, sensors
+
+    adapter = influx_service.get_sensor_time_series_adapter(config)
+    stop = datetime.now(timezone.utc)
+    start = stop - lookback
+    errors = []
+    for sensor, sensor_series in zip(sensors, series):
+        try:
+            sensor_series['points'] = adapter.query_sensor(sensor, start, stop)
+        except Exception as exc:  # pragma: no cover - concrete InfluxDB failures are integration-specific
+            errors.append(f'{sensor.name}: {exc}')
+
+    if errors:
+        hints.append('InfluxDB-Fehler beim Laden einzelner Sensoren: ' + '; '.join(errors))
+    if not any(sensor_series['points'] for sensor_series in series):
+        hints.append('Für den gewählten Zeitraum wurden keine Bodenfeuchte-Daten gefunden.')
+    return series, hints, sensors
+
 def _influx_service_config_from_db_or_app():
     influx_config = _first_influx_integration_config()
     if influx_config is None:
@@ -1446,6 +1519,11 @@ def location_detail(location_id):
     ]
     garden_map = GardenMap.query.order_by(GardenMap.id.asc()).first()
     other_locations = Location.query.filter(Location.id != loc.id).order_by(*location_sort_criteria()).all()
+    soil_moisture_range_key, soil_moisture_lookback = _selected_soil_moisture_range()
+    soil_moisture_series, soil_moisture_hints, soil_moisture_sensors = _load_location_soil_moisture_series(
+        loc.id,
+        soil_moisture_lookback,
+    )
     soil_moisture_current, soil_moisture_current_label, soil_moisture_sensor_values = _soil_moisture_current_for_location(loc)
     return render_template(
         'location.html',
@@ -1462,6 +1540,11 @@ def location_detail(location_id):
         source_suggestions=get_source_suggestions(),
         top_soil_properties=get_top_soil_property_labels(),
         soil_property_suggestions=SoilProperty.query.order_by(SoilProperty.label.asc()).all(),
+        soil_moisture_series=soil_moisture_series,
+        soil_moisture_hints=soil_moisture_hints,
+        soil_moisture_sensors=soil_moisture_sensors,
+        soil_moisture_range_key=soil_moisture_range_key,
+        soil_moisture_range_options=SOIL_MOISTURE_RANGE_OPTIONS,
         soil_moisture_current=soil_moisture_current,
         soil_moisture_current_label=soil_moisture_current_label,
         soil_moisture_sensor_values=soil_moisture_sensor_values,
