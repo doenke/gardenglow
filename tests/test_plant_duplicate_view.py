@@ -22,7 +22,7 @@ class PlantDuplicateViewTest(unittest.TestCase):
             self.user = User(sub='test-user', name='Test User')
             db.session.add(self.user)
             db.session.flush()
-            self.location = Location(name='Beet', user_id=self.user.id, creator_id=self.user.id)
+            self.location = Location(name='Beet')
             db.session.add(self.location)
             self.sun = LightNeed.query.filter_by(key='full_sun').one()
             self.soil = SoilProperty(label='Humos')

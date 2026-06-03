@@ -46,8 +46,6 @@ class Location(db.Model):
     description = db.Column(db.Text)
     color = db.Column(db.String(7), default='#2f6d40')
     polygon_points = db.Column(db.Text)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    creator_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
 
 
 class Plant(db.Model):

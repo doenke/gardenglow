@@ -25,8 +25,6 @@ class MapPointValidationTest(unittest.TestCase):
             self.location = Location(
                 name='Beet',
                 polygon_points='[]',
-                user_id=self.user.id,
-                creator_id=self.user.id,
             )
             db.session.add(self.location)
             db.session.add(GardenMap(filename='map.svg', calibration_points='[]', boundary_points='[]'))

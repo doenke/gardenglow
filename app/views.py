@@ -618,9 +618,7 @@ def get_or_create_trash_location():
         return trash
     trash = Location(
         name=TRASH_LOCATION_NAME,
-        description="Automatisch erstellt. Gelöschte Pflanzen landen hier.",
-        user_id=current_user().id,
-        creator_id=current_user().id
+        description="Automatisch erstellt. Gelöschte Pflanzen landen hier."
     )
     db.session.add(trash)
     db.session.flush()
@@ -1017,8 +1015,7 @@ def export_data():
 @main_bp.route('/locations/new', methods=['POST'])
 @login_required
 def new_location():
-    user = current_user()
-    loc = Location(name=request.form['name'], description=request.form.get('description'), color=request.form.get('color') or '#2f6d40', user_id=user.id, creator_id=user.id)
+    loc = Location(name=request.form['name'], description=request.form.get('description'), color=request.form.get('color') or '#2f6d40')
     db.session.add(loc)
     db.session.commit()
     return redirect(url_for('main.index'))
