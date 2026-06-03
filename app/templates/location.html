@@ -14,13 +14,11 @@
     <button type="button" id="toggle-polygon-edit" aria-label="Polygon bearbeiten" title="Polygon bearbeiten" class="icon-btn">✏️</button>
     <small id="polygon-edit-instructions" class="text-muted hidden">Klicke/tippe auf die Karte, um Punkte zu setzen. Ziehe Punkte zum Verschieben.</small>
   </div>
-  {% if soil_moisture_current is not none %}
-  <aside class="soil-moisture-card" aria-label="Aktuelle Bodenfeuchte">
+  {% if soil_moisture_sensors %}
+  <aside class="soil-moisture-card hidden" id="soil-moisture-current-card" aria-label="Aktuelle Bodenfeuchte">
     <span class="soil-moisture-card-title">Bodenfeuchte</span>
-    <strong>{{ soil_moisture_current_label }}</strong>
-    {% if soil_moisture_sensor_values and soil_moisture_sensor_values|length > 1 %}
-      <small>{{ soil_moisture_sensor_values|length }} Sensoren · Durchschnitt</small>
-    {% endif %}
+    <strong id="soil-moisture-current-label">–</strong>
+    <small id="soil-moisture-current-meta"></small>
   </aside>
   {% endif %}
 </div>
@@ -90,7 +88,7 @@
   <button type="button" id="open-plant-create-dialog">Pflanze anlegen</button>
 </div>
 
-{% if soil_moisture_has_series_data %}
+{% if soil_moisture_sensors %}
 <section class="soil-moisture-history" aria-labelledby="soil-moisture-history-title">
   <div class="soil-moisture-history-head">
     <div>
@@ -99,7 +97,7 @@
     </div>
     <form method="get" class="soil-moisture-range-form">
       <label for="soil-moisture-range">Zeitraum</label>
-      <select id="soil-moisture-range" name="moisture_range" onchange="this.form.submit()">
+      <select id="soil-moisture-range" name="moisture_range">
         {% for option in soil_moisture_range_options %}
         <option value="{{ option.key }}" {% if option.key == soil_moisture_range_key %}selected{% endif %}>{{ option.label }}</option>
         {% endfor %}
@@ -109,13 +107,11 @@
 
   <script type="application/json" id="soil-moisture-series-data">{{ soil_moisture_series|tojson }}</script>
 
-  {% if soil_moisture_hints %}
-  <div class="soil-moisture-hints" role="status" aria-live="polite">
+  <div class="soil-moisture-hints" id="soil-moisture-hints" role="status" aria-live="polite">
     {% for hint in soil_moisture_hints %}
     <p>{{ hint }}</p>
     {% endfor %}
   </div>
-  {% endif %}
 
   {% if soil_moisture_sensors %}
   <div class="soil-moisture-chart-wrap">
@@ -125,8 +121,8 @@
     {% for sensor_series in soil_moisture_series %}
     <span class="soil-moisture-legend-item" data-sensor-id="{{ sensor_series.sensor_id }}">
       <span class="soil-moisture-legend-swatch" aria-hidden="true"></span>
-      {{ sensor_series.name }}
-      {% if not sensor_series.points %}<small>(keine Daten)</small>{% endif %}
+      <span class="soil-moisture-legend-name">{{ sensor_series.name }}</span>
+      <small>(lädt …)</small>
     </span>
     {% endfor %}
   </div>
@@ -243,7 +239,47 @@
   const gardenBoundary = {{ (garden_map.boundary_points | stored_points if garden_map else []) | tojson }};
   const MAP_BORDER_FADE_PX = 50;
   const MAP_BORDER_FADE_STEPS = 14;
-  const soilMoistureColors = ['#2563eb', '#16a34a', '#dc2626', '#9333ea', '#ea580c', '#0891b2', '#be123c'];
+  const soilMoistureColors = ['#2563eb', '#16a34a', '#dc2626', '#9333ea', '#ea580c', '#be123c'];
+  const soilMoistureDataUrl = '/locations/{{ location.id }}/soil-moisture';
+
+  const setSoilMoistureHints = (messages) => {
+    const hintsNode = document.getElementById('soil-moisture-hints');
+    if (!hintsNode) return;
+    const safeMessages = Array.isArray(messages) && messages.length ? messages : [];
+    hintsNode.innerHTML = safeMessages.map((message) => {
+      const paragraph = document.createElement('p');
+      paragraph.textContent = message;
+      return paragraph.outerHTML;
+    }).join('');
+  };
+
+  const updateSoilMoistureCurrent = (current) => {
+    const card = document.getElementById('soil-moisture-current-card');
+    if (!card) return;
+    const label = document.getElementById('soil-moisture-current-label');
+    const meta = document.getElementById('soil-moisture-current-meta');
+    if (current && current.value !== null && current.value !== undefined) {
+      if (label) label.textContent = current.label || `${current.value} %`;
+      const sensorCount = Array.isArray(current.sensor_values)
+        ? current.sensor_values.filter((item) => item.value !== null && item.value !== undefined).length
+        : 0;
+      if (meta) meta.textContent = sensorCount > 1 ? `${sensorCount} Sensoren · Durchschnitt` : '';
+      card.classList.remove('hidden');
+      return;
+    }
+    card.classList.add('hidden');
+  };
+
+  const updateSoilMoistureLegend = (series) => {
+    if (!Array.isArray(series)) return;
+    series.forEach((sensorSeries, index) => {
+      const item = document.querySelector(`.soil-moisture-legend-item[data-sensor-id="${sensorSeries.sensor_id}"]`);
+      if (!item) return;
+      item.style.setProperty('--sensor-color', soilMoistureColors[index % soilMoistureColors.length]);
+      const status = item.querySelector('small');
+      if (status) status.textContent = (sensorSeries.points || []).length ? '' : '(keine Daten)';
+    });
+  };
 
   const drawSoilMoistureChart = () => {
     const canvas = document.getElementById('soil-moisture-chart');
@@ -348,8 +384,33 @@
       });
     });
   };
+  const loadSoilMoistureData = async () => {
+    const dataNode = document.getElementById('soil-moisture-series-data');
+    if (!dataNode) return;
+    const rangeSelect = document.getElementById('soil-moisture-range');
+    setSoilMoistureHints(['Bodenfeuchte-Daten werden im Hintergrund geladen.']);
+    const url = new URL(soilMoistureDataUrl, window.location.origin);
+    if (rangeSelect && rangeSelect.value) url.searchParams.set('moisture_range', rangeSelect.value);
+    try {
+      const response = await fetch(url, { headers: { 'Accept': 'application/json' } });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const payload = await response.json();
+      dataNode.textContent = JSON.stringify(payload.series || []);
+      updateSoilMoistureCurrent(payload.current);
+      updateSoilMoistureLegend(payload.series || []);
+      setSoilMoistureHints(payload.hints || []);
+      drawSoilMoistureChart();
+    } catch (error) {
+      setSoilMoistureHints(['Bodenfeuchte-Daten konnten nicht geladen werden.']);
+      updateSoilMoistureCurrent(null);
+      drawSoilMoistureChart();
+    }
+  };
+
   drawSoilMoistureChart();
+  loadSoilMoistureData();
   window.addEventListener('resize', drawSoilMoistureChart);
+  document.getElementById('soil-moisture-range')?.addEventListener('change', loadSoilMoistureData);
   const toGeo = (px, py) => {
     if (!Array.isArray(calibrationPoints) || calibrationPoints.length < 2) return null;
     const [p1,p2]=calibrationPoints;
