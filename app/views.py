@@ -1190,6 +1190,14 @@ def _first_influx_integration_config():
     return InfluxIntegrationConfig.query.order_by(InfluxIntegrationConfig.id.asc()).first()
 
 
+def _ensure_influx_integration_config():
+    influx_config = _first_influx_integration_config()
+    if influx_config is None:
+        influx_config = InfluxIntegrationConfig()
+        db.session.add(influx_config)
+    return influx_config
+
+
 def _sensor_influx_config():
     stored_config = _first_influx_integration_config()
     if stored_config and any((
@@ -1399,23 +1407,21 @@ def config():
 @main_bp.route('/config/influx', methods=['POST'])
 @login_required
 def save_influx_config():
-    influx_config = _first_influx_integration_config()
-    if influx_config is None:
-        influx_config = InfluxIntegrationConfig()
-        db.session.add(influx_config)
+    influx_config = _ensure_influx_integration_config()
 
-    try:
-        timeout_seconds = _form_int('timeout_seconds', default=10, minimum=1, maximum=300)
-    except ValueError as error:
-        flash(str(error), 'error')
-        return redirect(url_for('main.config'))
+    if 'timeout_seconds' in request.form:
+        try:
+            influx_config.timeout_seconds = _form_int('timeout_seconds', default=10, minimum=1, maximum=300)
+        except ValueError as error:
+            flash(str(error), 'error')
+            return redirect(url_for('main.config', _anchor='influxdb-config'))
+        influx_config.verify_tls = _form_bool('verify_tls')
 
     influx_config.influx_url = (request.form.get('influx_url') or '').strip()
     influx_config.influx_org = (request.form.get('influx_org') or '').strip()
     influx_config.influx_bucket = (request.form.get('influx_bucket') or '').strip()
-    influx_config.homeassistant_url = (request.form.get('homeassistant_url') or '').strip()
-    influx_config.verify_tls = _form_bool('verify_tls')
-    influx_config.timeout_seconds = timeout_seconds
+    if 'homeassistant_url' in request.form:
+        influx_config.homeassistant_url = (request.form.get('homeassistant_url') or '').strip()
     influx_config.updated_at = utc_now()
 
     influx_token = (request.form.get('influx_token') or '').strip()
@@ -1427,8 +1433,41 @@ def save_influx_config():
         influx_config.homeassistant_token = homeassistant_token
 
     db.session.commit()
-    flash('Homeassistant-/InfluxDB-Konfiguration wurde gespeichert.', 'success')
-    return redirect(url_for('main.config'))
+    flash('InfluxDB-Konfiguration wurde gespeichert.', 'success')
+    return redirect(url_for('main.config', _anchor='influxdb-config'))
+
+
+@main_bp.route('/config/homeassistant', methods=['POST'])
+@login_required
+def save_homeassistant_config():
+    influx_config = _ensure_influx_integration_config()
+    influx_config.homeassistant_url = (request.form.get('homeassistant_url') or '').strip()
+    influx_config.updated_at = utc_now()
+
+    homeassistant_token = (request.form.get('homeassistant_token') or '').strip()
+    if homeassistant_token:
+        influx_config.homeassistant_token = homeassistant_token
+
+    db.session.commit()
+    flash('Homeassistant-Konfiguration wurde gespeichert.', 'success')
+    return redirect(url_for('main.config', _anchor='homeassistant-config'))
+
+
+@main_bp.route('/config/connection-options', methods=['POST'])
+@login_required
+def save_connection_options():
+    influx_config = _ensure_influx_integration_config()
+    try:
+        influx_config.timeout_seconds = _form_int('timeout_seconds', default=10, minimum=1, maximum=300)
+    except ValueError as error:
+        flash(str(error), 'error')
+        return redirect(url_for('main.config', _anchor='connection-options'))
+
+    influx_config.verify_tls = _form_bool('verify_tls')
+    influx_config.updated_at = utc_now()
+    db.session.commit()
+    flash('Verbindungsoptionen wurden gespeichert.', 'success')
+    return redirect(url_for('main.config', _anchor='connection-options'))
 
 
 @main_bp.route('/config/influx/test', methods=['POST'])
