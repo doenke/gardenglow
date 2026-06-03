@@ -204,6 +204,13 @@ class SoilMoistureSensorModelTest(unittest.TestCase):
         self.assertNotIn('aria-label="Aktuelle Bodenfeuchte"', html)
         self.assertNotIn('Bodenfeuchte-Verlauf', html)
 
+    def test_location_detail_offers_one_year_soil_moisture_range(self):
+        response = self.client.get(f'/locations/{self.location_id}?moisture_range=1y')
+
+        self.assertEqual(response.status_code, 200)
+        html = response.get_data(as_text=True)
+        self.assertIn('<option value="1y" selected>1 Jahr</option>', html)
+
     def test_location_detail_renders_soil_moisture_series_for_linked_sensors(self):
         class FakeAdapter:
             def query_sensor(self, sensor, start, stop):
