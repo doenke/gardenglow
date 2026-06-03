@@ -186,8 +186,9 @@ class SoilMoistureSensorModelTest(unittest.TestCase):
         self.assertIn('Letzten Influx-Wert testen', sensor_response.get_data(as_text=True))
         self.assertEqual(location_response.status_code, 200)
         self.assertIn('/sensors?location_id={}'.format(self.location_id), location_response.get_data(as_text=True))
-        self.assertIn('Sensor verknüpfen', location_response.get_data(as_text=True))
-        self.assertNotIn('Bodenfeuchte-Verlauf', location_response.get_data(as_text=True))
+        self.assertIn('Zur Sensorseite dieses Beets', location_response.get_data(as_text=True))
+        self.assertIn('Bodenfeuchte-Verlauf', location_response.get_data(as_text=True))
+        self.assertIn('Bodenfeuchte-Daten werden im Hintergrund geladen.', location_response.get_data(as_text=True))
         self.assertNotIn('InfluxDB ist nicht vollständig konfiguriert', location_response.get_data(as_text=True))
 
     def test_location_detail_hides_soil_moisture_without_linked_sensor(self):
@@ -202,13 +203,6 @@ class SoilMoistureSensorModelTest(unittest.TestCase):
         html = response.get_data(as_text=True)
         self.assertNotIn('aria-label="Aktuelle Bodenfeuchte"', html)
         self.assertNotIn('Bodenfeuchte-Verlauf', html)
-        location_html = location_response.get_data(as_text=True)
-        self.assertIn('/sensors?location_id={}'.format(self.location_id), location_html)
-        self.assertIn('Zur Sensorseite dieses Beets', location_html)
-        self.assertNotIn('Sensor verknüpfen', location_html)
-        self.assertNotIn('Bodenfeuchte-Sensor anlegen</a>', location_html)
-        self.assertIn('Bodenfeuchte-Verlauf', location_html)
-        self.assertIn('InfluxDB ist nicht vollständig konfiguriert', location_response.get_data(as_text=True))
 
     def test_location_detail_renders_soil_moisture_series_for_linked_sensors(self):
         class FakeAdapter:
@@ -225,17 +219,21 @@ class SoilMoistureSensorModelTest(unittest.TestCase):
             db.session.commit()
 
         with patch('app.views.influx_service.get_sensor_time_series_adapter', return_value=FakeAdapter()) as adapter_factory:
-            response = self.client.get(f'/locations/{self.location_id}?moisture_range=24h')
+            page_response = self.client.get(f'/locations/{self.location_id}?moisture_range=24h')
+            adapter_factory.assert_not_called()
+            response = self.client.get(f'/locations/{self.location_id}/soil-moisture?moisture_range=24h')
 
+        self.assertEqual(page_response.status_code, 200)
+        self.assertEqual(adapter_factory.call_count, 2)
+        page_html = page_response.get_data(as_text=True)
+        self.assertIn('Bodenfeuchte-Daten werden im Hintergrund geladen.', page_html)
+        self.assertNotIn('\"value\": 35.2', page_html)
         self.assertEqual(response.status_code, 200)
-        adapter_factory.assert_called_once()
-        html = response.get_data(as_text=True)
-        self.assertIn('Bodenfeuchte-Verlauf', html)
-        self.assertIn('24 Stunden', html)
-        self.assertIn('Bodenfeuchte Sensor 1', html)
-        self.assertIn(f'\"sensor_id\": {self.sensor_id}', html)
-        self.assertIn('\"value\": 35.2', html)
-        self.assertNotIn('Für den gewählten Zeitraum wurden keine Bodenfeuchte-Daten gefunden.', html)
+        payload = response.get_json()
+        self.assertEqual(payload['range_key'], '24h')
+        self.assertEqual(payload['series'][0]['sensor_id'], self.sensor_id)
+        self.assertEqual(payload['series'][0]['points'][0]['value'], 35.2)
+        self.assertNotIn('Für den gewählten Zeitraum wurden keine Bodenfeuchte-Daten gefunden.', payload['hints'])
 
     def test_location_detail_hides_soil_moisture_when_influx_fails(self):
         class FailingAdapter:
@@ -252,13 +250,16 @@ class SoilMoistureSensorModelTest(unittest.TestCase):
             db.session.commit()
 
         with patch('app.views.influx_service.get_sensor_time_series_adapter', return_value=FailingAdapter()):
-            response = self.client.get(f'/locations/{self.location_id}')
+            page_response = self.client.get(f'/locations/{self.location_id}')
+            response = self.client.get(f'/locations/{self.location_id}/soil-moisture')
 
+        self.assertEqual(page_response.status_code, 200)
+        self.assertIn('Bodenfeuchte-Verlauf', page_response.get_data(as_text=True))
         self.assertEqual(response.status_code, 200)
-        html = response.get_data(as_text=True)
-        self.assertNotIn('Bodenfeuchte-Verlauf', html)
-        self.assertNotIn('InfluxDB-Fehler beim Laden einzelner Sensoren', html)
-        self.assertNotIn('Influx nicht erreichbar', html)
+        payload = response.get_json()
+        self.assertFalse(payload['has_series_data'])
+        self.assertIn('InfluxDB-Fehler beim Laden einzelner Sensoren', payload['hints'][0])
+        self.assertIn('Influx nicht erreichbar', payload['hints'][0])
 
     def test_location_detail_renders_aggregated_current_soil_moisture(self):
         with self.app.app_context():
@@ -301,14 +302,18 @@ class SoilMoistureSensorModelTest(unittest.TestCase):
             return {'time': '2026-06-03T08:10:00Z', 'value': 90}
 
         with patch('app.views.latest_sensor_value', side_effect=fake_latest_sensor_value):
-            response = self.client.get(f'/locations/{self.location_id}')
+            page_response = self.client.get(f'/locations/{self.location_id}')
+            response = self.client.get(f'/locations/{self.location_id}/soil-moisture')
 
+        self.assertEqual(page_response.status_code, 200)
+        page_html = page_response.get_data(as_text=True)
+        self.assertIn('Bodenfeuchte-Daten werden im Hintergrund geladen.', page_html)
+        self.assertNotIn('37,5 %', page_html)
         self.assertEqual(response.status_code, 200)
-        html = response.get_data(as_text=True)
-        self.assertIn('Bodenfeuchte', html)
-        self.assertIn('37,5 %', html)
-        self.assertIn('2 Sensoren · Durchschnitt', html)
-        self.assertNotIn('Inaktiver Bodenfeuchte Sensor', html)
+        payload = response.get_json()
+        self.assertEqual(payload['current']['label'], '37,5 %')
+        self.assertEqual(len([item for item in payload['current']['sensor_values'] if item['value'] is not None]), 2)
+        self.assertNotIn('Inaktiver Bodenfeuchte Sensor', response.get_data(as_text=True))
 
     def test_location_markers_do_not_include_soil_moisture_sensors(self):
         response = self.client.get(f'/locations/{self.location_id}')
@@ -329,7 +334,7 @@ class SoilMoistureSensorModelTest(unittest.TestCase):
             'map_y': 40,
         }, location_plant_markers)
         self.assertIn('Minze', html)
-        self.assertNotIn('Bodenfeuchte Sensor 1', html)
+        self.assertIn('Bodenfeuchte Sensor 1', html)
         self.assertNotIn('soil-sensor-1', html)
         self.assertNotIn('/sensors/{}'.format(self.sensor_id), html)
         self.assertNotIn('class=\"soil-moisture-sensor-marker\"', html)

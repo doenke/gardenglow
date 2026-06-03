@@ -18,7 +18,7 @@ from .models import db, utc_now, User, Location, Plant, PlantPhoto, PlantNote, G
 from .map_data import MapPointValidationError, parse_stored_points, validate_calibration_points, validate_polygon_points
 from .services.timeline_service import save_uploaded_attachment, set_single_title_entry, delete_timeline_entry, build_unique_upload_name
 from .services import influx_service
-from .services.influx_service import FluxInfluxQueryAdapter, InfluxIntegrationConfig as InfluxServiceConfig, get_sensor_time_series_adapter, latest_sensor_value
+from .services.influx_service import FluxInfluxQueryAdapter, InfluxIntegrationConfig as InfluxServiceConfig, latest_sensor_value
 from .auth import get_or_create_default_user, oidc_enabled
 from .taxonomy import service as taxonomy_service
 from .taxonomy.catalogs import get_database_catalog_by_key, get_database_catalogs
@@ -1226,9 +1226,13 @@ def _location_soil_moisture_sensors(location_id):
     )
 
 
+def _empty_soil_moisture_series(sensors):
+    return [{'sensor_id': sensor.id, 'name': sensor.name, 'points': []} for sensor in sensors]
+
+
 def _load_location_soil_moisture_series(location_id, lookback):
     sensors = _location_soil_moisture_sensors(location_id)
-    series = [{'sensor_id': sensor.id, 'name': sensor.name, 'points': []} for sensor in sensors]
+    series = _empty_soil_moisture_series(sensors)
     hints = []
 
     if not sensors:
@@ -1286,6 +1290,23 @@ def _format_soil_moisture_percent(value):
     return f'{formatted.replace(".", ",")} %'
 
 
+def _serialize_soil_moisture_current_value(value, label, sensor_values):
+    return {
+        'value': value,
+        'label': label,
+        'sensor_values': [
+            {
+                'sensor_id': item['sensor'].id,
+                'sensor_name': item['sensor'].name,
+                'value': item['value'],
+                'time': item['time'],
+                'label': item['label'],
+            }
+            for item in sensor_values
+        ],
+    }
+
+
 def _soil_moisture_current_for_location(location):
     sensors = (
         SoilMoistureSensor.query
@@ -1307,7 +1328,7 @@ def _soil_moisture_current_for_location(location):
             for sensor in sensors
         ]
 
-    adapter = get_sensor_time_series_adapter(service_config)
+    adapter = influx_service.get_sensor_time_series_adapter(service_config)
     valid_values = []
     has_query_error = False
     for sensor in sensors:
@@ -1660,13 +1681,9 @@ def location_detail(location_id):
     ]
     garden_map = GardenMap.query.order_by(GardenMap.id.asc()).first()
     other_locations = Location.query.filter(Location.id != loc.id).order_by(*location_sort_criteria()).all()
-    soil_moisture_range_key, soil_moisture_lookback = _selected_soil_moisture_range()
-    soil_moisture_series, soil_moisture_hints, soil_moisture_sensors = _load_location_soil_moisture_series(
-        loc.id,
-        soil_moisture_lookback,
-    )
-    soil_moisture_current, soil_moisture_current_label, soil_moisture_sensor_values = _soil_moisture_current_for_location(loc)
-    soil_moisture_has_series_data = any(sensor_series['points'] for sensor_series in soil_moisture_series)
+    soil_moisture_range_key, _soil_moisture_lookback = _selected_soil_moisture_range()
+    soil_moisture_sensors = _location_soil_moisture_sensors(loc.id)
+    soil_moisture_series = _empty_soil_moisture_series(soil_moisture_sensors)
     return render_template(
         'location.html',
         location=loc,
@@ -1683,14 +1700,13 @@ def location_detail(location_id):
         top_soil_properties=get_top_soil_property_labels(),
         soil_property_suggestions=SoilProperty.query.order_by(SoilProperty.label.asc()).all(),
         soil_moisture_series=soil_moisture_series,
-        soil_moisture_hints=soil_moisture_hints,
+        soil_moisture_hints=['Bodenfeuchte-Daten werden im Hintergrund geladen.'],
         soil_moisture_sensors=soil_moisture_sensors,
         soil_moisture_range_key=soil_moisture_range_key,
         soil_moisture_range_options=SOIL_MOISTURE_RANGE_OPTIONS,
-        soil_moisture_current=soil_moisture_current,
-        soil_moisture_current_label=soil_moisture_current_label,
-        soil_moisture_sensor_values=soil_moisture_sensor_values,
-        soil_moisture_has_series_data=soil_moisture_has_series_data,
+        soil_moisture_current=None,
+        soil_moisture_current_label=None,
+        soil_moisture_sensor_values=[],
         other_location_polygons=[
             {
                 'id': other_loc.id,
@@ -1701,6 +1717,34 @@ def location_detail(location_id):
             for other_loc in other_locations
         ],
     )
+
+
+@main_bp.route('/locations/<int:location_id>/soil-moisture')
+@login_required
+def location_soil_moisture_data(location_id):
+    loc = session_get_or_404(Location, location_id)
+    soil_moisture_range_key, soil_moisture_lookback = _selected_soil_moisture_range()
+    soil_moisture_series, soil_moisture_hints, soil_moisture_sensors = _load_location_soil_moisture_series(
+        loc.id,
+        soil_moisture_lookback,
+    )
+    soil_moisture_current, soil_moisture_current_label, soil_moisture_sensor_values = _soil_moisture_current_for_location(loc)
+
+    return jsonify({
+        'range_key': soil_moisture_range_key,
+        'series': soil_moisture_series,
+        'hints': soil_moisture_hints,
+        'sensors': [
+            {'sensor_id': sensor.id, 'name': sensor.name}
+            for sensor in soil_moisture_sensors
+        ],
+        'has_series_data': any(sensor_series['points'] for sensor_series in soil_moisture_series),
+        'current': _serialize_soil_moisture_current_value(
+            soil_moisture_current,
+            soil_moisture_current_label,
+            soil_moisture_sensor_values,
+        ),
+    })
 
 
 @main_bp.route('/locations/<int:location_id>/timeline/new', methods=['POST'])
