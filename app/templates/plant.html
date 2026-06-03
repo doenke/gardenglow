@@ -248,16 +248,8 @@
         <svg id="plant-map-overlay-markers"></svg>
       </div>
       <form method="post" action="/plants/{{ plant.id }}/position" class="grid mt-75">
-        <div class="field-pair">
-          <div class="field-pair-item">
-            <label for="plant-map-x">Breitengrad</label>
-            <input id="plant-map-x" type="number" step="any" min="-90" max="90" inputmode="decimal" name="map_x" value="{{ plant.map_x if plant.map_x is not none else '' }}" placeholder="z. B. 50.7956">
-          </div>
-          <div class="field-pair-item">
-            <label for="plant-map-y">Längengrad</label>
-            <input id="plant-map-y" type="number" step="any" min="-180" max="180" inputmode="decimal" name="map_y" value="{{ plant.map_y if plant.map_y is not none else '' }}" placeholder="z. B. 6.1269">
-          </div>
-        </div>
+        <input id="plant-map-x" type="hidden" name="map_x" value="{{ plant.map_x if plant.map_x is not none else '' }}">
+        <input id="plant-map-y" type="hidden" name="map_y" value="{{ plant.map_y if plant.map_y is not none else '' }}">
         <div class="actions-inline">
           <button type="submit" id="plant-position-save" class="hidden">Speichern</button>
         </div>
