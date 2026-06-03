@@ -6,7 +6,7 @@ import sqlite3
 import subprocess
 import zipfile
 from io import BytesIO
-from urllib.parse import quote, unquote
+from urllib.parse import quote, unquote, urljoin
 
 import requests
 from functools import wraps
@@ -15,6 +15,7 @@ from flask import Blueprint, abort, current_app, g, render_template, request, re
 from .models import db, utc_now, User, Location, Plant, PlantPhoto, PlantNote, GardenMap, TimelineEntry, LightNeed, SoilProperty, SoilMoistureSensor, PlantDatabaseIdentifier, InfluxIntegrationConfig, plant_soil_property
 from .map_data import MapPointValidationError, parse_stored_points, validate_calibration_points, validate_polygon_points
 from .services.timeline_service import save_uploaded_attachment, set_single_title_entry, delete_timeline_entry, build_unique_upload_name
+from .services.influx_service import FluxInfluxQueryAdapter, InfluxIntegrationConfig as InfluxServiceConfig
 from .auth import get_or_create_default_user, oidc_enabled
 from .taxonomy import service as taxonomy_service
 from .taxonomy.catalogs import get_database_catalog_by_key, get_database_catalogs
@@ -1187,6 +1188,55 @@ def save_influx_config():
     return redirect(url_for('main.config'))
 
 
+@main_bp.route('/config/influx/test', methods=['POST'])
+@login_required
+def test_influx_connection():
+    influx_config = _first_influx_integration_config()
+    if influx_config is None:
+        flash('InfluxDB ist nicht konfiguriert.', 'error')
+        return redirect(url_for('main.config'))
+
+    service_config = InfluxServiceConfig(
+        url=(influx_config.influx_url or '').strip(),
+        token=(influx_config.influx_token or '').strip(),
+        org=(influx_config.influx_org or '').strip(),
+        bucket=(influx_config.influx_bucket or '').strip(),
+        timeout_seconds=influx_config.timeout_seconds,
+        verify_tls=influx_config.verify_tls,
+    )
+    health = FluxInfluxQueryAdapter(service_config).health()
+    flash(health['message'], 'success' if health.get('ok') else 'error')
+    return redirect(url_for('main.config'))
+
+
+@main_bp.route('/config/homeassistant/test', methods=['POST'])
+@login_required
+def test_homeassistant_connection():
+    influx_config = _first_influx_integration_config()
+    if influx_config is None or not (influx_config.homeassistant_url or '').strip():
+        flash('Homeassistant ist nicht konfiguriert.', 'error')
+        return redirect(url_for('main.config'))
+
+    headers = {}
+    homeassistant_token = (influx_config.homeassistant_token or '').strip()
+    if homeassistant_token:
+        headers['Authorization'] = f'Bearer {homeassistant_token}'
+
+    api_url = urljoin(influx_config.homeassistant_url.rstrip('/') + '/', 'api/')
+    try:
+        response = requests.get(
+            api_url,
+            headers=headers,
+            timeout=influx_config.timeout_seconds,
+            verify=influx_config.verify_tls,
+        )
+        response.raise_for_status()
+    except requests.RequestException as error:
+        flash(f'Homeassistant-Verbindung fehlgeschlagen: {error}', 'error')
+    else:
+        flash('Homeassistant ist erreichbar.', 'success')
+    return redirect(url_for('main.config'))
+
 
 @main_bp.route('/admin')
 @login_required
@@ -1531,7 +1581,7 @@ def sensors():
     selected_location_id = request.args.get('location_id', type=int)
     sensors = SoilMoistureSensor.query.order_by(SoilMoistureSensor.name.asc(), SoilMoistureSensor.id.asc()).all()
     locations = Location.query.order_by(*location_sort_criteria()).all()
-    selected_location = Location.query.get(selected_location_id) if selected_location_id else None
+    selected_location = db.session.get(Location, selected_location_id) if selected_location_id else None
     return render_template(
         'sensors.html',
         sensors=sensors,
@@ -1559,7 +1609,7 @@ def new_sensor():
 @main_bp.route('/sensors/<int:sensor_id>')
 @login_required
 def sensor_detail(sensor_id):
-    sensor = SoilMoistureSensor.query.get_or_404(sensor_id)
+    sensor = session_get_or_404(SoilMoistureSensor, sensor_id)
     locations = Location.query.order_by(*location_sort_criteria()).all()
     return render_template(
         'sensor.html',
@@ -1573,7 +1623,7 @@ def sensor_detail(sensor_id):
 @main_bp.route('/sensors/<int:sensor_id>/edit', methods=['POST'])
 @login_required
 def edit_sensor(sensor_id):
-    sensor = SoilMoistureSensor.query.get_or_404(sensor_id)
+    sensor = session_get_or_404(SoilMoistureSensor, sensor_id)
     is_valid, error_message = apply_sensor_form(sensor, request.form)
     if not is_valid:
         flash(error_message, 'warning')
@@ -1586,7 +1636,7 @@ def edit_sensor(sensor_id):
 @main_bp.route('/sensors/<int:sensor_id>/delete', methods=['POST'])
 @login_required
 def delete_sensor(sensor_id):
-    sensor = SoilMoistureSensor.query.get_or_404(sensor_id)
+    sensor = session_get_or_404(SoilMoistureSensor, sensor_id)
     db.session.delete(sensor)
     db.session.commit()
     flash('Sensor wurde gelöscht.', 'success')

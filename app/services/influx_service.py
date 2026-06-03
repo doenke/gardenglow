@@ -28,6 +28,7 @@ class InfluxIntegrationConfig:
     org: str = ''
     bucket: str = ''
     timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS
+    verify_tls: bool = True
 
     @property
     def enabled(self) -> bool:
@@ -45,6 +46,7 @@ class InfluxIntegrationConfig:
                 config.get('INFLUX_TIMEOUT_SECONDS'),
                 DEFAULT_TIMEOUT_SECONDS,
             ),
+            verify_tls=_config_bool(config.get('INFLUX_VERIFY_TLS'), True),
         )
 
     @classmethod
@@ -88,6 +90,7 @@ class FluxInfluxQueryAdapter:
                 token=self.config.token,
                 org=self.config.org,
                 timeout=int(self.config.timeout_seconds * 1000),
+                verify_ssl=self.config.verify_tls,
             )
         return self._client
 
@@ -227,6 +230,17 @@ def _flux_time(value: datetime | str) -> str:
 
 def _flux_string(value: Any) -> str:
     return json.dumps(str(value))
+
+
+def _config_bool(value: Any, default: bool = False) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    normalized = str(value).strip().lower()
+    if not normalized:
+        return default
+    return normalized in {'1', 'true', 'yes', 'on', 'y'}
 
 
 def _positive_float(value: Any, default: float) -> float:

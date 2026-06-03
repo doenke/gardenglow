@@ -1,6 +1,7 @@
 import os
 import tempfile
 import unittest
+from unittest.mock import Mock, patch
 
 os.environ.setdefault('SECRET_KEY', 'x' * 40)
 
@@ -103,6 +104,70 @@ class InfluxConfigViewTest(unittest.TestCase):
             self.assertEqual(config.homeassistant_token, 'old-ha-token')
             self.assertFalse(config.verify_tls)
             self.assertEqual(config.timeout_seconds, 15)
+
+    def test_config_form_shows_connection_test_buttons(self):
+        response = self.client.get('/config')
+
+        self.assertEqual(response.status_code, 200)
+        html = response.get_data(as_text=True)
+        self.assertIn('action="/config/influx/test"', html)
+        self.assertIn('InfluxDB-Verbindung testen', html)
+        self.assertIn('action="/config/homeassistant/test"', html)
+        self.assertIn('Homeassistant-Verbindung testen', html)
+
+    def test_influx_connection_test_uses_saved_config(self):
+        with self.app.app_context():
+            db.session.add(InfluxIntegrationConfig(
+                influx_url='https://influx.local:8086',
+                influx_org='Garten',
+                influx_bucket='soil',
+                influx_token='secret-influx-token',
+                verify_tls=False,
+                timeout_seconds=7,
+            ))
+            db.session.commit()
+
+        with patch('app.views.FluxInfluxQueryAdapter') as adapter_class:
+            adapter_class.return_value.health.return_value = {
+                'ok': True,
+                'message': 'InfluxDB ist erreichbar.',
+            }
+
+            response = self.client.post('/config/influx/test')
+
+        self.assertEqual(response.status_code, 302)
+        service_config = adapter_class.call_args.args[0]
+        self.assertEqual(service_config.url, 'https://influx.local:8086')
+        self.assertEqual(service_config.token, 'secret-influx-token')
+        self.assertEqual(service_config.org, 'Garten')
+        self.assertEqual(service_config.bucket, 'soil')
+        self.assertEqual(service_config.timeout_seconds, 7)
+        self.assertFalse(service_config.verify_tls)
+        adapter_class.return_value.health.assert_called_once_with()
+
+    def test_homeassistant_connection_test_calls_api_endpoint(self):
+        with self.app.app_context():
+            db.session.add(InfluxIntegrationConfig(
+                homeassistant_url='https://ha.local:8123',
+                homeassistant_token='secret-ha-token',
+                verify_tls=False,
+                timeout_seconds=9,
+            ))
+            db.session.commit()
+
+        response_mock = Mock()
+        response_mock.raise_for_status.return_value = None
+        with patch('app.views.requests.get', return_value=response_mock) as requests_get:
+            response = self.client.post('/config/homeassistant/test')
+
+        self.assertEqual(response.status_code, 302)
+        requests_get.assert_called_once_with(
+            'https://ha.local:8123/api/',
+            headers={'Authorization': 'Bearer secret-ha-token'},
+            timeout=9,
+            verify=False,
+        )
+        response_mock.raise_for_status.assert_called_once_with()
 
 
 if __name__ == '__main__':
