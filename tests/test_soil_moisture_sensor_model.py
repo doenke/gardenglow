@@ -1,11 +1,12 @@
 import os
 import tempfile
 import unittest
+from unittest.mock import patch
 
 os.environ.setdefault('SECRET_KEY', 'x' * 40)
 
 from app import create_app
-from app.models import Location, Plant, SoilMoistureSensor, User, db, soil_moisture_sensor_location
+from app.models import InfluxIntegrationConfig, Location, Plant, SoilMoistureSensor, User, db, soil_moisture_sensor_location
 
 
 class SoilMoistureSensorModelTest(unittest.TestCase):
@@ -139,14 +140,65 @@ class SoilMoistureSensorModelTest(unittest.TestCase):
         self.assertEqual(location_response.status_code, 200)
         self.assertIn('/sensors?location_id={}'.format(self.location_id), location_response.get_data(as_text=True))
         self.assertIn('Sensor verknüpfen', location_response.get_data(as_text=True))
+        self.assertIn('Bodenfeuchte-Verlauf', location_response.get_data(as_text=True))
+        self.assertIn('InfluxDB ist nicht vollständig konfiguriert', location_response.get_data(as_text=True))
 
-    def test_location_markers_do_not_include_soil_moisture_sensors(self):
+    def test_location_detail_renders_soil_moisture_series_for_linked_sensors(self):
+        class FakeAdapter:
+            def query_sensor(self, sensor, start, stop):
+                return [{'time': '2026-06-01T12:00:00+00:00', 'value': 35.2}]
+
+        with self.app.app_context():
+            db.session.add(InfluxIntegrationConfig(
+                influx_url='https://influx.local',
+                influx_org='Garten',
+                influx_bucket='soil',
+                influx_token='token',
+            ))
+            db.session.commit()
+
+        with patch('app.views.influx_service.get_sensor_time_series_adapter', return_value=FakeAdapter()) as adapter_factory:
+            response = self.client.get(f'/locations/{self.location_id}?moisture_range=24h')
+
+        self.assertEqual(response.status_code, 200)
+        adapter_factory.assert_called_once()
+        html = response.get_data(as_text=True)
+        self.assertIn('Bodenfeuchte-Verlauf', html)
+        self.assertIn('24 Stunden', html)
+        self.assertIn('Bodenfeuchte Sensor 1', html)
+        self.assertIn(f'\"sensor_id\": {self.sensor_id}', html)
+        self.assertIn('\"value\": 35.2', html)
+        self.assertNotIn('Für den gewählten Zeitraum wurden keine Bodenfeuchte-Daten gefunden.', html)
+
+    def test_location_detail_shows_influx_errors_as_hints(self):
+        class FailingAdapter:
+            def query_sensor(self, sensor, start, stop):
+                raise RuntimeError('Influx nicht erreichbar')
+
+        with self.app.app_context():
+            db.session.add(InfluxIntegrationConfig(
+                influx_url='https://influx.local',
+                influx_org='Garten',
+                influx_bucket='soil',
+                influx_token='token',
+            ))
+            db.session.commit()
+
+        with patch('app.views.influx_service.get_sensor_time_series_adapter', return_value=FailingAdapter()):
+            response = self.client.get(f'/locations/{self.location_id}')
+
+        self.assertEqual(response.status_code, 200)
+        html = response.get_data(as_text=True)
+        self.assertIn('InfluxDB-Fehler beim Laden einzelner Sensoren', html)
+        self.assertIn('Influx nicht erreichbar', html)
+
+    def test_location_markers_do_not_include_soil_moisture_sensor_keys(self):
         response = self.client.get(f'/locations/{self.location_id}')
 
         self.assertEqual(response.status_code, 200)
         html = response.get_data(as_text=True)
         self.assertIn('Minze', html)
-        self.assertNotIn('Bodenfeuchte Sensor 1', html)
+        self.assertIn('Bodenfeuchte Sensor 1', html)
         self.assertNotIn('soil-sensor-1', html)
 
 
