@@ -11,7 +11,7 @@ import requests
 from functools import wraps
 from datetime import datetime, timezone
 from flask import Blueprint, abort, current_app, g, render_template, request, redirect, url_for, session, jsonify, send_from_directory, flash, send_file
-from .models import db, utc_now, User, Location, Plant, PlantPhoto, PlantNote, GardenMap, TimelineEntry, LightNeed, SoilProperty, PlantDatabaseIdentifier, plant_soil_property
+from .models import db, utc_now, User, Location, Plant, PlantPhoto, PlantNote, GardenMap, TimelineEntry, LightNeed, SoilProperty, SoilMoistureSensor, PlantDatabaseIdentifier, plant_soil_property
 from .map_data import MapPointValidationError, parse_stored_points, validate_calibration_points, validate_polygon_points
 from .services.timeline_service import save_uploaded_attachment, set_single_title_entry, delete_timeline_entry, build_unique_upload_name
 from .auth import get_or_create_default_user, oidc_enabled
@@ -516,6 +516,79 @@ def build_duplicate_plant_name(original_name):
     while f"{copy_name} {counter}" in existing_names:
         counter += 1
     return f"{copy_name} {counter}"
+
+
+def slugify_sensor_key(value):
+    base = re.sub(r'[^a-z0-9]+', '-', (value or '').strip().lower()).strip('-')
+    return base[:96] or 'sensor'
+
+
+def build_unique_sensor_key(sensor, preferred_value):
+    base = slugify_sensor_key(preferred_value)
+    candidate = base
+    counter = 2
+    query = SoilMoistureSensor.query
+    if sensor and sensor.id:
+        query = query.filter(SoilMoistureSensor.id != sensor.id)
+    existing_keys = {key for (key,) in query.with_entities(SoilMoistureSensor.key).all()}
+    while candidate in existing_keys:
+        suffix = f'-{counter}'
+        candidate = f'{base[:128 - len(suffix)]}{suffix}'
+        counter += 1
+    return candidate
+
+
+def parse_sensor_map_coordinate(field_name):
+    raw_value = (request.form.get(field_name) or '').strip()
+    if not raw_value:
+        return None, True
+    try:
+        return float(raw_value), True
+    except ValueError:
+        return None, False
+
+
+def get_selected_sensor_locations(form):
+    selected_ids = []
+    for raw_value in form.getlist('location_ids'):
+        try:
+            selected_ids.append(int(raw_value))
+        except (TypeError, ValueError):
+            continue
+    if not selected_ids:
+        single_id = form.get('location_id', type=int)
+        if single_id:
+            selected_ids.append(single_id)
+    if not selected_ids:
+        return []
+    return Location.query.filter(Location.id.in_(selected_ids)).order_by(*location_sort_criteria()).all()
+
+
+def apply_sensor_form(sensor, form):
+    name = (form.get('name') or '').strip()
+    if not name:
+        return False, 'Bitte einen Sensornamen angeben.'
+
+    map_x, map_x_valid = parse_sensor_map_coordinate('map_x')
+    map_y, map_y_valid = parse_sensor_map_coordinate('map_y')
+    if not map_x_valid or not map_y_valid:
+        return False, 'Bitte gültige Koordinaten für map_x und map_y angeben.'
+
+    locations = get_selected_sensor_locations(form)
+    if not locations:
+        return False, 'Bitte mindestens ein Beet auswählen.'
+
+    entity_id = (form.get('homeassistant_entity_id') or '').strip() or None
+    sensor.name = name
+    sensor.homeassistant_entity_id = entity_id
+    sensor.influx_measurement = (form.get('influx_measurement') or '').strip() or None
+    sensor.influx_field = (form.get('influx_field') or '').strip() or None
+    sensor.influx_tags = (form.get('influx_tags') or '').strip() or None
+    sensor.map_x = map_x
+    sensor.map_y = map_y
+    sensor.key = build_unique_sensor_key(sensor, entity_id or name)
+    sensor.locations = locations
+    return True, None
 
 
 def duplicate_plant_record(plant, creator_id):
@@ -1327,6 +1400,75 @@ def delete_location(location_id):
         db.session.delete(location)
     db.session.commit()
     return redirect(url_for('main.index'))
+
+
+@main_bp.route('/sensors')
+@login_required
+def sensors():
+    selected_location_id = request.args.get('location_id', type=int)
+    sensors = SoilMoistureSensor.query.order_by(SoilMoistureSensor.name.asc(), SoilMoistureSensor.id.asc()).all()
+    locations = Location.query.order_by(*location_sort_criteria()).all()
+    selected_location = Location.query.get(selected_location_id) if selected_location_id else None
+    return render_template(
+        'sensors.html',
+        sensors=sensors,
+        locations=locations,
+        selected_location=selected_location,
+        selected_location_id=selected_location.id if selected_location else selected_location_id,
+        user=current_user(),
+    )
+
+
+@main_bp.route('/sensors/new', methods=['POST'])
+@login_required
+def new_sensor():
+    sensor = SoilMoistureSensor(creator_id=current_user().id, key='pending')
+    is_valid, error_message = apply_sensor_form(sensor, request.form)
+    if not is_valid:
+        flash(error_message, 'warning')
+        return redirect(request.referrer or url_for('main.sensors'))
+    db.session.add(sensor)
+    db.session.commit()
+    flash(f'Sensor „{sensor.name}“ wurde angelegt.', 'success')
+    return redirect(url_for('main.sensor_detail', sensor_id=sensor.id))
+
+
+@main_bp.route('/sensors/<int:sensor_id>')
+@login_required
+def sensor_detail(sensor_id):
+    sensor = SoilMoistureSensor.query.get_or_404(sensor_id)
+    locations = Location.query.order_by(*location_sort_criteria()).all()
+    return render_template(
+        'sensor.html',
+        sensor=sensor,
+        locations=locations,
+        selected_location_ids={location.id for location in sensor.locations},
+        user=current_user(),
+    )
+
+
+@main_bp.route('/sensors/<int:sensor_id>/edit', methods=['POST'])
+@login_required
+def edit_sensor(sensor_id):
+    sensor = SoilMoistureSensor.query.get_or_404(sensor_id)
+    is_valid, error_message = apply_sensor_form(sensor, request.form)
+    if not is_valid:
+        flash(error_message, 'warning')
+        return redirect(url_for('main.sensor_detail', sensor_id=sensor.id))
+    db.session.commit()
+    flash(f'Sensor „{sensor.name}“ wurde gespeichert.', 'success')
+    return redirect(url_for('main.sensor_detail', sensor_id=sensor.id))
+
+
+@main_bp.route('/sensors/<int:sensor_id>/delete', methods=['POST'])
+@login_required
+def delete_sensor(sensor_id):
+    sensor = SoilMoistureSensor.query.get_or_404(sensor_id)
+    db.session.delete(sensor)
+    db.session.commit()
+    flash('Sensor wurde gelöscht.', 'success')
+    return redirect(url_for('main.sensors'))
+
 
 @main_bp.route('/plants/<int:plant_id>')
 @login_required

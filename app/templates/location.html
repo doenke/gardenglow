@@ -75,7 +75,11 @@
   </tbody>
 </table>
 
-<button type="button" id="open-plant-create-dialog" class="mb-1">Pflanze anlegen</button>
+<div class="actions-inline mb-1">
+  <button type="button" id="open-plant-create-dialog">Pflanze anlegen</button>
+  <a class="btn secondary" href="/sensors?location_id={{ location.id }}">Bodenfeuchte-Sensor anlegen</a>
+  <a class="btn secondary" href="/sensors?location_id={{ location.id }}">Sensor verknüpfen</a>
+</div>
 
 <dialog id="plant-create-dialog" class="plant-create-dialog" aria-labelledby="plant-create-dialog-title">
   <form method="post" action="/locations/{{ location.id }}/plants/new" id="plant-create-form" class="grid">
