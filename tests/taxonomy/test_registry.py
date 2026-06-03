@@ -271,7 +271,7 @@ class TaxonomyResolverConfigTest(unittest.TestCase):
     def test_wikipedia_resolver_external_call_uses_api_with_search_query(self):
         catalog = DatabaseCatalogConfig(
             key='wikipedia_de',
-            label='Deutsche Wikipedia',
+            label='Wikipedia',
             enabled=True,
             record_url_template='https://de.wikipedia.org/wiki/{id}',
             search_url_template='https://de.wikipedia.org/w/index.php?search={q}',
