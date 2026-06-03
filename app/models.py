@@ -17,6 +17,12 @@ plant_soil_property = db.Table(
     db.Column('soil_property_id', db.Integer, db.ForeignKey('soil_property.id'), primary_key=True),
 )
 
+soil_moisture_sensor_location = db.Table(
+    'soil_moisture_sensor_location',
+    db.Column('sensor_id', db.Integer, db.ForeignKey('soil_moisture_sensor.id'), primary_key=True),
+    db.Column('location_id', db.Integer, db.ForeignKey('location.id'), primary_key=True),
+)
+
 class LightNeed(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     key = db.Column(db.String(32), unique=True, nullable=False)
@@ -48,6 +54,31 @@ class Location(db.Model):
     polygon_points = db.Column(db.Text)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     creator_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+
+
+class SoilMoistureSensor(db.Model):
+    __table_args__ = (
+        db.Index('ix_soil_moisture_sensor_key', 'key'),
+        db.Index('ix_soil_moisture_sensor_is_active', 'is_active'),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(255), nullable=False)
+    key = db.Column(db.String(128), unique=True, nullable=False)
+    homeassistant_entity_id = db.Column(db.String(255))
+    influx_measurement = db.Column(db.String(255))
+    influx_field = db.Column(db.String(255))
+    influx_tags = db.Column(db.Text)
+    map_x = db.Column(db.Float)
+    map_y = db.Column(db.Float)
+    creator_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    is_active = db.Column(db.Boolean, nullable=False, default=True)
+    locations = db.relationship(
+        'Location',
+        secondary=soil_moisture_sensor_location,
+        lazy='select',
+        order_by='Location.name',
+    )
 
 
 class Plant(db.Model):
