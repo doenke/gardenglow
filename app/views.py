@@ -411,6 +411,17 @@ def get_top_soil_property_labels(excluded_soil_property_ids=None, limit=5):
     return [item[0] for item in top_soil_properties]
 
 
+def timeline_entry_has_content(title=None, description=None, attachment_filename=None):
+    return bool((title or '').strip() or (description or '').strip() or attachment_filename)
+
+
+def attachment_kind_for_filename(filename):
+    if not filename:
+        return None
+    ext = filename.rsplit('.', 1)[1].lower()
+    return 'image' if ext in IMAGE_TYPES else 'pdf'
+
+
 def create_timeline_entry(*, scope_type, scope_id, creator_id, created_at=None, event_at=None, event_type=None, title=None, description=None, attachment_filename=None, attachment_kind=None):
     entry = TimelineEntry(
         scope_type=scope_type,
@@ -1099,12 +1110,9 @@ def new_location_timeline_entry(location_id):
     if upload_error == 'extension_not_allowed':
         flash('Dateiendung nicht erlaubt. Bitte Bild oder PDF hochladen.', 'error')
         return redirect(url_for('main.location_detail', location_id=location.id))
-    attachment_kind = None
-    if unique:
-        ext = unique.rsplit('.', 1)[1].lower()
-        attachment_kind = 'image' if ext in IMAGE_TYPES else 'pdf'
+    attachment_kind = attachment_kind_for_filename(unique)
 
-    if not title and not description and not unique:
+    if not timeline_entry_has_content(title, description, unique):
         flash('Bitte Titel, Beschreibung oder Datei angeben.', 'warning')
         return redirect(url_for('main.location_detail', location_id=location.id))
 
@@ -1650,16 +1658,24 @@ def add_event(plant_id):
     if upload_error == 'extension_not_allowed':
         flash('Dateiendung nicht erlaubt. Bitte Bild oder PDF hochladen.', 'error')
         return redirect(url_for('main.plant_detail', plant_id=plant_id))
-    attachment_kind = None
-    if attachment_filename:
-        ext = attachment_filename.rsplit('.', 1)[1].lower()
-        attachment_kind = 'image' if ext in IMAGE_TYPES else 'pdf'
+    attachment_kind = attachment_kind_for_filename(attachment_filename)
 
-    if title or description or attachment_filename:
-        create_timeline_entry(scope_type='plant', scope_id=plant_id, event_type=event_type, event_at=event_at, title=title, description=description or None, attachment_filename=attachment_filename, attachment_kind=attachment_kind, creator_id=current_user().id)
-        db.session.commit()
-    else:
+    if not timeline_entry_has_content(title, description, attachment_filename):
         flash('Bitte Titel, Beschreibung oder Datei angeben.', 'warning')
+        return redirect(url_for('main.plant_detail', plant_id=plant_id))
+
+    create_timeline_entry(
+        scope_type='plant',
+        scope_id=plant_id,
+        event_type=event_type,
+        event_at=event_at,
+        title=title or None,
+        description=description or None,
+        attachment_filename=attachment_filename,
+        attachment_kind=attachment_kind,
+        creator_id=current_user().id,
+    )
+    db.session.commit()
     return redirect(url_for('main.plant_detail', plant_id=plant_id))
 
 
