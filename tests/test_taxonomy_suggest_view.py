@@ -25,8 +25,6 @@ class TaxonomySuggestViewTest(unittest.TestCase):
             db.session.flush()
             self.location = Location(
                 name='Beet',
-                user_id=self.user.id,
-                creator_id=self.user.id,
             )
             db.session.add(self.location)
             db.session.flush()

@@ -21,7 +21,7 @@ class LocationTimelineViewTest(unittest.TestCase):
             self.user = User(sub='test-user', name='Test User')
             db.session.add(self.user)
             db.session.flush()
-            self.location = Location(name='Sonnenbeet', user_id=self.user.id, creator_id=self.user.id)
+            self.location = Location(name='Sonnenbeet')
             db.session.add(self.location)
             db.session.flush()
             self.plant = Plant(name='Salbei', location_id=self.location.id, creator_id=self.user.id)

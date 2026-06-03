@@ -1,6 +1,7 @@
 from flask import Flask
 from werkzeug.middleware.proxy_fix import ProxyFix
 from .models import db, LightNeed
+from sqlalchemy import inspect, text
 from .auth import DEFAULT_MAX_AVATAR_SIZE_BYTES, OIDC_ENV_VARS, auth_bp, oauth, oidc_configured_from_env
 from .views import main_bp
 from .map_data import parse_stored_points
@@ -104,6 +105,7 @@ def create_app():
 
     with app.app_context():
         db.create_all()
+        _drop_retired_location_owner_columns()
         _seed_light_needs()
 
         os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
@@ -111,6 +113,58 @@ def create_app():
         os.makedirs(app.config['MAP_FOLDER'], exist_ok=True)
 
     return app
+
+
+def _drop_retired_location_owner_columns():
+    """Remove legacy ownership columns from locations in existing databases."""
+    retired_columns = {'user_id', 'creator_id'}
+    inspector = inspect(db.engine)
+    if 'location' not in inspector.get_table_names():
+        return
+
+    existing_columns = {column['name'] for column in inspector.get_columns('location')}
+    columns_to_drop = retired_columns & existing_columns
+    if not columns_to_drop:
+        return
+
+    if db.engine.dialect.name == 'sqlite':
+        _rebuild_sqlite_location_table_without_owner_columns()
+        return
+
+    drop_clauses = ', '.join(f'DROP COLUMN {column_name}' for column_name in sorted(columns_to_drop))
+    with db.engine.begin() as connection:
+        connection.execute(text(f'ALTER TABLE location {drop_clauses}'))
+
+
+def _rebuild_sqlite_location_table_without_owner_columns():
+    connection = db.engine.raw_connection()
+    try:
+        cursor = connection.cursor()
+        cursor.execute('PRAGMA foreign_keys=OFF')
+        cursor.execute('DROP TABLE IF EXISTS location_without_owner_columns')
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS location_without_owner_columns (
+                id INTEGER NOT NULL PRIMARY KEY,
+                name VARCHAR(255) NOT NULL,
+                description TEXT,
+                color VARCHAR(7),
+                polygon_points TEXT
+            )
+        ''')
+        cursor.execute('''
+            INSERT INTO location_without_owner_columns (id, name, description, color, polygon_points)
+            SELECT id, name, description, color, polygon_points FROM location
+        ''')
+        cursor.execute('DROP TABLE location')
+        cursor.execute('ALTER TABLE location_without_owner_columns RENAME TO location')
+        cursor.execute('CREATE INDEX IF NOT EXISTS ix_location_name ON location (name)')
+        connection.commit()
+        cursor.execute('PRAGMA foreign_keys=ON')
+    except Exception:
+        connection.rollback()
+        raise
+    finally:
+        connection.close()
 
 
 def _seed_light_needs():
