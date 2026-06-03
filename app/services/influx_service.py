@@ -16,6 +16,8 @@ from flask import current_app
 
 DEFAULT_TIMEOUT_SECONDS = 5
 DEFAULT_INFLUX_FIELD = 'value'
+DEFAULT_HOMEASSISTANT_DOMAIN = 'sensor'
+DEFAULT_HOMEASSISTANT_INFLUX_MEASUREMENT = ''
 DEFAULT_LOOKBACK = timedelta(days=7)
 
 
@@ -129,8 +131,11 @@ class FluxInfluxQueryAdapter:
     ) -> str:
         """Build a Flux query for one sensor in a bounded time range."""
         measurement = (
-            getattr(sensor, 'influx_measurement', None) or getattr(sensor, 'key', '') or ''
-        ).strip()
+            getattr(sensor, 'influx_measurement')
+            if hasattr(sensor, 'influx_measurement')
+            else getattr(sensor, 'key', '')
+        )
+        measurement = (measurement or '').strip()
         field = (getattr(sensor, 'influx_field', None) or DEFAULT_INFLUX_FIELD).strip()
         tags = parse_influx_tags(getattr(sensor, 'influx_tags', None))
 
@@ -189,6 +194,32 @@ class FluxInfluxQueryAdapter:
         flux = self.build_latest_sensor_value_query(sensor, start, stop)
         datapoints = normalize_flux_result(self.connect().query_api().query(query=flux, org=self.config.org))
         return datapoints[-1] if datapoints else None
+
+
+def homeassistant_entity_influx_defaults(entity_id: str | None) -> dict[str, str]:
+    """Return Influx field defaults for a Home Assistant entity id.
+
+    Home Assistant's InfluxDB integration stores the HA domain as a tag named
+    ``domain`` and the entity object id (without ``sensor.``) as ``entity_id``.
+    Values are stored in the Flux field ``value``.
+    """
+    domain, object_id = split_homeassistant_entity_id(entity_id)
+    return {
+        'measurement': DEFAULT_HOMEASSISTANT_INFLUX_MEASUREMENT,
+        'field': DEFAULT_INFLUX_FIELD,
+        'tags': json.dumps({'entity_id': object_id, 'domain': domain}, ensure_ascii=False, separators=(',', ':')) if object_id else '',
+    }
+
+
+def split_homeassistant_entity_id(entity_id: str | None) -> tuple[str, str]:
+    normalized = (entity_id or '').strip()
+    if not normalized:
+        return DEFAULT_HOMEASSISTANT_DOMAIN, ''
+    if '.' not in normalized:
+        return DEFAULT_HOMEASSISTANT_DOMAIN, normalized
+    domain, object_id = normalized.split('.', 1)
+    domain = domain.strip() or DEFAULT_HOMEASSISTANT_DOMAIN
+    return domain, object_id.strip()
 
 
 def get_sensor_time_series_adapter(config: InfluxIntegrationConfig | None = None) -> SensorTimeSeriesAdapter:

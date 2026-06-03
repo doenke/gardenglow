@@ -596,11 +596,18 @@ def apply_sensor_form(sensor, form):
         return False, 'Bitte mindestens ein Beet auswählen.'
 
     entity_id = (form.get('homeassistant_entity_id') or '').strip() or None
+    ha_influx_defaults = influx_service.homeassistant_entity_influx_defaults(entity_id) if entity_id else {}
     sensor.name = name
     sensor.homeassistant_entity_id = entity_id
-    sensor.influx_measurement = (form.get('influx_measurement') or '').strip() or None
-    sensor.influx_field = (form.get('influx_field') or '').strip() or None
-    sensor.influx_tags = (form.get('influx_tags') or '').strip() or None
+    sensor.influx_measurement = (form.get('influx_measurement') or '').strip() or (
+        ha_influx_defaults.get('measurement') if ha_influx_defaults else None
+    ) or None
+    sensor.influx_field = (form.get('influx_field') or '').strip() or (
+        ha_influx_defaults.get('field') if ha_influx_defaults else None
+    ) or None
+    sensor.influx_tags = (form.get('influx_tags') or '').strip() or (
+        ha_influx_defaults.get('tags') if ha_influx_defaults else None
+    ) or None
     sensor.map_x = map_x
     sensor.map_y = map_y
     sensor.key = build_unique_sensor_key(sensor, entity_id or name)
@@ -1889,6 +1896,32 @@ def edit_sensor(sensor_id):
         return redirect(url_for('main.sensor_detail', sensor_id=sensor.id))
     db.session.commit()
     flash(f'Sensor „{sensor.name}“ wurde gespeichert.', 'success')
+    return redirect(url_for('main.sensor_detail', sensor_id=sensor.id))
+
+
+@main_bp.route('/sensors/<int:sensor_id>/influx/test', methods=['POST'])
+@login_required
+def test_sensor_influx_value(sensor_id):
+    sensor = session_get_or_404(SoilMoistureSensor, sensor_id)
+    config = _sensor_influx_config()
+    if not config.enabled:
+        flash('InfluxDB ist nicht vollständig konfiguriert; der letzte Sensorwert kann nicht abgerufen werden.', 'warning')
+        return redirect(url_for('main.sensor_detail', sensor_id=sensor.id))
+
+    try:
+        adapter = influx_service.get_sensor_time_series_adapter(config)
+        datapoint = latest_sensor_value(sensor, adapter=adapter)
+    except Exception as exc:  # pragma: no cover - concrete InfluxDB failures are integration-specific
+        flash(f'InfluxDB-Test fehlgeschlagen: {exc}', 'error')
+        return redirect(url_for('main.sensor_detail', sensor_id=sensor.id))
+
+    if not datapoint:
+        flash('InfluxDB-Test erfolgreich, aber im Suchzeitraum wurde kein Wert gefunden.', 'warning')
+        return redirect(url_for('main.sensor_detail', sensor_id=sensor.id))
+
+    value = datapoint.get('value')
+    timestamp = datapoint.get('time') or 'Zeitpunkt unbekannt'
+    flash(f'Letzter Influx-Wert: {value} ({timestamp})', 'success')
     return redirect(url_for('main.sensor_detail', sensor_id=sensor.id))
 
 

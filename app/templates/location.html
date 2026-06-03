@@ -88,8 +88,6 @@
 
 <div class="actions-inline mb-1">
   <button type="button" id="open-plant-create-dialog">Pflanze anlegen</button>
-  <a class="btn secondary" href="/sensors?location_id={{ location.id }}">Bodenfeuchte-Sensor anlegen</a>
-  <a class="btn secondary" href="/sensors?location_id={{ location.id }}">Sensor verknüpfen</a>
 </div>
 
 {% if soil_moisture_has_series_data %}
@@ -97,7 +95,7 @@
   <div class="soil-moisture-history-head">
     <div>
       <h3 id="soil-moisture-history-title" class="m-0">Bodenfeuchte-Verlauf</h3>
-      <p class="text-muted m-0">Alle aktiven Sensoren dieses Beets in einem Diagramm.</p>
+      <p class="text-muted m-0"><a href="/sensors?location_id={{ location.id }}">Zur Sensorseite dieses Beets</a></p>
     </div>
     <form method="get" class="soil-moisture-range-form">
       <label for="soil-moisture-range">Zeitraum</label>
