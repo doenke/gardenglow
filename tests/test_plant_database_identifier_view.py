@@ -53,7 +53,7 @@ class PlantDatabaseIdentifierViewTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         html = response.get_data(as_text=True)
         self.assertIn('value="Großblättriges_Kaukasusvergissmeinnicht"', html)
-        self.assertIn('title="Deutsche Wikipedia (Großblättriges_Kaukasusvergissmeinnicht)"', html)
+        self.assertIn('title="Wikipedia (Großblättriges_Kaukasusvergissmeinnicht)"', html)
         self.assertNotIn('Gro%C3%9Fbl%C3%A4ttriges_Kaukasusvergissmeinnicht)', html)
 
     def test_wikipedia_identifier_is_saved_as_readable_slug(self):
@@ -111,7 +111,7 @@ class PlantDatabaseIdentifierViewTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         html = response.get_data(as_text=True)
-        wikipedia_index = html.index('title="Deutsche Wikipedia (Brunnera_macrophylla)"')
+        wikipedia_index = html.index('title="Wikipedia (Brunnera_macrophylla)"')
         mein_schoener_garten_index = html.index('title="Mein schöner Garten (kaukasusvergissmeinnicht)"')
         naturadb_index = html.index('title="NaturaDB (brunnera-macrophylla)"')
         floraweb_index = html.index('title="FloraWeb (6666)"')
