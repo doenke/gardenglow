@@ -66,6 +66,14 @@ class SensorTimeSeriesAdapter(Protocol):
     ) -> list[dict[str, Any]]:
         """Return normalized datapoints for a sensor and time range."""
 
+    def query_latest_sensor_value(
+        self,
+        sensor: Any,
+        start: datetime | str,
+        stop: datetime | str | None = None,
+    ) -> dict[str, Any] | None:
+        """Return the latest normalized datapoint for a sensor and time range."""
+
 
 class FluxInfluxQueryAdapter:
     """InfluxDB 2.7.11 adapter using Flux queries."""
@@ -139,6 +147,20 @@ class FluxInfluxQueryAdapter:
         ])
         return '\n'.join(lines)
 
+    def build_latest_sensor_value_query(
+        self,
+        sensor: Any,
+        start: datetime | str,
+        stop: datetime | str | None = None,
+    ) -> str:
+        """Build a Flux query that returns only the newest value for one sensor."""
+        return '\n'.join([
+            self.build_sensor_query(sensor, start, stop),
+            '  |> group()',
+            '  |> sort(columns: ["_time"])',
+            '  |> last()',
+        ])
+
     def query_sensor(
         self,
         sensor: Any,
@@ -152,6 +174,19 @@ class FluxInfluxQueryAdapter:
         tables = self.connect().query_api().query(query=flux, org=self.config.org)
         return normalize_flux_result(tables)
 
+    def query_latest_sensor_value(
+        self,
+        sensor: Any,
+        start: datetime | str,
+        stop: datetime | str | None = None,
+    ) -> dict[str, Any] | None:
+        if not self.config.enabled:
+            return None
+
+        flux = self.build_latest_sensor_value_query(sensor, start, stop)
+        datapoints = normalize_flux_result(self.connect().query_api().query(query=flux, org=self.config.org))
+        return datapoints[-1] if datapoints else None
+
 
 def get_sensor_time_series_adapter(config: InfluxIntegrationConfig | None = None) -> SensorTimeSeriesAdapter:
     """Factory for the currently supported sensor time-series adapter."""
@@ -163,6 +198,17 @@ def recent_sensor_values(sensor: Any, lookback: timedelta = DEFAULT_LOOKBACK) ->
     stop = datetime.now(timezone.utc)
     start = stop - lookback
     return get_sensor_time_series_adapter().query_sensor(sensor, start, stop)
+
+
+def latest_sensor_value(
+    sensor: Any,
+    lookback: timedelta = DEFAULT_LOOKBACK,
+    adapter: SensorTimeSeriesAdapter | None = None,
+) -> dict[str, Any] | None:
+    """Return the newest datapoint for one sensor within the lookback window."""
+    stop = datetime.now(timezone.utc)
+    start = stop - lookback
+    return (adapter or get_sensor_time_series_adapter()).query_latest_sensor_value(sensor, start, stop)
 
 
 def parse_influx_tags(raw_tags: str | Mapping[str, Any] | None) -> dict[str, str]:

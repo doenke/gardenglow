@@ -3,11 +3,12 @@ import os
 import re
 import tempfile
 import unittest
+from unittest.mock import patch
 
 os.environ.setdefault('SECRET_KEY', 'x' * 40)
 
 from app import create_app
-from app.models import Location, Plant, SoilMoistureSensor, User, db, soil_moisture_sensor_location
+from app.models import InfluxIntegrationConfig, Location, Plant, SoilMoistureSensor, User, db, soil_moisture_sensor_location
 
 
 class SoilMoistureSensorModelTest(unittest.TestCase):
@@ -142,6 +143,56 @@ class SoilMoistureSensorModelTest(unittest.TestCase):
         self.assertEqual(location_response.status_code, 200)
         self.assertIn('/sensors?location_id={}'.format(self.location_id), location_response.get_data(as_text=True))
         self.assertIn('Sensor verknüpfen', location_response.get_data(as_text=True))
+
+    def test_location_detail_renders_aggregated_current_soil_moisture(self):
+        with self.app.app_context():
+            first_sensor = db.session.get(SoilMoistureSensor, self.sensor_id)
+            second_sensor = SoilMoistureSensor(
+                name='Bodenfeuchte Sensor 2',
+                key='soil-sensor-2',
+                influx_measurement='soil_moisture',
+                influx_field='value',
+                creator_id=self.user_id,
+            )
+            second_sensor.locations.append(db.session.get(Location, self.location_id))
+            inactive_sensor = SoilMoistureSensor(
+                name='Inaktiver Bodenfeuchte Sensor',
+                key='soil-sensor-inactive',
+                influx_measurement='soil_moisture',
+                creator_id=self.user_id,
+                is_active=False,
+            )
+            inactive_sensor.locations.append(db.session.get(Location, self.location_id))
+            db.session.add_all([
+                second_sensor,
+                inactive_sensor,
+                InfluxIntegrationConfig(
+                    influx_url='http://influxdb:8086',
+                    influx_org='garden',
+                    influx_bucket='soil',
+                    influx_token='token',
+                ),
+            ])
+            db.session.commit()
+            first_sensor_key = first_sensor.key
+            second_sensor_key = second_sensor.key
+
+        def fake_latest_sensor_value(sensor, adapter=None):
+            if sensor.key == first_sensor_key:
+                return {'time': '2026-06-03T08:00:00Z', 'value': 30}
+            if sensor.key == second_sensor_key:
+                return {'time': '2026-06-03T08:05:00Z', 'value': '45'}
+            return {'time': '2026-06-03T08:10:00Z', 'value': 90}
+
+        with patch('app.views.latest_sensor_value', side_effect=fake_latest_sensor_value):
+            response = self.client.get(f'/locations/{self.location_id}')
+
+        self.assertEqual(response.status_code, 200)
+        html = response.get_data(as_text=True)
+        self.assertIn('Bodenfeuchte', html)
+        self.assertIn('37,5 %', html)
+        self.assertIn('2 Sensoren · Durchschnitt', html)
+        self.assertNotIn('Inaktiver Bodenfeuchte Sensor', html)
 
     def test_location_markers_do_not_include_soil_moisture_sensors(self):
         response = self.client.get(f'/locations/{self.location_id}')
