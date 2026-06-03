@@ -186,7 +186,7 @@ class SoilMoistureSensorModelTest(unittest.TestCase):
         self.assertIn('Letzten Influx-Wert testen', sensor_response.get_data(as_text=True))
         self.assertEqual(location_response.status_code, 200)
         self.assertIn('/sensors?location_id={}'.format(self.location_id), location_response.get_data(as_text=True))
-        self.assertIn('Zur Sensorseite dieses Beets', location_response.get_data(as_text=True))
+        self.assertIn('Zur Sensorübersicht dieses Beets', location_response.get_data(as_text=True))
         self.assertIn('Bodenfeuchte-Verlauf', location_response.get_data(as_text=True))
         self.assertIn('Bodenfeuchte-Daten werden im Hintergrund geladen.', location_response.get_data(as_text=True))
         self.assertNotIn('InfluxDB ist nicht vollständig konfiguriert', location_response.get_data(as_text=True))
