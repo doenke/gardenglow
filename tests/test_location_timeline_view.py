@@ -5,7 +5,7 @@ import unittest
 os.environ.setdefault('SECRET_KEY', 'x' * 40)
 
 from app import create_app
-from app.models import Location, TimelineEntry, User, db
+from app.models import Location, Plant, TimelineEntry, User, db
 
 
 class LocationTimelineViewTest(unittest.TestCase):
@@ -23,9 +23,13 @@ class LocationTimelineViewTest(unittest.TestCase):
             db.session.flush()
             self.location = Location(name='Sonnenbeet', user_id=self.user.id, creator_id=self.user.id)
             db.session.add(self.location)
+            db.session.flush()
+            self.plant = Plant(name='Salbei', location_id=self.location.id, creator_id=self.user.id)
+            db.session.add(self.plant)
             db.session.commit()
             self.user_id = self.user.id
             self.location_id = self.location.id
+            self.plant_id = self.plant.id
 
         with self.client.session_transaction() as session:
             session['user_id'] = self.user_id
@@ -61,6 +65,71 @@ class LocationTimelineViewTest(unittest.TestCase):
             entry = TimelineEntry.query.filter_by(scope_type='location', scope_id=self.location_id).one()
             self.assertEqual(entry.title, 'Beet vorbereitet')
             self.assertEqual(entry.description, 'Kompost eingearbeitet')
+
+    def test_location_timeline_allows_text_only_without_file_warning(self):
+        response = self.client.post(
+            f'/locations/{self.location_id}/timeline/new',
+            data={'description': 'Nur Text, keine Datei'},
+            follow_redirects=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        html = response.get_data(as_text=True)
+        self.assertIn('Nur Text, keine Datei', html)
+        self.assertNotIn('Bitte Datei auswählen', html)
+        with self.app.app_context():
+            entry = TimelineEntry.query.filter_by(scope_type='location', scope_id=self.location_id).one()
+            self.assertIsNone(entry.title)
+            self.assertEqual(entry.description, 'Nur Text, keine Datei')
+            self.assertIsNone(entry.attachment_filename)
+
+    def test_location_timeline_allows_title_only(self):
+        response = self.client.post(
+            f'/locations/{self.location_id}/timeline/new',
+            data={'title': 'Nur Titel'},
+            follow_redirects=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        html = response.get_data(as_text=True)
+        self.assertIn('<strong>Nur Titel</strong>', html)
+        self.assertNotIn('Bitte Datei auswählen', html)
+        with self.app.app_context():
+            entry = TimelineEntry.query.filter_by(scope_type='location', scope_id=self.location_id).one()
+            self.assertEqual(entry.title, 'Nur Titel')
+            self.assertIsNone(entry.description)
+            self.assertIsNone(entry.attachment_filename)
+
+    def test_location_timeline_rejects_empty_entries_once(self):
+        response = self.client.post(
+            f'/locations/{self.location_id}/timeline/new',
+            data={'title': '   ', 'description': '   '},
+            follow_redirects=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        html = response.get_data(as_text=True)
+        self.assertIn('Bitte Titel, Beschreibung oder Datei angeben.', html)
+        self.assertNotIn('Bitte Datei auswählen', html)
+        with self.app.app_context():
+            self.assertEqual(TimelineEntry.query.filter_by(scope_type='location', scope_id=self.location_id).count(), 0)
+
+    def test_plant_timeline_allows_title_only_and_normalizes_missing_description(self):
+        response = self.client.post(
+            f'/plants/{self.plant_id}/events',
+            data={'title': 'Nur Pflanzentitel'},
+            follow_redirects=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        html = response.get_data(as_text=True)
+        self.assertIn('<strong>Nur Pflanzentitel</strong>', html)
+        self.assertNotIn('Bitte Datei auswählen', html)
+        with self.app.app_context():
+            entry = TimelineEntry.query.filter_by(scope_type='plant', scope_id=self.plant_id).one()
+            self.assertEqual(entry.title, 'Nur Pflanzentitel')
+            self.assertIsNone(entry.description)
+            self.assertIsNone(entry.attachment_filename)
 
 
 if __name__ == '__main__':
