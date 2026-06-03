@@ -26,6 +26,7 @@ class AdminViewTest(unittest.TestCase):
         os.environ['BACKUP_FOLDER'] = self.backup_folder
         os.environ['APP_VERSION'] = 'test-version'
         os.environ['GIT_COMMIT'] = 'test-commit'
+        os.environ['COMMON_NAME_LOOKUP_LANG'] = 'fr'
         self.app = create_app()
         self.app.config.update(TESTING=True)
         self.client = self.app.test_client()
@@ -58,7 +59,7 @@ class AdminViewTest(unittest.TestCase):
         with self.app.app_context():
             db.session.remove()
             db.drop_all()
-        for key in ('DATABASE_URL', 'UPLOAD_FOLDER', 'AVATAR_FOLDER', 'MAP_FOLDER', 'BACKUP_FOLDER', 'APP_VERSION', 'GIT_COMMIT'):
+        for key in ('DATABASE_URL', 'UPLOAD_FOLDER', 'AVATAR_FOLDER', 'MAP_FOLDER', 'BACKUP_FOLDER', 'APP_VERSION', 'GIT_COMMIT', 'COMMON_NAME_LOOKUP_LANG'):
             os.environ.pop(key, None)
         shutil.rmtree(self.temp_dir)
 
@@ -73,6 +74,13 @@ class AdminViewTest(unittest.TestCase):
         self.assertIn('backup.sqlite', html)
         self.assertIn('test-version', html)
         self.assertIn('test-commit', html)
+        self.assertIn('Umgebungsvariablen', html)
+        self.assertIn('COMMON_NAME_LOOKUP_LANG', html)
+        self.assertIn('fr', html)
+        self.assertIn('MAX_ATTACHMENT_SIZE_BYTES', html)
+        self.assertIn('Default', html)
+        self.assertIn('Alle verwaisten Uploads löschen', html)
+        self.assertIn('admin-breakable admin-filename-cell', html)
 
     def test_orphan_file_can_be_deleted(self):
         response = self.client.post(
@@ -85,6 +93,23 @@ class AdminViewTest(unittest.TestCase):
         self.assertFalse(os.path.exists(os.path.join(self.upload_folder, 'orphan.jpg')))
         self.assertTrue(os.path.exists(os.path.join(self.upload_folder, 'referenced.jpg')))
         self.assertIn('wurde gelöscht', response.get_data(as_text=True))
+
+    def test_all_orphan_files_in_folder_can_be_deleted(self):
+        another_orphan = os.path.join(self.upload_folder, 'another-orphan.jpg')
+        with open(another_orphan, 'wb') as f:
+            f.write(b'another orphan')
+
+        response = self.client.post(
+            '/admin/orphan-uploads/delete-all',
+            data={'folder_key': 'uploads'},
+            follow_redirects=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(os.path.exists(os.path.join(self.upload_folder, 'orphan.jpg')))
+        self.assertFalse(os.path.exists(another_orphan))
+        self.assertTrue(os.path.exists(os.path.join(self.upload_folder, 'referenced.jpg')))
+        self.assertIn('verwaiste Upload-Dateien', response.get_data(as_text=True))
 
     def test_referenced_file_is_not_deleted_as_orphan(self):
         response = self.client.post(

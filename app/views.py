@@ -74,6 +74,28 @@ LIGHT_NEED_OPTIONS = [
 LIGHT_NEED_KEY_TO_LABEL = {item['key']: item['label'] for item in LIGHT_NEED_OPTIONS}
 LIGHT_NEED_ICON_BY_KEY = {item['key']: item['icon'] for item in LIGHT_NEED_OPTIONS}
 
+ENVIRONMENT_VARIABLES = [
+    {'name': 'SECRET_KEY', 'config_key': 'SECRET_KEY', 'default': None, 'sensitive': True},
+    {'name': 'DATABASE_URL', 'config_key': 'SQLALCHEMY_DATABASE_URI', 'default': 'sqlite:///garden.db'},
+    {'name': 'UPLOAD_FOLDER', 'config_key': 'UPLOAD_FOLDER', 'default': '/data/uploads'},
+    {'name': 'MAX_ATTACHMENT_SIZE_BYTES', 'config_key': 'MAX_ATTACHMENT_SIZE_BYTES', 'default': str(15 * 1024 * 1024)},
+    {'name': 'AVATAR_FOLDER', 'config_key': 'AVATAR_FOLDER', 'default': '/data/avatars'},
+    {'name': 'MAX_AVATAR_SIZE_BYTES', 'config_key': 'MAX_AVATAR_SIZE_BYTES', 'default': str(5 * 1024 * 1024)},
+    {'name': 'MAP_FOLDER', 'config_key': 'MAP_FOLDER', 'default': '/data/maps'},
+    {'name': 'BACKUP_FOLDER', 'config_key': 'BACKUP_FOLDER', 'default': '/data/backups'},
+    {'name': 'APP_VERSION', 'config_key': 'APP_VERSION', 'default': ''},
+    {'name': 'GIT_COMMIT', 'config_key': 'GIT_COMMIT', 'default': ''},
+    {'name': 'WIDGET_API_KEY', 'config_key': 'WIDGET_API_KEY', 'default': '', 'sensitive': True},
+    {'name': 'STATS_UPLOAD_CACHE_TTL_SECONDS', 'config_key': 'STATS_UPLOAD_CACHE_TTL_SECONDS', 'default': '60'},
+    {'name': 'HEADER_LOGO_URL', 'config_key': 'HEADER_LOGO_URL', 'default': ''},
+    {'name': 'COMMON_NAME_LOOKUP_LANG', 'config_key': 'COMMON_NAME_LOOKUP_LANG', 'default': 'de'},
+    {'name': 'DEBUG_MODE', 'config_key': 'DEBUG_MODE', 'default': 'false'},
+    {'name': 'OIDC_SERVER_METADATA_URL', 'config_key': None, 'default': ''},
+    {'name': 'OIDC_CLIENT_ID', 'config_key': None, 'default': ''},
+    {'name': 'OIDC_CLIENT_SECRET', 'config_key': None, 'default': '', 'sensitive': True},
+    {'name': 'OIDC_LOGOUT_URL', 'config_key': None, 'default': ''},
+]
+
 
 def _debuggable_external_get(catalog, url, params=None, timeout=6):
     return execute_external_call(
@@ -808,6 +830,36 @@ def _app_version_info():
     }
 
 
+def _display_environment_value(definition, value):
+    if definition.get('sensitive') and value:
+        return '••••••••'
+    if value is None:
+        return ''
+    return str(value)
+
+
+def _environment_variable_report():
+    variables = []
+    for definition in ENVIRONMENT_VARIABLES:
+        name = definition['name']
+        raw_value = os.environ.get(name)
+        is_set = raw_value is not None and raw_value != ''
+        config_key = definition.get('config_key')
+        if config_key:
+            effective_value = current_app.config.get(config_key)
+        else:
+            effective_value = raw_value if raw_value is not None else definition.get('default')
+
+        variables.append({
+            'name': name,
+            'value': _display_environment_value(definition, effective_value),
+            'source': 'Gesetzt' if is_set else 'Default',
+            'is_set': is_set,
+            'sensitive': bool(definition.get('sensitive')),
+        })
+    return variables
+
+
 def _serialize_export_value(value):
     if hasattr(value, 'isoformat'):
         return value.isoformat()
@@ -958,7 +1010,18 @@ def admin():
         database=_database_size_info(),
         backups=_backup_report(),
         version_info=_app_version_info(),
+        environment_variables=_environment_variable_report(),
     )
+
+
+def _safe_orphan_target(folder_path, filename):
+    if not folder_path:
+        return None
+    folder_abs = os.path.abspath(folder_path)
+    target = os.path.abspath(os.path.join(folder_abs, filename))
+    if os.path.commonpath([folder_abs, target]) != folder_abs:
+        return None
+    return target
 
 
 @main_bp.route('/admin/orphan-upload/delete', methods=['POST'])
@@ -975,9 +1038,8 @@ def delete_orphan_upload():
         flash('Datei wurde nicht gelöscht, weil sie nicht als verwaist erkannt wurde.', 'warning')
         return redirect(url_for('main.admin'))
 
-    folder_abs = os.path.abspath(folder['path'])
-    target = os.path.abspath(os.path.join(folder_abs, filename))
-    if os.path.commonpath([folder_abs, target]) != folder_abs:
+    target = _safe_orphan_target(folder['path'], filename)
+    if not target:
         flash('Datei konnte nicht gelöscht werden: ungültiger Pfad.', 'error')
         return redirect(url_for('main.admin'))
 
@@ -989,6 +1051,45 @@ def delete_orphan_upload():
             flash('Datei existiert nicht mehr.', 'warning')
     except OSError:
         flash('Datei konnte nicht gelöscht werden.', 'error')
+    return redirect(url_for('main.admin'))
+
+
+@main_bp.route('/admin/orphan-uploads/delete-all', methods=['POST'])
+@login_required
+def delete_all_orphan_uploads():
+    folder_key = (request.form.get('folder_key') or '').strip()
+    folder = _resolve_folder_by_key(folder_key)
+    if not folder:
+        flash('Verwaiste Dateien konnten nicht gelöscht werden: ungültige Anfrage.', 'error')
+        return redirect(url_for('main.admin'))
+
+    report = _build_upload_folder_report()
+    folder_report = next((item for item in report if item['key'] == folder_key), None)
+    orphan_files = folder_report['orphan_files'] if folder_report else []
+    deleted_count = 0
+    failed_count = 0
+
+    for orphan_file in orphan_files:
+        filename = orphan_file['filename']
+        target = _safe_orphan_target(folder['path'], filename)
+        if not target:
+            failed_count += 1
+            continue
+        try:
+            if os.path.isfile(target):
+                os.remove(target)
+                deleted_count += 1
+        except OSError:
+            failed_count += 1
+
+    if deleted_count and not failed_count:
+        flash(f'{deleted_count} verwaiste Upload-Dateien in „{folder["label"]}“ wurden gelöscht.', 'success')
+    elif deleted_count:
+        flash(f'{deleted_count} verwaiste Upload-Dateien wurden gelöscht, {failed_count} konnten nicht gelöscht werden.', 'warning')
+    elif failed_count:
+        flash('Verwaiste Upload-Dateien konnten nicht gelöscht werden.', 'error')
+    else:
+        flash(f'Keine verwaisten Upload-Dateien in „{folder["label"]}“ gefunden.', 'info')
     return redirect(url_for('main.admin'))
 
 
