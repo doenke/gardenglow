@@ -1666,6 +1666,7 @@ def location_detail(location_id):
         soil_moisture_lookback,
     )
     soil_moisture_current, soil_moisture_current_label, soil_moisture_sensor_values = _soil_moisture_current_for_location(loc)
+    soil_moisture_has_series_data = any(sensor_series['points'] for sensor_series in soil_moisture_series)
     return render_template(
         'location.html',
         location=loc,
@@ -1689,6 +1690,7 @@ def location_detail(location_id):
         soil_moisture_current=soil_moisture_current,
         soil_moisture_current_label=soil_moisture_current_label,
         soil_moisture_sensor_values=soil_moisture_sensor_values,
+        soil_moisture_has_series_data=soil_moisture_has_series_data,
         other_location_polygons=[
             {
                 'id': other_loc.id,

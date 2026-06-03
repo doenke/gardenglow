@@ -185,6 +185,23 @@ class SoilMoistureSensorModelTest(unittest.TestCase):
         self.assertIn('soil_moisture', sensor_response.get_data(as_text=True))
         self.assertIn('Letzten Influx-Wert testen', sensor_response.get_data(as_text=True))
         self.assertEqual(location_response.status_code, 200)
+        self.assertIn('/sensors?location_id={}'.format(self.location_id), location_response.get_data(as_text=True))
+        self.assertIn('Sensor verknüpfen', location_response.get_data(as_text=True))
+        self.assertNotIn('Bodenfeuchte-Verlauf', location_response.get_data(as_text=True))
+        self.assertNotIn('InfluxDB ist nicht vollständig konfiguriert', location_response.get_data(as_text=True))
+
+    def test_location_detail_hides_soil_moisture_without_linked_sensor(self):
+        with self.app.app_context():
+            sensor = db.session.get(SoilMoistureSensor, self.sensor_id)
+            sensor.locations.clear()
+            db.session.commit()
+
+        response = self.client.get(f'/locations/{self.location_id}')
+
+        self.assertEqual(response.status_code, 200)
+        html = response.get_data(as_text=True)
+        self.assertNotIn('aria-label="Aktuelle Bodenfeuchte"', html)
+        self.assertNotIn('Bodenfeuchte-Verlauf', html)
         location_html = location_response.get_data(as_text=True)
         self.assertIn('/sensors?location_id={}'.format(self.location_id), location_html)
         self.assertIn('Zur Sensorseite dieses Beets', location_html)
@@ -220,7 +237,7 @@ class SoilMoistureSensorModelTest(unittest.TestCase):
         self.assertIn('\"value\": 35.2', html)
         self.assertNotIn('Für den gewählten Zeitraum wurden keine Bodenfeuchte-Daten gefunden.', html)
 
-    def test_location_detail_shows_influx_errors_as_hints(self):
+    def test_location_detail_hides_soil_moisture_when_influx_fails(self):
         class FailingAdapter:
             def query_sensor(self, sensor, start, stop):
                 raise RuntimeError('Influx nicht erreichbar')
@@ -239,8 +256,9 @@ class SoilMoistureSensorModelTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         html = response.get_data(as_text=True)
-        self.assertIn('InfluxDB-Fehler beim Laden einzelner Sensoren', html)
-        self.assertIn('Influx nicht erreichbar', html)
+        self.assertNotIn('Bodenfeuchte-Verlauf', html)
+        self.assertNotIn('InfluxDB-Fehler beim Laden einzelner Sensoren', html)
+        self.assertNotIn('Influx nicht erreichbar', html)
 
     def test_location_detail_renders_aggregated_current_soil_moisture(self):
         with self.app.app_context():
@@ -311,7 +329,7 @@ class SoilMoistureSensorModelTest(unittest.TestCase):
             'map_y': 40,
         }, location_plant_markers)
         self.assertIn('Minze', html)
-        self.assertIn('Bodenfeuchte Sensor 1', html)
+        self.assertNotIn('Bodenfeuchte Sensor 1', html)
         self.assertNotIn('soil-sensor-1', html)
         self.assertNotIn('/sensors/{}'.format(self.sensor_id), html)
         self.assertNotIn('class=\"soil-moisture-sensor-marker\"', html)
