@@ -1,11 +1,14 @@
+import json
 import os
+import re
 import tempfile
 import unittest
+from unittest.mock import patch
 
 os.environ.setdefault('SECRET_KEY', 'x' * 40)
 
 from app import create_app
-from app.models import Location, Plant, SoilMoistureSensor, User, db, soil_moisture_sensor_location
+from app.models import InfluxIntegrationConfig, Location, Plant, SoilMoistureSensor, User, db, soil_moisture_sensor_location
 
 
 class SoilMoistureSensorModelTest(unittest.TestCase):
@@ -41,6 +44,7 @@ class SoilMoistureSensorModelTest(unittest.TestCase):
             db.session.commit()
             self.user_id = self.user.id
             self.location_id = self.location.id
+            self.plant_id = self.plant.id
             self.sensor_id = self.sensor.id
 
         with self.client.session_transaction() as session:
@@ -139,15 +143,128 @@ class SoilMoistureSensorModelTest(unittest.TestCase):
         self.assertEqual(location_response.status_code, 200)
         self.assertIn('/sensors?location_id={}'.format(self.location_id), location_response.get_data(as_text=True))
         self.assertIn('Sensor verknüpfen', location_response.get_data(as_text=True))
+        self.assertIn('Bodenfeuchte-Verlauf', location_response.get_data(as_text=True))
+        self.assertIn('InfluxDB ist nicht vollständig konfiguriert', location_response.get_data(as_text=True))
+
+    def test_location_detail_renders_soil_moisture_series_for_linked_sensors(self):
+        class FakeAdapter:
+            def query_sensor(self, sensor, start, stop):
+                return [{'time': '2026-06-01T12:00:00+00:00', 'value': 35.2}]
+
+        with self.app.app_context():
+            db.session.add(InfluxIntegrationConfig(
+                influx_url='https://influx.local',
+                influx_org='Garten',
+                influx_bucket='soil',
+                influx_token='token',
+            ))
+            db.session.commit()
+
+        with patch('app.views.influx_service.get_sensor_time_series_adapter', return_value=FakeAdapter()) as adapter_factory:
+            response = self.client.get(f'/locations/{self.location_id}?moisture_range=24h')
+
+        self.assertEqual(response.status_code, 200)
+        adapter_factory.assert_called_once()
+        html = response.get_data(as_text=True)
+        self.assertIn('Bodenfeuchte-Verlauf', html)
+        self.assertIn('24 Stunden', html)
+        self.assertIn('Bodenfeuchte Sensor 1', html)
+        self.assertIn(f'\"sensor_id\": {self.sensor_id}', html)
+        self.assertIn('\"value\": 35.2', html)
+        self.assertNotIn('Für den gewählten Zeitraum wurden keine Bodenfeuchte-Daten gefunden.', html)
+
+    def test_location_detail_shows_influx_errors_as_hints(self):
+        class FailingAdapter:
+            def query_sensor(self, sensor, start, stop):
+                raise RuntimeError('Influx nicht erreichbar')
+
+        with self.app.app_context():
+            db.session.add(InfluxIntegrationConfig(
+                influx_url='https://influx.local',
+                influx_org='Garten',
+                influx_bucket='soil',
+                influx_token='token',
+            ))
+            db.session.commit()
+
+        with patch('app.views.influx_service.get_sensor_time_series_adapter', return_value=FailingAdapter()):
+    def test_location_detail_renders_aggregated_current_soil_moisture(self):
+        with self.app.app_context():
+            first_sensor = db.session.get(SoilMoistureSensor, self.sensor_id)
+            second_sensor = SoilMoistureSensor(
+                name='Bodenfeuchte Sensor 2',
+                key='soil-sensor-2',
+                influx_measurement='soil_moisture',
+                influx_field='value',
+                creator_id=self.user_id,
+            )
+            second_sensor.locations.append(db.session.get(Location, self.location_id))
+            inactive_sensor = SoilMoistureSensor(
+                name='Inaktiver Bodenfeuchte Sensor',
+                key='soil-sensor-inactive',
+                influx_measurement='soil_moisture',
+                creator_id=self.user_id,
+                is_active=False,
+            )
+            inactive_sensor.locations.append(db.session.get(Location, self.location_id))
+            db.session.add_all([
+                second_sensor,
+                inactive_sensor,
+                InfluxIntegrationConfig(
+                    influx_url='http://influxdb:8086',
+                    influx_org='garden',
+                    influx_bucket='soil',
+                    influx_token='token',
+                ),
+            ])
+            db.session.commit()
+            first_sensor_key = first_sensor.key
+            second_sensor_key = second_sensor.key
+
+        def fake_latest_sensor_value(sensor, adapter=None):
+            if sensor.key == first_sensor_key:
+                return {'time': '2026-06-03T08:00:00Z', 'value': 30}
+            if sensor.key == second_sensor_key:
+                return {'time': '2026-06-03T08:05:00Z', 'value': '45'}
+            return {'time': '2026-06-03T08:10:00Z', 'value': 90}
+
+        with patch('app.views.latest_sensor_value', side_effect=fake_latest_sensor_value):
+            response = self.client.get(f'/locations/{self.location_id}')
+
+        self.assertEqual(response.status_code, 200)
+        html = response.get_data(as_text=True)
+        self.assertIn('InfluxDB-Fehler beim Laden einzelner Sensoren', html)
+        self.assertIn('Influx nicht erreichbar', html)
+
+    def test_location_markers_do_not_include_soil_moisture_sensor_keys(self):
+        self.assertIn('Bodenfeuchte', html)
+        self.assertIn('37,5 %', html)
+        self.assertIn('2 Sensoren · Durchschnitt', html)
+        self.assertNotIn('Inaktiver Bodenfeuchte Sensor', html)
 
     def test_location_markers_do_not_include_soil_moisture_sensors(self):
         response = self.client.get(f'/locations/{self.location_id}')
 
         self.assertEqual(response.status_code, 200)
         html = response.get_data(as_text=True)
+        marker_match = re.search(r'const plantsById = (.*?);', html)
+        self.assertIsNotNone(marker_match)
+        location_plant_markers = json.loads(marker_match.group(1))
+
+        self.assertEqual(location_plant_markers, [
+            {'id': self.plant_id, 'name': 'Minze', 'map_x': 10, 'map_y': 20},
+        ])
+        self.assertNotIn({
+            'id': self.sensor_id,
+            'name': 'Bodenfeuchte Sensor 1',
+            'map_x': 30,
+            'map_y': 40,
+        }, location_plant_markers)
         self.assertIn('Minze', html)
-        self.assertNotIn('Bodenfeuchte Sensor 1', html)
+        self.assertIn('Bodenfeuchte Sensor 1', html)
         self.assertNotIn('soil-sensor-1', html)
+        self.assertNotIn('/sensors/{}'.format(self.sensor_id), html)
+        self.assertNotIn('class=\"soil-moisture-sensor-marker\"', html)
 
 
 if __name__ == '__main__':
