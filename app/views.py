@@ -1165,6 +1165,7 @@ def index():
     user = current_user()
     locations = Location.query.order_by(*location_sort_criteria()).all()
     garden_map = GardenMap.query.order_by(GardenMap.id.asc()).first()
+    sensor_current_extremes = _load_sensor_current_extremes()
     location_plant_counts = {
         location_id: count
         for location_id, count in db.session.query(Plant.location_id, db.func.count(Plant.id)).group_by(Plant.location_id).all()
@@ -1183,6 +1184,7 @@ def index():
         location_plant_counts=location_plant_counts,
         garden_map=garden_map,
         plants=plants,
+        sensor_current_extremes=sensor_current_extremes,
     )
 
 
@@ -1313,6 +1315,82 @@ def _serialize_soil_moisture_current_value(value, label, sensor_values):
             for item in sensor_values
         ],
     }
+
+
+def _empty_sensor_current_value(label='Kein aktueller Messwert'):
+    return {
+        'value': None,
+        'time': None,
+        'label': label,
+        'has_value': False,
+    }
+
+
+def _load_sensor_current_values(sensors):
+    sensor_current_values = {
+        sensor.id: _empty_sensor_current_value('Inaktiv' if not sensor.is_active else 'Kein aktueller Messwert')
+        for sensor in sensors
+    }
+    active_sensors = [sensor for sensor in sensors if sensor.is_active]
+    if not active_sensors:
+        return sensor_current_values
+
+    service_config = _influx_service_config_from_db_or_app()
+    if not service_config.enabled:
+        for sensor in active_sensors:
+            sensor_current_values[sensor.id] = _empty_sensor_current_value('Keine InfluxDB-Konfiguration')
+        return sensor_current_values
+
+    adapter = influx_service.get_sensor_time_series_adapter(service_config)
+    for sensor in active_sensors:
+        datapoint = None
+        value = None
+        try:
+            datapoint = latest_sensor_value(sensor, adapter=adapter)
+            value = _numeric_sensor_value((datapoint or {}).get('value'))
+        except Exception as exc:  # pragma: no cover - depends on external InfluxDB availability
+            current_app.logger.info(
+                'Aktueller Bodenfeuchtewert für Sensor %s konnte nicht geladen werden: %s',
+                sensor.id,
+                exc,
+            )
+
+        if value is not None:
+            sensor_current_values[sensor.id] = {
+                'value': value,
+                'time': (datapoint or {}).get('time'),
+                'label': _format_soil_moisture_percent(value),
+                'has_value': True,
+            }
+        else:
+            sensor_current_values[sensor.id] = _empty_sensor_current_value()
+    return sensor_current_values
+
+
+def _load_sensor_current_extremes():
+    sensors = (
+        SoilMoistureSensor.query
+        .filter(SoilMoistureSensor.is_active.is_(True))
+        .order_by(SoilMoistureSensor.name.asc(), SoilMoistureSensor.id.asc())
+        .all()
+    )
+    sensor_current_values = _load_sensor_current_values(sensors)
+    valid_values = [
+        {
+            'sensor': sensor,
+            **sensor_current_values[sensor.id],
+        }
+        for sensor in sensors
+        if sensor_current_values[sensor.id]['has_value']
+    ]
+    if not valid_values:
+        return []
+    if len(valid_values) == 1:
+        return [{'kind': 'Aktuell', **valid_values[0]}]
+    return [
+        {'kind': 'Maximum', **max(valid_values, key=lambda item: (item['value'], item['sensor'].name, item['sensor'].id))},
+        {'kind': 'Minimum', **min(valid_values, key=lambda item: (item['value'], item['sensor'].name, item['sensor'].id))},
+    ]
 
 
 def _soil_moisture_current_for_location(location):
@@ -1929,11 +2007,13 @@ def delete_location(location_id):
 def sensors():
     selected_location_id = request.args.get('location_id', type=int)
     sensors = SoilMoistureSensor.query.order_by(SoilMoistureSensor.name.asc(), SoilMoistureSensor.id.asc()).all()
+    sensor_current_values = _load_sensor_current_values(sensors)
     locations = Location.query.order_by(*location_sort_criteria()).all()
     selected_location = db.session.get(Location, selected_location_id) if selected_location_id else None
     return render_template(
         'sensors.html',
         sensors=sensors,
+        sensor_current_values=sensor_current_values,
         locations=locations,
         selected_location=selected_location,
         selected_location_id=selected_location.id if selected_location else selected_location_id,

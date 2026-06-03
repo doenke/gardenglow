@@ -1,6 +1,20 @@
 {% extends 'base.html' %}
 {% block content %}
 <section class="card">
+<div class="index-card-head">
+  <div></div>
+  {% if sensor_current_extremes %}
+  <a class="sensor-current-summary" href="/sensors" aria-label="Aktuelle Sensorwerte in der Sensorliste anzeigen">
+    {% for item in sensor_current_extremes %}
+      <span class="sensor-current-summary-item">
+        <span class="sensor-current-summary-kind">{{ item.kind }}</span>
+        <strong>{{ item.label }}</strong>
+        <span class="sensor-current-summary-name">{{ item.sensor.name }}</span>
+      </span>
+    {% endfor %}
+  </a>
+  {% endif %}
+</div>
 {% if garden_map and garden_map.filename %}
 <div class="rel-inline fit-content mb-35" style="margin-left:auto;margin-right:auto;">
   <img id="index-map-image" src="/maps/{{ garden_map.filename }}" alt="Luftbild des Gartens" class="map-image" style="margin:0 auto;">

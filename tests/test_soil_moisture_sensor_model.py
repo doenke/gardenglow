@@ -191,6 +191,27 @@ class SoilMoistureSensorModelTest(unittest.TestCase):
         self.assertIn('Bodenfeuchte-Daten werden im Hintergrund geladen.', location_response.get_data(as_text=True))
         self.assertNotIn('InfluxDB ist nicht vollständig konfiguriert', location_response.get_data(as_text=True))
 
+
+    def test_sensor_list_renders_current_value_instead_of_position(self):
+        with self.app.app_context():
+            db.session.add(InfluxIntegrationConfig(
+                influx_url='https://influx.local',
+                influx_org='Garten',
+                influx_bucket='soil',
+                influx_token='token',
+            ))
+            db.session.commit()
+
+        with patch('app.views.latest_sensor_value', return_value={'time': '2026-06-03T08:00:00Z', 'value': 42.5}):
+            response = self.client.get('/sensors')
+
+        self.assertEqual(response.status_code, 200)
+        html = response.get_data(as_text=True)
+        self.assertIn('<th>Aktueller Wert</th>', html)
+        self.assertIn('data-label="Aktueller Wert">42,5 %</td>', html)
+        self.assertNotIn('<th>Position</th>', html)
+        self.assertNotIn('data-label="Position"', html)
+
     def test_location_detail_hides_soil_moisture_without_linked_sensor(self):
         with self.app.app_context():
             sensor = db.session.get(SoilMoistureSensor, self.sensor_id)

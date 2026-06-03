@@ -25,7 +25,7 @@
         <th>Name</th>
         <th>Homeassistant Entity-ID</th>
         <th>Beete</th>
-        <th>Position</th>
+        <th>Aktueller Wert</th>
       </tr>
     </thead>
     <tbody>
@@ -40,9 +40,8 @@
             –
           {% endfor %}
         </td>
-        <td data-label="Position">
-          {% if sensor.map_x is not none and sensor.map_y is not none %}{{ sensor.map_x }}, {{ sensor.map_y }}{% else %}–{% endif %}
-        </td>
+        {% set current_value = sensor_current_values.get(sensor.id) %}
+        <td data-label="Aktueller Wert">{{ current_value.label if current_value else '–' }}</td>
       </tr>
       {% else %}
       <tr><td colspan="4">Noch keine Bodenfeuchte-Sensoren vorhanden.</td></tr>
