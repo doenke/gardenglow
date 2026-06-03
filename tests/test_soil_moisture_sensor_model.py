@@ -21,7 +21,7 @@ class SoilMoistureSensorModelTest(unittest.TestCase):
             self.user = User(sub='sensor-user', name='Sensor User')
             db.session.add(self.user)
             db.session.flush()
-            self.location = Location(name='Sensorbeet', user_id=self.user.id, creator_id=self.user.id)
+            self.location = Location(name='Sensorbeet')
             db.session.add(self.location)
             db.session.flush()
             self.plant = Plant(name='Minze', location_id=self.location.id, creator_id=self.user.id, map_x=10, map_y=20)
@@ -71,6 +71,74 @@ class SoilMoistureSensorModelTest(unittest.TestCase):
             self.assertEqual(len(association_rows), 1)
             self.assertEqual(association_rows[0].sensor_id, sensor.id)
             self.assertEqual(association_rows[0].location_id, self.location_id)
+
+    def test_sensor_routes_create_and_update_sensor_locations(self):
+        with self.app.app_context():
+            second_location = Location(name='Zweites Beet')
+            db.session.add(second_location)
+            db.session.commit()
+            second_location_id = second_location.id
+
+        response = self.client.post('/sensors/new', data={
+            'name': 'Neuer Bodensensor',
+            'homeassistant_entity_id': 'sensor.neuer_bodensensor',
+            'influx_measurement': 'soil',
+            'influx_field': 'moisture',
+            'influx_tags': 'bed=one',
+            'map_x': '12.5',
+            'map_y': '34.5',
+            'location_ids': [str(self.location_id), str(second_location_id)],
+        }, follow_redirects=False)
+
+        self.assertEqual(response.status_code, 302)
+        with self.app.app_context():
+            sensor = SoilMoistureSensor.query.filter_by(homeassistant_entity_id='sensor.neuer_bodensensor').one()
+            self.assertEqual(sensor.key, 'sensor-neuer-bodensensor')
+            self.assertEqual(sensor.influx_measurement, 'soil')
+            self.assertEqual(sensor.influx_field, 'moisture')
+            self.assertEqual(sensor.influx_tags, 'bed=one')
+            self.assertEqual(sensor.map_x, 12.5)
+            self.assertEqual(sensor.map_y, 34.5)
+            self.assertEqual([location.id for location in sensor.locations], [self.location_id, second_location_id])
+            sensor_id = sensor.id
+
+        response = self.client.post(f'/sensors/{sensor_id}/edit', data={
+            'name': 'Aktualisierter Bodensensor',
+            'homeassistant_entity_id': 'sensor.aktualisierter_bodensensor',
+            'influx_measurement': 'soil',
+            'influx_field': 'value',
+            'influx_tags': 'bed=two',
+            'map_x': '98.1',
+            'map_y': '76.2',
+            'location_ids': [str(second_location_id)],
+        }, follow_redirects=False)
+
+        self.assertEqual(response.status_code, 302)
+        with self.app.app_context():
+            sensor = db.session.get(SoilMoistureSensor, sensor_id)
+            self.assertEqual(sensor.name, 'Aktualisierter Bodensensor')
+            self.assertEqual(sensor.key, 'sensor-aktualisierter-bodensensor')
+            self.assertEqual(sensor.homeassistant_entity_id, 'sensor.aktualisierter_bodensensor')
+            self.assertEqual(sensor.influx_field, 'value')
+            self.assertEqual(sensor.influx_tags, 'bed=two')
+            self.assertEqual(sensor.map_x, 98.1)
+            self.assertEqual(sensor.map_y, 76.2)
+            self.assertEqual([location.id for location in sensor.locations], [second_location_id])
+
+    def test_sensor_pages_render_forms_and_location_action(self):
+        sensors_response = self.client.get('/sensors')
+        sensor_response = self.client.get(f'/sensors/{self.sensor_id}')
+        location_response = self.client.get(f'/locations/{self.location_id}')
+
+        self.assertEqual(sensors_response.status_code, 200)
+        self.assertIn('Bodenfeuchte-Sensor anlegen', sensors_response.get_data(as_text=True))
+        self.assertIn('Homeassistant Entity-ID', sensors_response.get_data(as_text=True))
+        self.assertEqual(sensor_response.status_code, 200)
+        self.assertIn('/sensors/{}/edit'.format(self.sensor_id), sensor_response.get_data(as_text=True))
+        self.assertIn('soil_moisture', sensor_response.get_data(as_text=True))
+        self.assertEqual(location_response.status_code, 200)
+        self.assertIn('/sensors?location_id={}'.format(self.location_id), location_response.get_data(as_text=True))
+        self.assertIn('Sensor verknüpfen', location_response.get_data(as_text=True))
 
     def test_location_markers_do_not_include_soil_moisture_sensors(self):
         response = self.client.get(f'/locations/{self.location_id}')

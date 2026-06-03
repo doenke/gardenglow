@@ -1,0 +1,67 @@
+{% extends 'base.html' %}
+{% block header_breadcrumb %}
+<nav class="page-breadcrumb" aria-label="Breadcrumb">
+  <a href="/">Übersicht</a>
+  <span class="separator" aria-hidden="true">/</span>
+  <a href="/sensors">Bodenfeuchte-Sensoren</a>
+  <span class="separator" aria-hidden="true">/</span>
+  <span aria-current="page">{{ sensor.name }}</span>
+</nav>
+{% endblock %}
+{% block content %}
+<section class="card">
+  <div class="flex items-center gap-5 wrap mb-75">
+    <h2 class="m-0">{{ sensor.name }}</h2>
+    {% if not sensor.is_active %}<span class="chip">inaktiv</span>{% endif %}
+  </div>
+
+  <form method="post" action="/sensors/{{ sensor.id }}/edit" class="grid sensor-form">
+    <label for="sensor-name">Name</label>
+    <input id="sensor-name" name="name" value="{{ sensor.name }}" required>
+
+    <label for="sensor-homeassistant-entity-id">Homeassistant Entity-ID</label>
+    <input id="sensor-homeassistant-entity-id" name="homeassistant_entity_id" value="{{ sensor.homeassistant_entity_id or '' }}" placeholder="z. B. sensor.hochbeet_1_bodenfeuchte">
+
+    <fieldset class="grid sensor-fieldset">
+      <legend>Influx</legend>
+      <label for="sensor-influx-measurement">Measurement</label>
+      <input id="sensor-influx-measurement" name="influx_measurement" value="{{ sensor.influx_measurement or '' }}" placeholder="z. B. soil_moisture">
+      <label for="sensor-influx-field">Field</label>
+      <input id="sensor-influx-field" name="influx_field" value="{{ sensor.influx_field or '' }}" placeholder="z. B. value">
+      <label for="sensor-influx-tags">Tags</label>
+      <textarea id="sensor-influx-tags" name="influx_tags" placeholder='z. B. {"source":"homeassistant"}'>{{ sensor.influx_tags or '' }}</textarea>
+    </fieldset>
+
+    <div class="field-pair">
+      <label for="sensor-map-x">map_x
+        <input id="sensor-map-x" name="map_x" type="number" step="any" inputmode="decimal" value="{{ sensor.map_x if sensor.map_x is not none else '' }}" placeholder="z. B. 52.5200">
+      </label>
+      <label for="sensor-map-y">map_y
+        <input id="sensor-map-y" name="map_y" type="number" step="any" inputmode="decimal" value="{{ sensor.map_y if sensor.map_y is not none else '' }}" placeholder="z. B. 13.4050">
+      </label>
+    </div>
+
+    <label for="sensor-location-ids">Beete</label>
+    <select id="sensor-location-ids" name="location_ids" multiple required size="{{ [locations|length, 6]|min }}">
+      {% for location in locations %}
+      <option value="{{ location.id }}" {% if location.id in selected_location_ids %}selected{% endif %}>{{ location.name }}</option>
+      {% endfor %}
+    </select>
+    <small class="text-muted">Mehrere Beete mit Strg/Cmd oder Shift auswählen.</small>
+
+    <div class="actions-inline">
+      <button type="submit">Speichern</button>
+      <a class="btn secondary" href="/sensors">Zurück zur Sensorliste</a>
+    </div>
+  </form>
+</section>
+
+<form method="post" action="/sensors/{{ sensor.id }}/delete" onsubmit="return confirm('Sensor wirklich löschen?');" class="floating-trash">
+  <button type="submit" aria-label="Sensor löschen" title="Sensor löschen">🗑️</button>
+</form>
+
+<style>
+.sensor-form{max-width:760px}
+.sensor-fieldset{border:1px solid var(--border);border-radius:12px;padding:.8rem}
+</style>
+{% endblock %}

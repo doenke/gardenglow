@@ -1,0 +1,135 @@
+{% extends 'base.html' %}
+{% block header_breadcrumb %}
+<nav class="page-breadcrumb" aria-label="Breadcrumb">
+  <a href="/">Übersicht</a>
+  <span class="separator" aria-hidden="true">/</span>
+  <span aria-current="page">Bodenfeuchte-Sensoren</span>
+</nav>
+{% endblock %}
+{% block content %}
+<section class="card">
+  <div class="flex items-center gap-5 wrap mb-75">
+    <h2 class="m-0">Bodenfeuchte-Sensoren</h2>
+    {% if selected_location %}
+      <span class="chip">für {{ selected_location.name }}</span>
+    {% endif %}
+  </div>
+
+  <div class="actions-inline mb-1">
+    <button type="button" id="open-sensor-create-dialog">Bodenfeuchte-Sensor anlegen</button>
+  </div>
+
+  <table class="sensors-table">
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Homeassistant Entity-ID</th>
+        <th>Beete</th>
+        <th>Position</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for sensor in sensors %}
+      <tr data-row-link="/sensors/{{ sensor.id }}">
+        <td data-label="Name"><a class="table-row-link" href="/sensors/{{ sensor.id }}">{{ sensor.name }}</a></td>
+        <td data-label="Homeassistant Entity-ID">{{ sensor.homeassistant_entity_id or '–' }}</td>
+        <td data-label="Beete">
+          {% for location in sensor.locations %}
+            <a href="/locations/{{ location.id }}">{{ location.name }}</a>{% if not loop.last %}, {% endif %}
+          {% else %}
+            –
+          {% endfor %}
+        </td>
+        <td data-label="Position">
+          {% if sensor.map_x is not none and sensor.map_y is not none %}{{ sensor.map_x }}, {{ sensor.map_y }}{% else %}–{% endif %}
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="4">Noch keine Bodenfeuchte-Sensoren vorhanden.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<dialog id="sensor-create-dialog" class="sensor-dialog" aria-labelledby="sensor-create-dialog-title">
+  <form method="post" action="/sensors/new" class="grid">
+    <div class="dialog-head">
+      <h3 id="sensor-create-dialog-title" class="m-0">Bodenfeuchte-Sensor anlegen</h3>
+      <button type="button" id="close-sensor-create-dialog" class="btn secondary dialog-close" aria-label="Dialog schließen">×</button>
+    </div>
+
+    <label for="sensor-name">Name</label>
+    <input id="sensor-name" name="name" placeholder="z. B. Sensor Hochbeet 1" required autofocus>
+
+    <label for="sensor-homeassistant-entity-id">Homeassistant Entity-ID</label>
+    <input id="sensor-homeassistant-entity-id" name="homeassistant_entity_id" placeholder="z. B. sensor.hochbeet_1_bodenfeuchte">
+
+    <fieldset class="grid sensor-fieldset">
+      <legend>Influx</legend>
+      <label for="sensor-influx-measurement">Measurement</label>
+      <input id="sensor-influx-measurement" name="influx_measurement" placeholder="z. B. soil_moisture">
+      <label for="sensor-influx-field">Field</label>
+      <input id="sensor-influx-field" name="influx_field" placeholder="z. B. value">
+      <label for="sensor-influx-tags">Tags</label>
+      <textarea id="sensor-influx-tags" name="influx_tags" placeholder='z. B. {"source":"homeassistant"}'></textarea>
+    </fieldset>
+
+    <div class="field-pair">
+      <label for="sensor-map-x">map_x
+        <input id="sensor-map-x" name="map_x" type="number" step="any" inputmode="decimal" placeholder="z. B. 52.5200">
+      </label>
+      <label for="sensor-map-y">map_y
+        <input id="sensor-map-y" name="map_y" type="number" step="any" inputmode="decimal" placeholder="z. B. 13.4050">
+      </label>
+    </div>
+
+    <label for="sensor-location-ids">Beete</label>
+    <select id="sensor-location-ids" name="location_ids" multiple required size="{{ [locations|length, 6]|min }}">
+      {% for location in locations %}
+      <option value="{{ location.id }}" {% if selected_location_id == location.id %}selected{% endif %}>{{ location.name }}</option>
+      {% endfor %}
+    </select>
+    <small class="text-muted">Mehrere Beete mit Strg/Cmd oder Shift auswählen.</small>
+
+    <div class="actions-inline">
+      <button type="submit">Anlegen</button>
+      <button type="button" id="cancel-sensor-create-dialog" class="btn secondary">Abbrechen</button>
+    </div>
+  </form>
+</dialog>
+
+<style>
+.sensor-dialog{width:min(92vw,620px);border:1px solid var(--border);border-radius:16px;background:var(--surface);color:var(--text);box-shadow:var(--shadow);padding:1rem}
+.sensor-dialog::backdrop{background:rgba(0,0,0,.45);backdrop-filter:blur(2px)}
+.sensor-fieldset{border:1px solid var(--border);border-radius:12px;padding:.8rem}
+</style>
+<script>
+  const sensorCreateDialog = document.getElementById('sensor-create-dialog');
+  const openSensorCreateDialogButton = document.getElementById('open-sensor-create-dialog');
+  const closeSensorCreateDialogButtons = [
+    document.getElementById('close-sensor-create-dialog'),
+    document.getElementById('cancel-sensor-create-dialog'),
+  ].filter(Boolean);
+  const sensorNameInput = document.getElementById('sensor-name');
+
+  const openSensorCreateDialog = () => {
+    if (!sensorCreateDialog) return;
+    if (typeof sensorCreateDialog.showModal === 'function') sensorCreateDialog.showModal();
+    else sensorCreateDialog.setAttribute('open', '');
+    if (sensorNameInput) sensorNameInput.focus();
+  };
+  const closeSensorCreateDialog = () => {
+    if (!sensorCreateDialog) return;
+    if (typeof sensorCreateDialog.close === 'function') sensorCreateDialog.close();
+    else sensorCreateDialog.removeAttribute('open');
+  };
+  if (openSensorCreateDialogButton && sensorCreateDialog) {
+    openSensorCreateDialogButton.addEventListener('click', openSensorCreateDialog);
+    closeSensorCreateDialogButtons.forEach((button) => button.addEventListener('click', closeSensorCreateDialog));
+    sensorCreateDialog.addEventListener('click', (event) => {
+      if (event.target === sensorCreateDialog) closeSensorCreateDialog();
+    });
+  }
+  {% if selected_location_id %}openSensorCreateDialog();{% endif %}
+</script>
+{% endblock %}
