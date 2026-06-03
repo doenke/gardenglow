@@ -129,6 +129,49 @@ class SoilMoistureSensorModelTest(unittest.TestCase):
             self.assertEqual(sensor.map_y, 76.2)
             self.assertEqual([location.id for location in sensor.locations], [second_location_id])
 
+    def test_sensor_routes_fill_homeassistant_influx_defaults_when_blank(self):
+        response = self.client.post('/sensors/new', data={
+            'name': 'Homeassistant Bodensensor',
+            'homeassistant_entity_id': 'sensor.third_reality_inc_3rsm0347z_bodenfeuchtigkeit',
+            'influx_measurement': '',
+            'influx_field': '',
+            'influx_tags': '',
+            'location_ids': [str(self.location_id)],
+        }, follow_redirects=False)
+
+        self.assertEqual(response.status_code, 302)
+        with self.app.app_context():
+            sensor = SoilMoistureSensor.query.filter_by(name='Homeassistant Bodensensor').one()
+            self.assertIsNone(sensor.influx_measurement)
+            self.assertEqual(sensor.influx_field, 'value')
+            self.assertEqual(
+                json.loads(sensor.influx_tags),
+                {'entity_id': 'third_reality_inc_3rsm0347z_bodenfeuchtigkeit', 'domain': 'sensor'},
+            )
+
+    def test_sensor_detail_can_test_latest_influx_value(self):
+        with self.app.app_context():
+            db.session.add(InfluxIntegrationConfig(
+                influx_url='https://influx.local',
+                influx_org='Garten',
+                influx_bucket='soil',
+                influx_token='token',
+            ))
+            db.session.commit()
+
+        class FakeAdapter:
+            pass
+
+        with patch('app.views.influx_service.get_sensor_time_series_adapter', return_value=FakeAdapter()) as adapter_factory, \
+                patch('app.views.latest_sensor_value', return_value={'time': '2026-06-03T08:00:00Z', 'value': 42.5}) as latest_value:
+            response = self.client.post(f'/sensors/{self.sensor_id}/influx/test', follow_redirects=True)
+
+        self.assertEqual(response.status_code, 200)
+        adapter_factory.assert_called_once()
+        latest_value.assert_called_once()
+        html = response.get_data(as_text=True)
+        self.assertIn('Letzter Influx-Wert: 42.5 (2026-06-03T08:00:00Z)', html)
+
     def test_sensor_pages_render_forms_and_location_action(self):
         sensors_response = self.client.get('/sensors')
         sensor_response = self.client.get(f'/sensors/{self.sensor_id}')
@@ -140,6 +183,7 @@ class SoilMoistureSensorModelTest(unittest.TestCase):
         self.assertEqual(sensor_response.status_code, 200)
         self.assertIn('/sensors/{}/edit'.format(self.sensor_id), sensor_response.get_data(as_text=True))
         self.assertIn('soil_moisture', sensor_response.get_data(as_text=True))
+        self.assertIn('Letzten Influx-Wert testen', sensor_response.get_data(as_text=True))
         self.assertEqual(location_response.status_code, 200)
         self.assertIn('/sensors?location_id={}'.format(self.location_id), location_response.get_data(as_text=True))
         self.assertIn('Sensor verknüpfen', location_response.get_data(as_text=True))

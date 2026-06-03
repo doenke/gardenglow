@@ -66,12 +66,13 @@
 
     <fieldset class="grid sensor-fieldset">
       <legend>Influx</legend>
+      <p class="text-muted m-0">Bei Homeassistant-Entities wird der Standard der HA-InfluxDB-Integration genutzt: <code>_field=value</code>, Tags <code>entity_id</code> ohne Domain und <code>domain</code>.</p>
       <label for="sensor-influx-measurement">Measurement</label>
-      <input id="sensor-influx-measurement" name="influx_measurement" placeholder="z. B. soil_moisture">
+      <input id="sensor-influx-measurement" name="influx_measurement" placeholder="für Homeassistant leer lassen">
       <label for="sensor-influx-field">Field</label>
-      <input id="sensor-influx-field" name="influx_field" placeholder="z. B. value">
+      <input id="sensor-influx-field" name="influx_field" placeholder="value">
       <label for="sensor-influx-tags">Tags</label>
-      <textarea id="sensor-influx-tags" name="influx_tags" placeholder='z. B. {"source":"homeassistant"}'></textarea>
+      <textarea id="sensor-influx-tags" name="influx_tags" placeholder='{"entity_id":"bodenfeuchtigkeit","domain":"sensor"}'></textarea>
     </fieldset>
 
     <div class="field-pair">
@@ -130,6 +131,41 @@
       if (event.target === sensorCreateDialog) closeSensorCreateDialog();
     });
   }
+
+  const entityInput = document.getElementById('sensor-homeassistant-entity-id');
+  const measurementInput = document.getElementById('sensor-influx-measurement');
+  const fieldInput = document.getElementById('sensor-influx-field');
+  const tagsInput = document.getElementById('sensor-influx-tags');
+
+  function defaultsForEntity(rawEntity) {
+    const entity = (rawEntity || '').trim();
+    if (!entity) return null;
+    let domain = 'sensor';
+    let objectId = entity;
+    if (entity.includes('.')) {
+      const parts = entity.split('.');
+      domain = (parts.shift() || 'sensor').trim() || 'sensor';
+      objectId = parts.join('.').trim();
+    }
+    if (!objectId) return null;
+    return {measurement: '', field: 'value', tags: JSON.stringify({entity_id: objectId, domain: domain})};
+  }
+
+  if (entityInput && measurementInput && fieldInput && tagsInput) {
+    let lastGenerated = defaultsForEntity(entityInput.value) || {measurement: '', field: '', tags: ''};
+    const shouldReplace = (input, generatedValue) => input.value.trim() === '' || input.value === generatedValue;
+    const applyHomeassistantDefaults = () => {
+      const defaults = defaultsForEntity(entityInput.value);
+      if (!defaults) return;
+      if (shouldReplace(measurementInput, lastGenerated.measurement)) measurementInput.value = defaults.measurement;
+      if (shouldReplace(fieldInput, lastGenerated.field)) fieldInput.value = defaults.field;
+      if (shouldReplace(tagsInput, lastGenerated.tags)) tagsInput.value = defaults.tags;
+      lastGenerated = defaults;
+    };
+    entityInput.addEventListener('input', applyHomeassistantDefaults);
+    entityInput.addEventListener('change', applyHomeassistantDefaults);
+  }
+
   {% if selected_location_id %}openSensorCreateDialog();{% endif %}
 </script>
 {% endblock %}

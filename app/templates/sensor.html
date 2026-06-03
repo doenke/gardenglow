@@ -24,12 +24,13 @@
 
     <fieldset class="grid sensor-fieldset">
       <legend>Influx</legend>
+      <p class="text-muted m-0">Bei Homeassistant-Entities wird der Standard der HA-InfluxDB-Integration genutzt: <code>_field=value</code>, Tags <code>entity_id</code> ohne Domain und <code>domain</code>.</p>
       <label for="sensor-influx-measurement">Measurement</label>
-      <input id="sensor-influx-measurement" name="influx_measurement" value="{{ sensor.influx_measurement or '' }}" placeholder="z. B. soil_moisture">
+      <input id="sensor-influx-measurement" name="influx_measurement" value="{{ sensor.influx_measurement or '' }}" placeholder="für Homeassistant leer lassen">
       <label for="sensor-influx-field">Field</label>
-      <input id="sensor-influx-field" name="influx_field" value="{{ sensor.influx_field or '' }}" placeholder="z. B. value">
+      <input id="sensor-influx-field" name="influx_field" value="{{ sensor.influx_field or '' }}" placeholder="value">
       <label for="sensor-influx-tags">Tags</label>
-      <textarea id="sensor-influx-tags" name="influx_tags" placeholder='z. B. {"source":"homeassistant"}'>{{ sensor.influx_tags or '' }}</textarea>
+      <textarea id="sensor-influx-tags" name="influx_tags" placeholder='{"entity_id":"bodenfeuchtigkeit","domain":"sensor"}'>{{ sensor.influx_tags or '' }}</textarea>
     </fieldset>
 
     <div class="field-pair">
@@ -54,6 +55,11 @@
       <a class="btn secondary" href="/sensors">Zurück zur Sensorliste</a>
     </div>
   </form>
+
+  <form method="post" action="/sensors/{{ sensor.id }}/influx/test" class="sensor-test-form">
+    <button type="submit" class="secondary">Letzten Influx-Wert testen</button>
+    <small class="text-muted">Ruft den neuesten <code>_value</code> im Standard-Suchzeitraum ab.</small>
+  </form>
 </section>
 
 <form method="post" action="/sensors/{{ sensor.id }}/delete" onsubmit="return confirm('Sensor wirklich löschen?');" class="floating-trash">
@@ -63,5 +69,51 @@
 <style>
 .sensor-form{max-width:760px}
 .sensor-fieldset{border:1px solid var(--border);border-radius:12px;padding:.8rem}
+.sensor-test-form{display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;margin-top:1rem}
 </style>
+<script>
+(() => {
+  const entityInput = document.getElementById('sensor-homeassistant-entity-id');
+  const measurementInput = document.getElementById('sensor-influx-measurement');
+  const fieldInput = document.getElementById('sensor-influx-field');
+  const tagsInput = document.getElementById('sensor-influx-tags');
+  if (!entityInput || !measurementInput || !fieldInput || !tagsInput) return;
+
+  let lastGenerated = defaultsForEntity(entityInput.value) || {measurement: '', field: '', tags: ''};
+
+  function defaultsForEntity(rawEntity) {
+    const entity = (rawEntity || '').trim();
+    if (!entity) return null;
+    let domain = 'sensor';
+    let objectId = entity;
+    if (entity.includes('.')) {
+      const parts = entity.split('.');
+      domain = (parts.shift() || 'sensor').trim() || 'sensor';
+      objectId = parts.join('.').trim();
+    }
+    if (!objectId) return null;
+    return {
+      measurement: '',
+      field: 'value',
+      tags: JSON.stringify({entity_id: objectId, domain: domain}),
+    };
+  }
+
+  function shouldReplace(input, generatedValue) {
+    return input.value.trim() === '' || input.value === generatedValue;
+  }
+
+  function applyHomeassistantDefaults() {
+    const defaults = defaultsForEntity(entityInput.value);
+    if (!defaults) return;
+    if (shouldReplace(measurementInput, lastGenerated.measurement)) measurementInput.value = defaults.measurement;
+    if (shouldReplace(fieldInput, lastGenerated.field)) fieldInput.value = defaults.field;
+    if (shouldReplace(tagsInput, lastGenerated.tags)) tagsInput.value = defaults.tags;
+    lastGenerated = defaults;
+  }
+
+  entityInput.addEventListener('input', applyHomeassistantDefaults);
+  entityInput.addEventListener('change', applyHomeassistantDefaults);
+})();
+</script>
 {% endblock %}
