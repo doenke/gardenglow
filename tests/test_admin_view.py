@@ -41,8 +41,6 @@ class AdminViewTest(unittest.TestCase):
             f.write(b'avatar')
         with open(os.path.join(self.map_folder, 'map.png'), 'wb') as f:
             f.write(b'map')
-        with open(os.path.join(self.backup_folder, 'backup.sqlite'), 'wb') as f:
-            f.write(b'backup')
 
         with self.app.app_context():
             self.user = User(sub='test-user', name='Test User', avatar_filename='avatar.png')
@@ -52,6 +50,8 @@ class AdminViewTest(unittest.TestCase):
             db.session.add(GardenMap(filename='map.png', calibration_points='[]', boundary_points='[]'))
             db.session.commit()
             self.user_id = self.user.id
+
+        shutil.copy2(self.db_path, os.path.join(self.backup_folder, 'backup.sqlite'))
 
         with self.client.session_transaction() as session:
             session['user_id'] = self.user_id
@@ -83,6 +83,9 @@ class AdminViewTest(unittest.TestCase):
         self.assertIn('Alle verwaisten Uploads löschen', html)
         self.assertIn('Backup anlegen', html)
         self.assertIn('/admin/backup/create', html)
+        self.assertIn('/admin/backup/restore', html)
+        self.assertIn('/admin/backup/delete', html)
+        self.assertIn('Wiederherstellen', html)
         self.assertIn('admin-breakable admin-filename-cell', html)
 
     def test_backup_can_be_created_from_admin_page(self):
@@ -102,6 +105,49 @@ class AdminViewTest(unittest.TestCase):
         with sqlite3.connect(backup_path) as connection:
             row = connection.execute("select name from user where sub = 'test-user'").fetchone()
         self.assertEqual(row, ('Test User',))
+
+    def test_backup_can_be_deleted_from_admin_page(self):
+        response = self.client.post(
+            '/admin/backup/delete',
+            data={'filename': 'backup.sqlite'},
+            follow_redirects=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(os.path.exists(os.path.join(self.backup_folder, 'backup.sqlite')))
+        self.assertIn('Backup „backup.sqlite“ wurde gelöscht.', response.get_data(as_text=True))
+
+    def test_backup_can_be_restored_from_admin_page(self):
+        with self.app.app_context():
+            user = db.session.get(User, self.user_id)
+            user.name = 'Changed User'
+            db.session.commit()
+
+        response = self.client.post(
+            '/admin/backup/restore',
+            data={'filename': 'backup.sqlite'},
+            follow_redirects=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        with sqlite3.connect(self.db_path) as connection:
+            row = connection.execute("select name from user where sub = 'test-user'").fetchone()
+        self.assertEqual(row, ('Test User',))
+        self.assertIn('Backup „backup.sqlite“ wurde wiederhergestellt.', response.get_data(as_text=True))
+
+    def test_invalid_backup_is_not_restored(self):
+        invalid_backup = os.path.join(self.backup_folder, 'invalid.sqlite')
+        with open(invalid_backup, 'wb') as f:
+            f.write(b'invalid')
+
+        response = self.client.post(
+            '/admin/backup/restore',
+            data={'filename': 'invalid.sqlite'},
+            follow_redirects=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('keine gültige GardenGlow-SQLite-Datenbank', response.get_data(as_text=True))
 
     def test_orphan_file_can_be_deleted(self):
         response = self.client.post(

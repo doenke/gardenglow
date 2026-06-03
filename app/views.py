@@ -1,6 +1,7 @@
 import os
 import time
 import re
+import shutil
 import json
 import sqlite3
 import subprocess
@@ -932,6 +933,61 @@ def _create_sqlite_backup():
         'size_bytes': os.path.getsize(backup_path),
     }
 
+def _safe_backup_target(filename):
+    backup_folder = current_app.config.get('BACKUP_FOLDER')
+    if not backup_folder or not filename:
+        return None
+    folder_abs = os.path.abspath(backup_folder)
+    target = os.path.abspath(os.path.join(folder_abs, filename))
+    try:
+        if os.path.commonpath([folder_abs, target]) != folder_abs:
+            return None
+    except ValueError:
+        return None
+    return target
+
+
+def _validate_sqlite_backup(backup_path):
+    try:
+        with sqlite3.connect(f'file:{quote(backup_path)}?mode=ro', uri=True) as connection:
+            integrity = connection.execute('PRAGMA integrity_check').fetchone()
+            if not integrity or integrity[0] != 'ok':
+                return False
+            expected_tables = {'user'}
+            existing_tables = {
+                row[0]
+                for row in connection.execute(
+                    "SELECT name FROM sqlite_master WHERE type = 'table'"
+                ).fetchall()
+            }
+            return expected_tables.issubset(existing_tables)
+    except sqlite3.Error:
+        return False
+
+
+def _restore_sqlite_backup(filename):
+    backup_path = _safe_backup_target(filename)
+    if not backup_path or not os.path.isfile(backup_path):
+        raise RuntimeError('Backup-Datei wurde nicht gefunden.')
+    if not _validate_sqlite_backup(backup_path):
+        raise RuntimeError('Backup-Datei ist keine gültige GardenGlow-SQLite-Datenbank.')
+
+    db_path = _database_file_path()
+    if not db_path or not os.path.isfile(db_path):
+        raise RuntimeError('Es ist keine lokale SQLite-Datenbank zum Wiederherstellen verfügbar.')
+
+    db.session.remove()
+    db.engine.dispose()
+    shutil.copy2(backup_path, db_path)
+
+
+def _delete_backup(filename):
+    backup_path = _safe_backup_target(filename)
+    if not backup_path or not os.path.isfile(backup_path):
+        raise RuntimeError('Backup-Datei wurde nicht gefunden.')
+    os.remove(backup_path)
+
+
 def _git_commit():
     configured = (current_app.config.get('GIT_COMMIT') or '').strip()
     if configured:
@@ -1223,6 +1279,34 @@ def _safe_orphan_target(folder_path, filename):
     if os.path.commonpath([folder_abs, target]) != folder_abs:
         return None
     return target
+
+
+@main_bp.route('/admin/backup/restore', methods=['POST'])
+@login_required
+def restore_backup():
+    filename = (request.form.get('filename') or '').strip()
+    try:
+        _restore_sqlite_backup(filename)
+        flash(f'Backup „{filename}“ wurde wiederhergestellt.', 'success')
+    except RuntimeError as exc:
+        flash(str(exc), 'error')
+    except OSError:
+        flash('Backup konnte nicht wiederhergestellt werden.', 'error')
+    return redirect(url_for('main.admin'))
+
+
+@main_bp.route('/admin/backup/delete', methods=['POST'])
+@login_required
+def delete_backup():
+    filename = (request.form.get('filename') or '').strip()
+    try:
+        _delete_backup(filename)
+        flash(f'Backup „{filename}“ wurde gelöscht.', 'success')
+    except RuntimeError as exc:
+        flash(str(exc), 'error')
+    except OSError:
+        flash('Backup konnte nicht gelöscht werden.', 'error')
+    return redirect(url_for('main.admin'))
 
 
 @main_bp.route('/admin/orphan-upload/delete', methods=['POST'])
@@ -1559,7 +1643,7 @@ def new_sensor():
 @main_bp.route('/sensors/<int:sensor_id>')
 @login_required
 def sensor_detail(sensor_id):
-    sensor = SoilMoistureSensor.query.get_or_404(sensor_id)
+    sensor = db.get_or_404(SoilMoistureSensor, sensor_id)
     locations = Location.query.order_by(*location_sort_criteria()).all()
     return render_template(
         'sensor.html',
@@ -1573,7 +1657,7 @@ def sensor_detail(sensor_id):
 @main_bp.route('/sensors/<int:sensor_id>/edit', methods=['POST'])
 @login_required
 def edit_sensor(sensor_id):
-    sensor = SoilMoistureSensor.query.get_or_404(sensor_id)
+    sensor = db.get_or_404(SoilMoistureSensor, sensor_id)
     is_valid, error_message = apply_sensor_form(sensor, request.form)
     if not is_valid:
         flash(error_message, 'warning')
@@ -1586,7 +1670,7 @@ def edit_sensor(sensor_id):
 @main_bp.route('/sensors/<int:sensor_id>/delete', methods=['POST'])
 @login_required
 def delete_sensor(sensor_id):
-    sensor = SoilMoistureSensor.query.get_or_404(sensor_id)
+    sensor = db.get_or_404(SoilMoistureSensor, sensor_id)
     db.session.delete(sensor)
     db.session.commit()
     flash('Sensor wurde gelöscht.', 'success')

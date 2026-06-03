@@ -22,7 +22,7 @@
     </div>
   </div>
 
-  <div class="actions-inline mb-1">
+  <div class="actions-inline admin-primary-actions mb-1">
     <form method="post" action="{{ url_for('main.create_backup') }}" onsubmit="return confirm('Jetzt ein neues Datenbank-Backup anlegen?');">
       <button type="submit" class="btn">Backup anlegen</button>
     </form>
@@ -135,6 +135,7 @@
         <th>Datei</th>
         <th>Größe</th>
         <th>Geändert (UTC)</th>
+        <th>Aktion</th>
       </tr>
     </thead>
     <tbody>
@@ -143,6 +144,18 @@
         <td data-label="Datei">{{ backup.filename }}</td>
         <td data-label="Größe">{{ backup.size_human }}</td>
         <td data-label="Geändert (UTC)">{{ backup.mtime.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+        <td data-label="Aktion">
+          <div class="admin-backup-actions">
+            <form method="post" action="{{ url_for('main.restore_backup') }}" onsubmit="return confirm('Backup „{{ backup.filename }}“ wirklich wiederherstellen? Die aktuelle Datenbank wird überschrieben.');">
+              <input type="hidden" name="filename" value="{{ backup.filename }}">
+              <button type="submit" class="btn secondary">Wiederherstellen</button>
+            </form>
+            <form method="post" action="{{ url_for('main.delete_backup') }}" onsubmit="return confirm('Backup „{{ backup.filename }}“ wirklich löschen?');">
+              <input type="hidden" name="filename" value="{{ backup.filename }}">
+              <button type="submit" class="btn danger">Löschen</button>
+            </form>
+          </div>
+        </td>
       </tr>
       {% endfor %}
     </tbody>
@@ -160,6 +173,11 @@
 .admin-section-header{display:flex;justify-content:space-between;align-items:center;gap:.75rem;flex-wrap:wrap;margin:.75rem 0 .35rem}
 .admin-section-header h3{margin:0}
 .admin-section-header form{margin:0}
+.admin-primary-actions{align-items:stretch}
+.admin-primary-actions form{display:inline-flex;margin:0}
+.admin-primary-actions .btn{display:inline-flex;align-items:center;justify-content:center;text-decoration:none;min-height:2.55rem}
+.admin-backup-actions{display:flex;flex-wrap:wrap;gap:.45rem}
+.admin-backup-actions form{margin:0}
 .admin-breakable{overflow-wrap:anywhere;word-break:break-word;min-width:0}
 .admin-filename-cell{max-width:clamp(180px,42vw,520px)}
 .admin-orphan-table,.admin-env-table{table-layout:fixed}
