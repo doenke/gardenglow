@@ -62,6 +62,16 @@ class PlantPositionViewTest(unittest.TestCase):
         self.assertIn("positionSaveButton.classList.remove('hidden')", html)
         self.assertIn("positionSaveButton.classList.add('hidden')", html)
 
+    def test_plant_detail_hides_position_coordinate_fields_below_map(self):
+        response = self.client.get(f'/plants/{self.plant_id}')
+
+        self.assertEqual(response.status_code, 200)
+        html = response.get_data(as_text=True)
+        self.assertIn('id="plant-map-x" type="hidden"', html)
+        self.assertIn('id="plant-map-y" type="hidden"', html)
+        self.assertNotIn('<label for="plant-map-x">Breitengrad</label>', html)
+        self.assertNotIn('<label for="plant-map-y">Längengrad</label>', html)
+
     def test_plant_map_image_keeps_native_dimensions_for_overlay_alignment(self):
         response = self.client.get(f'/plants/{self.plant_id}')
 
