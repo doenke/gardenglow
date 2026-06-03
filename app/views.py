@@ -1,12 +1,16 @@
 import os
 import time
 import re
+import json
+import subprocess
+import zipfile
+from io import BytesIO
 from urllib.parse import quote, unquote
 
 import requests
 from functools import wraps
 from datetime import datetime
-from flask import Blueprint, current_app, g, render_template, request, redirect, url_for, session, jsonify, send_from_directory, flash
+from flask import Blueprint, current_app, g, render_template, request, redirect, url_for, session, jsonify, send_from_directory, flash, send_file
 from .models import db, User, Location, Plant, PlantPhoto, PlantNote, GardenMap, TimelineEntry, LightNeed, SoilProperty, PlantDatabaseIdentifier, plant_soil_property
 from .map_data import MapPointValidationError, parse_stored_points, validate_calibration_points, validate_polygon_points
 from .services.timeline_service import save_uploaded_attachment, set_single_title_entry, delete_timeline_entry, build_unique_upload_name
@@ -611,6 +615,208 @@ def get_or_create_trash_location():
     db.session.flush()
     return trash
 
+
+def _format_bytes(size_bytes):
+    size = float(size_bytes or 0)
+    units = ['B', 'KB', 'MB', 'GB', 'TB']
+    for unit in units:
+        if size < 1024 or unit == units[-1]:
+            if unit == 'B':
+                return f"{int(size)} {unit}"
+            return f"{size:.1f} {unit}"
+        size /= 1024
+
+
+def _safe_file_entries(folder):
+    entries = []
+    if not folder or not os.path.isdir(folder):
+        return entries
+    folder_abs = os.path.abspath(folder)
+    for root, _, files in os.walk(folder_abs):
+        for filename in files:
+            full_path = os.path.abspath(os.path.join(root, filename))
+            if not os.path.isfile(full_path):
+                continue
+            try:
+                relative_path = os.path.relpath(full_path, folder_abs).replace(os.sep, '/')
+                entries.append({
+                    'filename': relative_path,
+                    'path': full_path,
+                    'size_bytes': os.path.getsize(full_path),
+                    'mtime': datetime.utcfromtimestamp(os.path.getmtime(full_path)),
+                })
+            except OSError:
+                continue
+    entries.sort(key=lambda item: item['filename'].lower())
+    return entries
+
+
+def _upload_folder_definitions():
+    return [
+        {'key': 'uploads', 'label': 'Uploads', 'path': current_app.config.get('UPLOAD_FOLDER')},
+        {'key': 'avatars', 'label': 'Avatare', 'path': current_app.config.get('AVATAR_FOLDER')},
+        {'key': 'maps', 'label': 'Karten', 'path': current_app.config.get('MAP_FOLDER')},
+    ]
+
+
+def _referenced_upload_filenames():
+    timeline_files = {
+        filename for (filename,) in db.session.query(TimelineEntry.attachment_filename)
+        .filter(TimelineEntry.attachment_filename.isnot(None))
+        .all()
+        if filename
+    }
+    legacy_photo_files = {
+        filename for (filename,) in db.session.query(PlantPhoto.filename).all()
+        if filename
+    }
+    avatar_files = {
+        filename for (filename,) in db.session.query(User.avatar_filename)
+        .filter(User.avatar_filename.isnot(None))
+        .all()
+        if filename
+    }
+    map_files = {
+        filename for (filename,) in db.session.query(GardenMap.filename)
+        .filter(GardenMap.filename.isnot(None))
+        .all()
+        if filename
+    }
+    return {
+        'uploads': timeline_files | legacy_photo_files,
+        'avatars': avatar_files,
+        'maps': map_files,
+    }
+
+
+def _build_upload_folder_report():
+    referenced = _referenced_upload_filenames()
+    report = []
+    for folder in _upload_folder_definitions():
+        entries = _safe_file_entries(folder['path'])
+        referenced_for_folder = referenced.get(folder['key'], set())
+        orphan_entries = [entry for entry in entries if entry['filename'] not in referenced_for_folder]
+        total_size = sum(entry['size_bytes'] for entry in entries)
+        orphan_size = sum(entry['size_bytes'] for entry in orphan_entries)
+        report.append({
+            **folder,
+            'exists': bool(folder['path'] and os.path.isdir(folder['path'])),
+            'file_count': len(entries),
+            'size_bytes': total_size,
+            'size_human': _format_bytes(total_size),
+            'orphan_count': len(orphan_entries),
+            'orphan_size_bytes': orphan_size,
+            'orphan_size_human': _format_bytes(orphan_size),
+            'orphan_files': [
+                {
+                    **entry,
+                    'size_human': _format_bytes(entry['size_bytes']),
+                }
+                for entry in orphan_entries
+            ],
+        })
+    return report
+
+
+def _resolve_folder_by_key(folder_key):
+    for folder in _upload_folder_definitions():
+        if folder['key'] == folder_key:
+            return folder
+    return None
+
+
+def _is_orphan_upload_file(folder_key, filename):
+    report = _build_upload_folder_report()
+    for folder in report:
+        if folder['key'] != folder_key:
+            continue
+        return any(entry['filename'] == filename for entry in folder['orphan_files'])
+    return False
+
+
+def _database_file_path():
+    try:
+        url = db.engine.url
+    except Exception:
+        return None
+    if not str(url.drivername).startswith('sqlite'):
+        return None
+    database = url.database
+    if not database or database == ':memory:':
+        return None
+    if os.path.isabs(database):
+        return database
+    return os.path.abspath(os.path.join(current_app.instance_path, database))
+
+
+def _database_size_info():
+    db_path = _database_file_path()
+    if db_path and os.path.isfile(db_path):
+        size = os.path.getsize(db_path)
+        return {'size_bytes': size, 'size_human': _format_bytes(size), 'path': db_path, 'type': 'SQLite'}
+    driver = getattr(db.engine.url, 'drivername', 'unbekannt')
+    return {'size_bytes': None, 'size_human': 'Nicht verfügbar', 'path': None, 'type': driver}
+
+
+def _backup_report(limit=5):
+    backup_folder = current_app.config.get('BACKUP_FOLDER')
+    entries = []
+    if backup_folder and os.path.isdir(backup_folder):
+        entries = _safe_file_entries(backup_folder)
+        entries.sort(key=lambda item: item['mtime'], reverse=True)
+    return {
+        'path': backup_folder,
+        'exists': bool(backup_folder and os.path.isdir(backup_folder)),
+        'files': [{**entry, 'size_human': _format_bytes(entry['size_bytes'])} for entry in entries[:limit]],
+    }
+
+
+def _git_commit():
+    configured = (current_app.config.get('GIT_COMMIT') or '').strip()
+    if configured:
+        return configured
+    try:
+        result = subprocess.run(
+            ['git', 'rev-parse', '--short', 'HEAD'],
+            cwd=os.path.abspath(os.path.join(current_app.root_path, '..')),
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            timeout=2,
+        )
+        return result.stdout.strip() or 'Unbekannt'
+    except (OSError, subprocess.SubprocessError):
+        return 'Unbekannt'
+
+
+def _app_version_info():
+    return {
+        'version': (current_app.config.get('APP_VERSION') or os.getenv('APP_VERSION') or 'Nicht gesetzt').strip(),
+        'git_commit': _git_commit(),
+    }
+
+
+def _serialize_export_value(value):
+    if hasattr(value, 'isoformat'):
+        return value.isoformat()
+    return value
+
+
+def _build_data_export_payload():
+    payload = {
+        'exported_at': datetime.utcnow().isoformat() + 'Z',
+        'app': _app_version_info(),
+        'tables': {},
+    }
+    for table in db.metadata.sorted_tables:
+        rows = db.session.execute(db.select(table)).mappings().all()
+        payload['tables'][table.name] = [
+            {key: _serialize_export_value(value) for key, value in row.items()}
+            for row in rows
+        ]
+    return payload
+
 @main_bp.route('/healthz')
 def healthz():
     try:
@@ -727,6 +933,74 @@ def config():
         user=user,
         garden_map=garden_map,
         locations=locations,
+    )
+
+
+
+@main_bp.route('/admin')
+@login_required
+def admin():
+    return render_template(
+        'admin.html',
+        user=current_user(),
+        upload_folders=_build_upload_folder_report(),
+        database=_database_size_info(),
+        backups=_backup_report(),
+        version_info=_app_version_info(),
+    )
+
+
+@main_bp.route('/admin/orphan-upload/delete', methods=['POST'])
+@login_required
+def delete_orphan_upload():
+    folder_key = (request.form.get('folder_key') or '').strip()
+    filename = (request.form.get('filename') or '').strip()
+    folder = _resolve_folder_by_key(folder_key)
+    if not folder or not filename:
+        flash('Datei konnte nicht gelöscht werden: ungültige Anfrage.', 'error')
+        return redirect(url_for('main.admin'))
+
+    if not _is_orphan_upload_file(folder_key, filename):
+        flash('Datei wurde nicht gelöscht, weil sie nicht als verwaist erkannt wurde.', 'warning')
+        return redirect(url_for('main.admin'))
+
+    folder_abs = os.path.abspath(folder['path'])
+    target = os.path.abspath(os.path.join(folder_abs, filename))
+    if os.path.commonpath([folder_abs, target]) != folder_abs:
+        flash('Datei konnte nicht gelöscht werden: ungültiger Pfad.', 'error')
+        return redirect(url_for('main.admin'))
+
+    try:
+        if os.path.isfile(target):
+            os.remove(target)
+            flash(f'Verwaiste Datei „{filename}“ wurde gelöscht.', 'success')
+        else:
+            flash('Datei existiert nicht mehr.', 'warning')
+    except OSError:
+        flash('Datei konnte nicht gelöscht werden.', 'error')
+    return redirect(url_for('main.admin'))
+
+
+@main_bp.route('/admin/export')
+@login_required
+def export_data():
+    payload = _build_data_export_payload()
+    export_time = datetime.utcnow().strftime('%Y%m%d-%H%M%S')
+    buffer = BytesIO()
+    with zipfile.ZipFile(buffer, mode='w', compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr(
+            'garden-export.json',
+            json.dumps(payload, ensure_ascii=False, indent=2),
+        )
+        db_path = _database_file_path()
+        if db_path and os.path.isfile(db_path):
+            archive.write(db_path, arcname=os.path.basename(db_path))
+    buffer.seek(0)
+    return send_file(
+        buffer,
+        mimetype='application/zip',
+        as_attachment=True,
+        download_name=f'garden-export-{export_time}.zip',
     )
 
 @main_bp.route('/locations/new', methods=['POST'])

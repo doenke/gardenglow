@@ -1,0 +1,129 @@
+{% extends 'base.html' %}
+{% block content %}
+<section class="card">
+  <h2>Admin &amp; Wartung</h2>
+  <p class="text-muted mt-0">Statusübersicht für Speicher, Datenbank, Backups und Export.</p>
+
+  <div class="admin-summary-grid">
+    <div class="admin-summary-card">
+      <span class="admin-summary-label">Datenbank</span>
+      <strong>{{ database.size_human }}</strong>
+      <small>{{ database.type }}{% if database.path %} · {{ database.path }}{% endif %}</small>
+    </div>
+    <div class="admin-summary-card">
+      <span class="admin-summary-label">App-Version</span>
+      <strong>{{ version_info.version }}</strong>
+      <small>Git-Commit: {{ version_info.git_commit }}</small>
+    </div>
+    <div class="admin-summary-card">
+      <span class="admin-summary-label">Backups</span>
+      <strong>{{ backups.files | length }}</strong>
+      <small>{% if backups.exists %}{{ backups.path }}{% else %}Ordner nicht vorhanden: {{ backups.path }}{% endif %}</small>
+    </div>
+  </div>
+
+  <div class="actions-inline mb-1">
+    <a class="btn" href="{{ url_for('main.export_data') }}">Daten exportieren</a>
+  </div>
+</section>
+
+<section class="card">
+  <h2>Speicherverbrauch je Upload-Ordner</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Ordner</th>
+        <th>Pfad</th>
+        <th>Dateien</th>
+        <th>Speicher</th>
+        <th>Verwaist</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for folder in upload_folders %}
+      <tr>
+        <td data-label="Ordner"><strong>{{ folder.label }}</strong></td>
+        <td data-label="Pfad">{{ folder.path }}{% if not folder.exists %}<br><small class="text-muted">Ordner nicht vorhanden</small>{% endif %}</td>
+        <td data-label="Dateien">{{ folder.file_count }}</td>
+        <td data-label="Speicher">{{ folder.size_human }}</td>
+        <td data-label="Verwaist">{{ folder.orphan_count }} · {{ folder.orphan_size_human }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<section class="card">
+  <h2>Verwaiste Upload-Dateien</h2>
+  <p class="text-muted mt-0">Eine Datei gilt als verwaist, wenn sie in einem Upload-Ordner liegt, aber nicht mehr in der Datenbank referenziert wird.</p>
+  {% set has_orphans = false %}
+  {% for folder in upload_folders %}
+    {% if folder.orphan_files %}
+      {% set has_orphans = true %}
+      <h3>{{ folder.label }}</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Datei</th>
+            <th>Größe</th>
+            <th>Geändert (UTC)</th>
+            <th>Aktion</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for file in folder.orphan_files %}
+          <tr>
+            <td data-label="Datei">{{ file.filename }}</td>
+            <td data-label="Größe">{{ file.size_human }}</td>
+            <td data-label="Geändert (UTC)">{{ file.mtime.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+            <td data-label="Aktion">
+              <form method="post" action="{{ url_for('main.delete_orphan_upload') }}" onsubmit="return confirm('Verwaiste Datei wirklich löschen?');">
+                <input type="hidden" name="folder_key" value="{{ folder.key }}">
+                <input type="hidden" name="filename" value="{{ file.filename }}">
+                <button type="submit" class="btn danger">Löschen</button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% endif %}
+  {% endfor %}
+  {% if not upload_folders | selectattr('orphan_files') | list %}
+    <p>Keine verwaisten Upload-Dateien gefunden.</p>
+  {% endif %}
+</section>
+
+<section class="card">
+  <h2>Letzte Backups</h2>
+  {% if backups.files %}
+  <table>
+    <thead>
+      <tr>
+        <th>Datei</th>
+        <th>Größe</th>
+        <th>Geändert (UTC)</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for backup in backups.files %}
+      <tr>
+        <td data-label="Datei">{{ backup.filename }}</td>
+        <td data-label="Größe">{{ backup.size_human }}</td>
+        <td data-label="Geändert (UTC)">{{ backup.mtime.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+    <p>{% if backups.exists %}Keine Backup-Dateien gefunden.{% else %}Backup-Ordner nicht vorhanden: {{ backups.path }}{% endif %}</p>
+  {% endif %}
+</section>
+
+<style>
+.admin-summary-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1rem;margin:1rem 0}
+.admin-summary-card{display:grid;gap:.25rem;padding:1rem;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface-soft)}
+.admin-summary-card strong{font-size:1.35rem}
+.admin-summary-label{font-size:.78rem;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:700}
+</style>
+{% endblock %}
