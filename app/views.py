@@ -1531,7 +1531,7 @@ def sensors():
     selected_location_id = request.args.get('location_id', type=int)
     sensors = SoilMoistureSensor.query.order_by(SoilMoistureSensor.name.asc(), SoilMoistureSensor.id.asc()).all()
     locations = Location.query.order_by(*location_sort_criteria()).all()
-    selected_location = Location.query.get(selected_location_id) if selected_location_id else None
+    selected_location = db.session.get(Location, selected_location_id) if selected_location_id else None
     return render_template(
         'sensors.html',
         sensors=sensors,
@@ -1559,7 +1559,7 @@ def new_sensor():
 @main_bp.route('/sensors/<int:sensor_id>')
 @login_required
 def sensor_detail(sensor_id):
-    sensor = SoilMoistureSensor.query.get_or_404(sensor_id)
+    sensor = session_get_or_404(SoilMoistureSensor, sensor_id)
     locations = Location.query.order_by(*location_sort_criteria()).all()
     return render_template(
         'sensor.html',
@@ -1573,7 +1573,7 @@ def sensor_detail(sensor_id):
 @main_bp.route('/sensors/<int:sensor_id>/edit', methods=['POST'])
 @login_required
 def edit_sensor(sensor_id):
-    sensor = SoilMoistureSensor.query.get_or_404(sensor_id)
+    sensor = session_get_or_404(SoilMoistureSensor, sensor_id)
     is_valid, error_message = apply_sensor_form(sensor, request.form)
     if not is_valid:
         flash(error_message, 'warning')
@@ -1586,7 +1586,7 @@ def edit_sensor(sensor_id):
 @main_bp.route('/sensors/<int:sensor_id>/delete', methods=['POST'])
 @login_required
 def delete_sensor(sensor_id):
-    sensor = SoilMoistureSensor.query.get_or_404(sensor_id)
+    sensor = session_get_or_404(SoilMoistureSensor, sensor_id)
     db.session.delete(sensor)
     db.session.commit()
     flash('Sensor wurde gelöscht.', 'success')
