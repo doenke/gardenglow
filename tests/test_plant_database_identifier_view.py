@@ -97,7 +97,7 @@ class PlantDatabaseIdentifierViewTest(unittest.TestCase):
     def test_database_links_follow_catalog_display_order(self):
         with self.app.app_context():
             PlantDatabaseIdentifier.query.filter_by(plant_id=self.plant_id).delete()
-            plant = Plant.query.get(self.plant_id)
+            plant = db.session.get(Plant, self.plant_id)
             plant.database_identifiers = [
                 PlantDatabaseIdentifier(catalog_key='floraweb', taxonomy_id='6666'),
                 PlantDatabaseIdentifier(catalog_key='gbif', taxonomy_id='1234'),
