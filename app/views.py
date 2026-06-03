@@ -2,6 +2,7 @@ import os
 import time
 import re
 import json
+import math
 import sqlite3
 import subprocess
 import zipfile
@@ -15,7 +16,7 @@ from flask import Blueprint, abort, current_app, g, render_template, request, re
 from .models import db, utc_now, User, Location, Plant, PlantPhoto, PlantNote, GardenMap, TimelineEntry, LightNeed, SoilProperty, SoilMoistureSensor, PlantDatabaseIdentifier, InfluxIntegrationConfig, plant_soil_property, soil_moisture_sensor_location
 from .map_data import MapPointValidationError, parse_stored_points, validate_calibration_points, validate_polygon_points
 from .services.timeline_service import save_uploaded_attachment, set_single_title_entry, delete_timeline_entry, build_unique_upload_name
-from .services import influx_service
+from .services.influx_service import InfluxIntegrationConfig as InfluxServiceConfig, get_sensor_time_series_adapter, latest_sensor_value
 from .auth import get_or_create_default_user, oidc_enabled
 from .taxonomy import service as taxonomy_service
 from .taxonomy.catalogs import get_database_catalog_by_key, get_database_catalogs
@@ -1191,6 +1192,89 @@ def _load_location_soil_moisture_series(location_id, lookback):
         hints.append('Für den gewählten Zeitraum wurden keine Bodenfeuchte-Daten gefunden.')
     return series, hints, sensors
 
+def _influx_service_config_from_db_or_app():
+    influx_config = _first_influx_integration_config()
+    if influx_config is None:
+        return InfluxServiceConfig.from_app_config()
+    return InfluxServiceConfig(
+        url=(influx_config.influx_url or '').strip(),
+        token=(influx_config.influx_token or '').strip(),
+        org=(influx_config.influx_org or '').strip(),
+        bucket=(influx_config.influx_bucket or '').strip(),
+        timeout_seconds=influx_config.timeout_seconds,
+    )
+
+
+def _numeric_sensor_value(raw_value):
+    if isinstance(raw_value, bool):
+        return None
+    try:
+        value = float(raw_value)
+    except (TypeError, ValueError):
+        return None
+    return value if math.isfinite(value) else None
+
+
+def _format_soil_moisture_percent(value):
+    if value is None:
+        return None
+    formatted = f'{value:.1f}'.rstrip('0').rstrip('.')
+    return f'{formatted.replace(".", ",")} %'
+
+
+def _soil_moisture_current_for_location(location):
+    sensors = (
+        SoilMoistureSensor.query
+        .filter(
+            SoilMoistureSensor.is_active.is_(True),
+            SoilMoistureSensor.locations.any(Location.id == location.id),
+        )
+        .order_by(SoilMoistureSensor.name.asc(), SoilMoistureSensor.id.asc())
+        .all()
+    )
+    sensor_values = []
+    if not sensors:
+        return None, 'Kein Bodenfeuchtesensor verknüpft.', sensor_values
+
+    service_config = _influx_service_config_from_db_or_app()
+    if not service_config.enabled:
+        return None, 'Bodenfeuchte nicht verfügbar: InfluxDB ist nicht vollständig konfiguriert.', [
+            {'sensor': sensor, 'value': None, 'time': None, 'label': 'Keine InfluxDB-Konfiguration'}
+            for sensor in sensors
+        ]
+
+    adapter = get_sensor_time_series_adapter(service_config)
+    valid_values = []
+    has_query_error = False
+    for sensor in sensors:
+        datapoint = None
+        value = None
+        try:
+            datapoint = latest_sensor_value(sensor, adapter=adapter)
+            value = _numeric_sensor_value((datapoint or {}).get('value'))
+        except Exception as exc:  # pragma: no cover - depends on external InfluxDB availability
+            has_query_error = True
+            current_app.logger.info(
+                'Bodenfeuchtewert für Sensor %s konnte nicht geladen werden: %s',
+                sensor.id,
+                exc,
+            )
+
+        if value is not None:
+            valid_values.append(value)
+        sensor_values.append({
+            'sensor': sensor,
+            'value': value,
+            'time': (datapoint or {}).get('time'),
+            'label': _format_soil_moisture_percent(value) if value is not None else 'Kein aktueller Messwert',
+        })
+
+    if valid_values:
+        current_value = sum(valid_values) / len(valid_values)
+        return current_value, _format_soil_moisture_percent(current_value), sensor_values
+    if has_query_error:
+        return None, 'Bodenfeuchte zurzeit nicht abrufbar.', sensor_values
+    return None, 'Keine aktuellen Bodenfeuchte-Messwerte.', sensor_values
 
 def _form_bool(name):
     return (request.form.get(name) or '').strip().lower() in {'1', 'true', 'yes', 'on', 'y'}
@@ -1403,7 +1487,7 @@ def new_location():
 @login_required
 def location_detail(location_id):
     loc = session_get_or_404(Location, location_id)
-    plants = Plant.query.filter_by(location_id=loc.id).all()
+    plants = Plant.query.filter_by(location_id=loc.id).order_by(Plant.name.asc()).all()
     plant_ids = [plant.id for plant in plants]
     plant_title_images_by_id = {}
     if plant_ids:
@@ -1440,6 +1524,7 @@ def location_detail(location_id):
         loc.id,
         soil_moisture_lookback,
     )
+    soil_moisture_current, soil_moisture_current_label, soil_moisture_sensor_values = _soil_moisture_current_for_location(loc)
     return render_template(
         'location.html',
         location=loc,
@@ -1460,6 +1545,9 @@ def location_detail(location_id):
         soil_moisture_sensors=soil_moisture_sensors,
         soil_moisture_range_key=soil_moisture_range_key,
         soil_moisture_range_options=SOIL_MOISTURE_RANGE_OPTIONS,
+        soil_moisture_current=soil_moisture_current,
+        soil_moisture_current_label=soil_moisture_current_label,
+        soil_moisture_sensor_values=soil_moisture_sensor_values,
         other_location_polygons=[
             {
                 'id': other_loc.id,
