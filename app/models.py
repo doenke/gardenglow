@@ -1,6 +1,10 @@
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import text
-from datetime import datetime
+from datetime import datetime, timezone
+
+
+def utc_now():
+    return datetime.now(timezone.utc)
 
 
 db = SQLAlchemy()
@@ -144,7 +148,7 @@ class PlantPhoto(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     plant_id = db.Column(db.Integer, db.ForeignKey('plant.id'), nullable=False)
     filename = db.Column(db.String(255), nullable=False)
-    uploaded_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    uploaded_at = db.Column(db.DateTime(timezone=True), default=utc_now, nullable=False)
     taken_on = db.Column(db.Date)
     comment = db.Column(db.Text)
     creator_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
@@ -153,7 +157,7 @@ class PlantPhoto(db.Model):
 class PlantNote(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     plant_id = db.Column(db.Integer, db.ForeignKey('plant.id'), nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    created_at = db.Column(db.DateTime(timezone=True), default=utc_now, nullable=False)
     note_date = db.Column(db.Date, nullable=False)
     comment = db.Column(db.Text, nullable=False)
     creator_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
@@ -176,8 +180,8 @@ class TimelineEntry(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     scope_type = db.Column(db.String(32), nullable=False, index=True)
     scope_id = db.Column(db.Integer, nullable=False, index=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
-    event_at = db.Column(db.DateTime)
+    created_at = db.Column(db.DateTime(timezone=True), default=utc_now, nullable=False)
+    event_at = db.Column(db.DateTime(timezone=True))
     event_type = db.Column(db.String(32))
     title = db.Column(db.String(255))
     description = db.Column(db.Text)

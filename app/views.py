@@ -9,9 +9,9 @@ from urllib.parse import quote, unquote
 
 import requests
 from functools import wraps
-from datetime import datetime
-from flask import Blueprint, current_app, g, render_template, request, redirect, url_for, session, jsonify, send_from_directory, flash, send_file
-from .models import db, User, Location, Plant, PlantPhoto, PlantNote, GardenMap, TimelineEntry, LightNeed, SoilProperty, SoilMoistureSensor, PlantDatabaseIdentifier, plant_soil_property
+from datetime import datetime, timezone
+from flask import Blueprint, abort, current_app, g, render_template, request, redirect, url_for, session, jsonify, send_from_directory, flash, send_file
+from .models import db, utc_now, User, Location, Plant, PlantPhoto, PlantNote, GardenMap, TimelineEntry, LightNeed, SoilProperty, SoilMoistureSensor, PlantDatabaseIdentifier, plant_soil_property
 from .map_data import MapPointValidationError, parse_stored_points, validate_calibration_points, validate_polygon_points
 from .services.timeline_service import save_uploaded_attachment, set_single_title_entry, delete_timeline_entry, build_unique_upload_name
 from .auth import get_or_create_default_user, oidc_enabled
@@ -95,6 +95,13 @@ ENVIRONMENT_VARIABLES = [
     {'name': 'OIDC_CLIENT_SECRET', 'config_key': None, 'default': '', 'sensitive': True},
     {'name': 'OIDC_LOGOUT_URL', 'config_key': None, 'default': ''},
 ]
+
+
+def session_get_or_404(model, ident):
+    instance = db.session.get(model, ident)
+    if instance is None:
+        abort(404)
+    return instance
 
 
 def _debuggable_external_get(catalog, url, params=None, timeout=6):
@@ -448,7 +455,7 @@ def create_timeline_entry(*, scope_type, scope_id, creator_id, created_at=None, 
     entry = TimelineEntry(
         scope_type=scope_type,
         scope_id=scope_id,
-        created_at=created_at or datetime.utcnow(),
+        created_at=created_at or utc_now(),
         event_at=event_at,
         event_type=event_type,
         title=title,
@@ -617,7 +624,7 @@ def duplicate_plant_record(plant, creator_id):
         scope_type='plant',
         scope_id=duplicated.id,
         event_type='data_event',
-        event_at=datetime.utcnow(),
+        event_at=utc_now(),
         title='Pflanze dupliziert',
         description=f'Dupliziert von {plant.name}.',
         creator_id=creator_id,
@@ -629,7 +636,7 @@ def create_system_event(plant_id, key, creator_id, event_at=None, description=No
     create_timeline_entry(
         scope_type='plant',
         scope_id=plant_id,
-        event_at=event_at or datetime.utcnow(),
+        event_at=event_at or utc_now(),
         event_type='plant_event',
         title=tpl['title'],
         description=description if description is not None else tpl['description'],
@@ -642,7 +649,7 @@ def current_user():
         return g._current_user
 
     uid = session.get('user_id')
-    user = User.query.get(uid) if uid else None
+    user = db.session.get(User, uid) if uid else None
     if user is None and not oidc_enabled():
         user = get_or_create_default_user()
     g._current_user = user
@@ -747,7 +754,7 @@ def _safe_file_entries(folder):
                     'filename': relative_path,
                     'path': full_path,
                     'size_bytes': os.path.getsize(full_path),
-                    'mtime': datetime.utcfromtimestamp(os.path.getmtime(full_path)),
+                    'mtime': datetime.fromtimestamp(os.path.getmtime(full_path), timezone.utc),
                 })
             except OSError:
                 continue
@@ -939,7 +946,7 @@ def _serialize_export_value(value):
 
 def _build_data_export_payload():
     payload = {
-        'exported_at': datetime.utcnow().isoformat() + 'Z',
+        'exported_at': utc_now().isoformat().replace('+00:00', 'Z'),
         'app': _app_version_info(),
         'tables': {},
     }
@@ -1168,7 +1175,7 @@ def delete_all_orphan_uploads():
 @login_required
 def export_data():
     payload = _build_data_export_payload()
-    export_time = datetime.utcnow().strftime('%Y%m%d-%H%M%S')
+    export_time = utc_now().strftime('%Y%m%d-%H%M%S')
     buffer = BytesIO()
     with zipfile.ZipFile(buffer, mode='w', compression=zipfile.ZIP_DEFLATED) as archive:
         archive.writestr(
@@ -1197,7 +1204,7 @@ def new_location():
 @main_bp.route('/locations/<int:location_id>')
 @login_required
 def location_detail(location_id):
-    loc = Location.query.get_or_404(location_id)
+    loc = session_get_or_404(Location, location_id)
     plants = Plant.query.filter_by(location_id=loc.id).all()
     plant_ids = [plant.id for plant in plants]
     plant_title_images_by_id = {}
@@ -1260,7 +1267,7 @@ def location_detail(location_id):
 @main_bp.route('/locations/<int:location_id>/timeline/new', methods=['POST'])
 @login_required
 def new_location_timeline_entry(location_id):
-    location = Location.query.get_or_404(location_id)
+    location = session_get_or_404(Location, location_id)
     title = (request.form.get('title') or '').strip()
     description = (request.form.get('description') or '').strip()
     attachment = request.files.get('attachment')
@@ -1304,7 +1311,7 @@ def new_location_timeline_entry(location_id):
 @main_bp.route('/locations/<int:location_id>/timeline/<int:entry_id>/set-title', methods=['POST'])
 @login_required
 def set_location_timeline_title(location_id, entry_id):
-    location = Location.query.get_or_404(location_id)
+    location = session_get_or_404(Location, location_id)
     set_single_title_entry(
         model=TimelineEntry,
         owner_filter=(TimelineEntry.scope_type == 'location', TimelineEntry.scope_id == location.id),
@@ -1318,7 +1325,7 @@ def set_location_timeline_title(location_id, entry_id):
 @main_bp.route('/locations/<int:location_id>/timeline/<int:entry_id>/delete', methods=['POST'])
 @login_required
 def delete_location_timeline_entry(location_id, entry_id):
-    location = Location.query.get_or_404(location_id)
+    location = session_get_or_404(Location, location_id)
     entry = TimelineEntry.query.filter_by(id=entry_id, scope_type='location', scope_id=location.id).first_or_404()
     delete_timeline_entry(entry, current_app.config['UPLOAD_FOLDER'], ('attachment_filename',))
     db.session.delete(entry)
@@ -1361,7 +1368,7 @@ def new_plant(location_id):
     db.session.add(p)
     db.session.flush()
     upsert_plant_database_identifiers(p, request.form)
-    event_at = datetime.utcnow()
+    event_at = utc_now()
     tpl = SYSTEM_EVENT_TEMPLATES['planting']
     create_timeline_entry(
         scope_type='plant',
@@ -1378,7 +1385,7 @@ def new_plant(location_id):
 @main_bp.route('/locations/<int:location_id>/delete', methods=['POST'])
 @login_required
 def delete_location(location_id):
-    location = Location.query.get_or_404(location_id)
+    location = session_get_or_404(Location, location_id)
     if location.name == TRASH_LOCATION_NAME:
         return redirect(url_for('main.index'))
     trash = get_or_create_trash_location()
@@ -1466,14 +1473,14 @@ def delete_sensor(sensor_id):
 @main_bp.route('/plants/<int:plant_id>')
 @login_required
 def plant_detail(plant_id):
-    plant = Plant.query.get_or_404(plant_id)
+    plant = session_get_or_404(Plant, plant_id)
     events = TimelineEntry.query.filter_by(scope_type='plant', scope_id=plant.id).order_by(TimelineEntry.event_at.desc(), TimelineEntry.created_at.desc()).all()
     photos = PlantPhoto.query.filter_by(plant_id=plant.id).order_by(PlantPhoto.uploaded_at.desc()).all()
     notes = PlantNote.query.filter_by(plant_id=plant.id).order_by(PlantNote.created_at.desc()).all()
     month_names = ['Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez']
     last_plant_event = next((ev for ev in events if ev.event_type == 'plant_event' and ev.title in PLANTING_STATE_TYPES), None)
     is_planted = bool(last_plant_event and PLANTING_STATE_TYPES[last_plant_event.title] in {'planting', 'transplant'})
-    location = Location.query.get(plant.location_id)
+    location = db.session.get(Location, plant.location_id)
     garden_map = GardenMap.query.order_by(GardenMap.id.asc()).first()
     location_plants = Plant.query.filter_by(location_id=plant.location_id).order_by(Plant.name.asc()).all()
     location_plant_markers = [
@@ -1496,7 +1503,7 @@ def plant_detail(plant_id):
         user=current_user(),
         locations=Location.query.order_by(*location_sort_criteria()).all(),
         creators={u.id: u for u in User.query.all()},
-        today_date=datetime.utcnow().date().isoformat(),
+        today_date=utc_now().date().isoformat(),
         month_names=month_names,
         is_planted=is_planted,
         garden_map=garden_map,
@@ -1578,7 +1585,7 @@ def save_boundary():
 @main_bp.route('/locations/<int:location_id>/map', methods=['POST'])
 @login_required
 def save_location_map(location_id):
-    loc = Location.query.get_or_404(location_id)
+    loc = session_get_or_404(Location, location_id)
     try:
         polygon_points = validate_polygon_points(request.form.get('polygon_points', '[]'), 'Beet-Polygonpunkte')
     except MapPointValidationError as exc:
@@ -1592,7 +1599,7 @@ def save_location_map(location_id):
 @main_bp.route('/locations/<int:location_id>/color', methods=['POST'])
 @login_required
 def save_location_color(location_id):
-    loc = Location.query.get_or_404(location_id)
+    loc = session_get_or_404(Location, location_id)
     if loc.name == TRASH_LOCATION_NAME:
         return redirect(request.referrer or url_for('main.index'))
     loc.color = request.form.get('color') or '#2f6d40'
@@ -1603,7 +1610,7 @@ def save_location_color(location_id):
 @main_bp.route('/plants/<int:plant_id>/position', methods=['POST'])
 @login_required
 def save_plant_position(plant_id):
-    plant = Plant.query.get_or_404(plant_id)
+    plant = session_get_or_404(Plant, plant_id)
     is_json_request = request.is_json
     payload = request.get_json(silent=True) if is_json_request else None
     try:
@@ -1640,7 +1647,7 @@ def save_plant_position(plant_id):
 @main_bp.route('/plants/<int:plant_id>/common-name-suggest', methods=['POST'])
 @login_required
 def suggest_common_name(plant_id):
-    plant = Plant.query.get_or_404(plant_id)
+    plant = session_get_or_404(Plant, plant_id)
     started_at = time.perf_counter()
     payload = request.get_json(silent=True) or {}
     name_value = (payload.get('name') or plant.name or '').strip()
@@ -1703,7 +1710,7 @@ def upsert_plant_database_identifiers(plant, form):
 @main_bp.route('/plants/<int:plant_id>/taxonomy-ids-suggest', methods=['POST'])
 @login_required
 def suggest_taxonomy_ids(plant_id):
-    plant = Plant.query.get_or_404(plant_id)
+    plant = session_get_or_404(Plant, plant_id)
     started_at = time.perf_counter()
     payload = request.get_json(silent=True) or {}
     scientific_name = (payload.get('scientific_name') or plant.scientific_name or plant.name or '').strip()
@@ -1746,7 +1753,7 @@ def suggest_taxonomy_ids(plant_id):
 @main_bp.route('/plants/<int:plant_id>/masterdata', methods=['POST'])
 @login_required
 def update_masterdata(plant_id):
-    plant = Plant.query.get_or_404(plant_id)
+    plant = session_get_or_404(Plant, plant_id)
 
     field_labels = {
         'name': 'Name',
@@ -1818,7 +1825,7 @@ def update_masterdata(plant_id):
             scope_type='plant',
             scope_id=plant.id,
             event_type='data_event',
-            event_at=datetime.utcnow(),
+            event_at=utc_now(),
             title='Pflanzendaten geändert',
             description='\n'.join(changes),
             creator_id=current_user().id
@@ -1831,7 +1838,7 @@ def update_masterdata(plant_id):
 @main_bp.route('/plants/<int:plant_id>/duplicate', methods=['POST'])
 @login_required
 def duplicate_plant(plant_id):
-    plant = Plant.query.get_or_404(plant_id)
+    plant = session_get_or_404(Plant, plant_id)
     duplicated = duplicate_plant_record(plant, current_user().id)
     db.session.commit()
     flash(f'Pflanze „{plant.name}“ wurde dupliziert.', 'success')
@@ -1840,7 +1847,7 @@ def duplicate_plant(plant_id):
 @main_bp.route('/plants/<int:plant_id>/delete', methods=['POST'])
 @login_required
 def delete_plant(plant_id):
-    plant = Plant.query.get_or_404(plant_id)
+    plant = session_get_or_404(Plant, plant_id)
     source_location_id = plant.location_id
     trash = get_or_create_trash_location()
     if plant.location_id != trash.id:
@@ -1852,10 +1859,10 @@ def delete_plant(plant_id):
 @main_bp.route('/plants/<int:plant_id>/move', methods=['POST'])
 @login_required
 def move_plant(plant_id):
-    plant = Plant.query.get_or_404(plant_id)
+    plant = session_get_or_404(Plant, plant_id)
     target_location_id = request.form.get('location_id', type=int)
-    target_location = Location.query.get_or_404(target_location_id)
-    source_location = Location.query.get_or_404(plant.location_id)
+    target_location = session_get_or_404(Location, target_location_id)
+    source_location = session_get_or_404(Location, plant.location_id)
     user_id = current_user().id
     trash = get_or_create_trash_location()
 
@@ -1877,7 +1884,7 @@ def move_plant(plant_id):
 def add_event(plant_id):
     event_type = 'user_event'
     event_at_raw = request.form.get('event_at')
-    event_at = datetime.strptime(event_at_raw, '%Y-%m-%d') if event_at_raw else datetime.utcnow()
+    event_at = datetime.strptime(event_at_raw, '%Y-%m-%d').replace(tzinfo=timezone.utc) if event_at_raw else utc_now()
     title = request.form.get('title', '').strip()
     description = request.form.get('description', '').strip()
 
@@ -1922,7 +1929,7 @@ def add_event(plant_id):
 @main_bp.route('/plants/<int:plant_id>/events/<int:event_id>/set-title', methods=['POST'])
 @login_required
 def set_plant_event_title(plant_id, event_id):
-    plant = Plant.query.get_or_404(plant_id)
+    plant = session_get_or_404(Plant, plant_id)
     set_single_title_entry(
         model=TimelineEntry,
         owner_filter=(TimelineEntry.scope_type == 'plant', TimelineEntry.scope_id == plant.id),
@@ -1950,7 +1957,7 @@ def add_system_event(plant_id, event_key):
         return redirect(url_for('main.plant_detail', plant_id=plant_id))
     if event_key in {'care_event', 'measurement'}:
         titles = {'care_event': 'Pflege', 'measurement': 'Messen'}
-        create_timeline_entry(scope_type='plant', scope_id=plant_id, event_type=EVENT_TYPE_MAP[event_key], event_at=datetime.utcnow(), title=titles[event_key], description=None, creator_id=current_user().id)
+        create_timeline_entry(scope_type='plant', scope_id=plant_id, event_type=EVENT_TYPE_MAP[event_key], event_at=utc_now(), title=titles[event_key], description=None, creator_id=current_user().id)
     else:
         create_system_event(plant_id, event_key, current_user().id)
     db.session.commit()
