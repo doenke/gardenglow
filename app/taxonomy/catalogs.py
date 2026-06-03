@@ -15,7 +15,7 @@ class DatabaseCatalogConfig:
 _DEFAULT_DATABASE_CATALOGS = (
     DatabaseCatalogConfig(
         key='wikipedia_de',
-        label='Deutsche Wikipedia',
+        label='Wikipedia',
         record_url_template='https://de.wikipedia.org/wiki/{id}',
         search_url_template='https://de.wikipedia.org/w/index.php?search={q}',
         icon_url='https://de.wikipedia.org/favicon.ico',
