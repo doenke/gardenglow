@@ -46,6 +46,10 @@ class InfluxConfigViewTest(unittest.TestCase):
                 'homeassistant_token': 'secret-ha-token',
                 'verify_tls': '1',
                 'timeout_seconds': '42',
+                'temperature_homeassistant_entity_id': 'sensor.aussentemperatur',
+                'temperature_influx_field': 'value',
+                'rainfall_homeassistant_entity_id': 'sensor.regenmenge',
+                'rainfall_influx_field': 'value',
             },
         )
 
@@ -60,6 +64,8 @@ class InfluxConfigViewTest(unittest.TestCase):
             self.assertEqual(config.homeassistant_token, 'secret-ha-token')
             self.assertTrue(config.verify_tls)
             self.assertEqual(config.timeout_seconds, 42)
+            self.assertFalse(hasattr(config, 'temperature_homeassistant_entity_id'))
+            self.assertFalse(hasattr(config, 'rainfall_homeassistant_entity_id'))
             self.assertIsNotNone(config.created_at)
             self.assertIsNotNone(config.updated_at)
 
@@ -90,6 +96,10 @@ class InfluxConfigViewTest(unittest.TestCase):
         self.assertIn('Gespeicherter Token bleibt erhalten', html)
         self.assertNotIn('old-influx-token', html)
         self.assertNotIn('old-ha-token', html)
+        self.assertNotIn('temperature_homeassistant_entity_id', html)
+        self.assertNotIn('rainfall_homeassistant_entity_id', html)
+        self.assertNotIn('temperature_influx_field', html)
+        self.assertNotIn('rainfall_influx_field', html)
 
         response = self.client.post(
             '/config/influx',
