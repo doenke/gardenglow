@@ -627,9 +627,7 @@ def apply_sensor_form(sensor, form):
     # Beet zugeordnet sein, wird stattdessen der Papierkorb ausgewählt.
     locations = get_selected_sensor_locations(form)
 
-    sensor_type = (form.get('sensor_type') or form.get('type') or '').strip()
-    if not sensor_type:
-        return False, 'Bitte einen Sensortyp auswählen.'
+    sensor_type = (form.get('sensor_type') or form.get('type') or sensor.sensor_type or SENSOR_TYPE_SOIL_MOISTURE).strip()
     if sensor_type not in SENSOR_TYPES:
         return False, 'Bitte einen gültigen Sensortyp auswählen.'
 
@@ -1441,11 +1439,28 @@ def _numeric_sensor_value(raw_value):
     return value if math.isfinite(value) else None
 
 
-def _format_soil_moisture_percent(value):
+def _format_sensor_number(value):
+    formatted = f'{value:.1f}'.rstrip('0').rstrip('.')
+    return formatted.replace('.', ',')
+
+
+def _format_sensor_value(value, unit):
     if value is None:
         return None
-    formatted = f'{value:.1f}'.rstrip('0').rstrip('.')
-    return f'{formatted.replace(".", ",")} %'
+    number = _format_sensor_number(value)
+    return f'{number} {unit}' if unit else number
+
+
+def _sensor_value_unit(sensor):
+    return {
+        SENSOR_TYPE_SOIL_MOISTURE: '%',
+        SENSOR_TYPE_TEMPERATURE: '°C',
+        SENSOR_TYPE_RAINFALL: 'mm',
+    }.get(getattr(sensor, 'sensor_type', None), '%')
+
+
+def _format_soil_moisture_percent(value):
+    return _format_sensor_value(value, '%')
 
 
 def _serialize_soil_moisture_current_value(value, label, sensor_values):
@@ -1507,7 +1522,7 @@ def _load_sensor_current_values(sensors):
             sensor_current_values[sensor.id] = {
                 'value': value,
                 'time': (datapoint or {}).get('time'),
-                'label': _format_soil_moisture_percent(value),
+                'label': _format_sensor_value(value, _sensor_value_unit(sensor)),
                 'has_value': True,
             }
         else:

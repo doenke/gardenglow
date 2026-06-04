@@ -250,15 +250,41 @@ class SensorModelTest(unittest.TestCase):
                 influx_bucket='soil',
                 influx_token='token',
             ))
+            db.session.add_all([
+                Sensor(
+                    name='Temperatur Sensor',
+                    key='temperature-sensor',
+                    sensor_type=SENSOR_TYPE_TEMPERATURE,
+                    influx_field='value',
+                    creator_id=self.user_id,
+                ),
+                Sensor(
+                    name='Regen Sensor',
+                    key='rainfall-sensor',
+                    sensor_type=SENSOR_TYPE_RAINFALL,
+                    influx_field='value',
+                    creator_id=self.user_id,
+                ),
+            ])
             db.session.commit()
 
-        with patch('app.views.latest_sensor_value', return_value={'time': '2026-06-03T08:00:00Z', 'value': 42.5}):
+        def current_value_for(sensor, adapter=None):
+            values = {
+                SENSOR_TYPE_SOIL_MOISTURE: 42.5,
+                SENSOR_TYPE_TEMPERATURE: 21.5,
+                SENSOR_TYPE_RAINFALL: 4.2,
+            }
+            return {'time': '2026-06-03T08:00:00Z', 'value': values[sensor.sensor_type]}
+
+        with patch('app.views.latest_sensor_value', side_effect=current_value_for):
             response = self.client.get('/sensors')
 
         self.assertEqual(response.status_code, 200)
         html = response.get_data(as_text=True)
         self.assertIn('<th>Aktueller Wert</th>', html)
         self.assertIn('data-label="Aktueller Wert">42,5 %</td>', html)
+        self.assertIn('data-label="Aktueller Wert">21,5 °C</td>', html)
+        self.assertIn('data-label="Aktueller Wert">4,2 mm</td>', html)
         self.assertNotIn('<th>Position</th>', html)
         self.assertNotIn('data-label="Position"', html)
 
