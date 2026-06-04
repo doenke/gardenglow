@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 {% block content %}
-<section class="card">
+<section class="card index-dashboard">
 <div class="index-card-head">
   <div></div>
   {% if sensor_current_extremes %}
@@ -15,13 +15,21 @@
   </a>
   {% endif %}
 </div>
-{% if garden_map and garden_map.filename %}
-<div class="rel-inline fit-content mb-35" style="margin-left:auto;margin-right:auto;">
-  <img id="index-map-image" src="/maps/{{ garden_map.filename }}" alt="Luftbild des Gartens" class="map-image" style="margin:0 auto;">
-  <svg id="index-map-overlay" class="map-overlay" preserveAspectRatio="none"></svg>
-</div>
-{% endif %}
-<h2 class="m-0">Beete</h2>
+<div class="index-hero{% if not (garden_map and garden_map.filename) %} index-hero-no-map{% endif %}">
+  {% if garden_map and garden_map.filename %}
+  <div class="index-map-panel">
+    <div class="index-map-kicker">Gartenkarte</div>
+    <div class="rel-inline fit-content index-map-frame">
+      <img id="index-map-image" src="/maps/{{ garden_map.filename }}" alt="Luftbild des Gartens" class="map-image index-map-image">
+      <svg id="index-map-overlay" class="map-overlay" preserveAspectRatio="none"></svg>
+    </div>
+  </div>
+  {% endif %}
+  <section class="index-locations-panel" aria-labelledby="locations-heading">
+    <div class="index-section-head">
+      <p class="index-section-kicker">Übersicht</p>
+      <h2 id="locations-heading" class="m-0">Beete</h2>
+    </div>
 <div class="table-search">
   <label class="sr-only" for="locations-search">Beete durchsuchen</label>
   <input type="search" id="locations-search" placeholder="z. B. Kräuterbeet">
@@ -62,6 +70,8 @@
   {% endfor %}
   </tbody>
 </table>
+  </section>
+</div>
 
 <dialog id="location-color-dialog" aria-labelledby="location-color-title">
   <form method="post" id="location-color-form" class="grid">
@@ -88,7 +98,11 @@
   <button>anlegen</button>
 </form>
 
-<h2 class="m-0">Alle Pflanzen</h2>
+<section class="index-plants-panel" aria-labelledby="plants-heading">
+<div class="index-section-head">
+  <p class="index-section-kicker">Inventar</p>
+  <h2 id="plants-heading" class="m-0">Alle Pflanzen</h2>
+</div>
 <div class="table-search">
   <label class="sr-only" for="index-plants-search">Pflanzen durchsuchen</label>
   <input type="search" id="index-plants-search" placeholder="z. B. Tomate">
@@ -115,6 +129,7 @@
   {% endfor %}
   </tbody>
 </table>
+</section>
 
 
 
