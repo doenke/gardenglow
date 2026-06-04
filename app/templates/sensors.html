@@ -39,7 +39,7 @@
           {% for location in sensor.locations %}
             <a href="/locations/{{ location.id }}">{{ location.name }}</a>{% if not loop.last %}, {% endif %}
           {% else %}
-            Alle produktiven Beete
+            Alle Beete
           {% endfor %}
         </td>
         {% set current_value = sensor_current_values.get(sensor.id) %}
