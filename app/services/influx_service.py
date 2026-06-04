@@ -1,4 +1,4 @@
-"""InfluxDB adapter layer for sensor time-series queries.
+"""InfluxDB adapter layer for soil moisture sensor time-series queries.
 
 The public entry points in this module intentionally hide the concrete
 InfluxDB query API from views/templates.  InfluxDB 2.7.11 uses Flux as the

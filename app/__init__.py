@@ -111,7 +111,7 @@ def create_app():
 
     with app.app_context():
         db.create_all()
-        _ensure_sensor_schema()
+        _ensure_sensor_schema_and_migrate_legacy_soil_moisture_sensors()
         _migrate_legacy_weather_config_to_sensors()
         _seed_light_needs()
 
@@ -123,8 +123,8 @@ def create_app():
 
 
 
-def _ensure_sensor_schema():
-    """Keep the regular sensor schema compatible with existing databases."""
+def _ensure_sensor_schema_and_migrate_legacy_soil_moisture_sensors():
+    """Keep sensor schema compatible and migrate legacy soil moisture sensor rows."""
     inspector = inspect(db.engine)
     table_names = set(inspector.get_table_names())
 
@@ -151,6 +151,42 @@ def _ensure_sensor_schema():
                 'PRIMARY KEY (sensor_id, location_id), '
                 'FOREIGN KEY(sensor_id) REFERENCES sensor (id), '
                 'FOREIGN KEY(location_id) REFERENCES location (id)'
+                ')'
+            )
+
+        if 'soil_moisture_sensor' in table_names:
+            legacy_columns = {column['name'] for column in inspector.get_columns('soil_moisture_sensor')}
+            migrated_columns = [
+                'id',
+                'name',
+                'key',
+                'homeassistant_entity_id',
+                'influx_measurement',
+                'influx_field',
+                'influx_tags',
+                'map_x',
+                'map_y',
+                'creator_id',
+                'is_active',
+            ]
+            available_columns = [column for column in migrated_columns if column in legacy_columns]
+            insert_columns = ', '.join(available_columns + ['sensor_type'])
+            select_columns = ', '.join(f'legacy.{column}' for column in available_columns)
+            connection.exec_driver_sql(
+                f'INSERT INTO {Sensor.__tablename__} ({insert_columns}) '
+                f"SELECT {select_columns}, '{SENSOR_TYPE_SOIL_MOISTURE}' "
+                'FROM soil_moisture_sensor legacy '
+                f'WHERE NOT EXISTS (SELECT 1 FROM {Sensor.__tablename__} sensor WHERE sensor.id = legacy.id)'
+            )
+
+        if 'soil_moisture_sensor_location' in table_names:
+            connection.exec_driver_sql(
+                'INSERT INTO sensor_location (sensor_id, location_id) '
+                'SELECT legacy.sensor_id, legacy.location_id '
+                'FROM soil_moisture_sensor_location legacy '
+                'WHERE NOT EXISTS ('
+                'SELECT 1 FROM sensor_location current '
+                'WHERE current.sensor_id = legacy.sensor_id AND current.location_id = legacy.location_id'
                 ')'
             )
 
