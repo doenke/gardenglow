@@ -39,7 +39,7 @@
           {% for location in sensor.locations %}
             <a href="/locations/{{ location.id }}">{{ location.name }}</a>{% if not loop.last %}, {% endif %}
           {% else %}
-            –
+            Alle produktiven Beete
           {% endfor %}
         </td>
         {% set current_value = sensor_current_values.get(sensor.id) %}
@@ -103,12 +103,12 @@
     </fieldset>
 
     <label for="sensor-location-ids">Beete</label>
-    <select id="sensor-location-ids" name="location_ids" multiple required size="{{ [locations|length, 6]|min }}">
+    <select id="sensor-location-ids" name="location_ids" multiple size="{{ [locations|length, 6]|min }}" aria-describedby="sensor-location-help">
       {% for location in locations %}
       <option value="{{ location.id }}" {% if selected_location_id == location.id %}selected{% endif %}>{{ location.name }}</option>
       {% endfor %}
     </select>
-    <small class="text-muted">Mehrere Beete mit Strg/Cmd oder Shift auswählen.</small>
+    <small id="sensor-location-help" class="text-muted">Mehrere Beete mit Strg/Cmd oder Shift auswählen. Keine Auswahl bedeutet: Sensor gilt für alle produktiven Beete. Papierkorb auswählen bedeutet: Sensor ist keinem produktiven Beet zugeordnet.</small>
 
     <div class="actions-inline">
       <button type="submit">Anlegen</button>
