@@ -2194,23 +2194,29 @@ def delete_location(location_id):
 @login_required
 def sensors():
     selected_location_id = request.args.get('location_id', type=int)
+    requested_sensor_type = (request.args.get('sensor_type') or '').strip()
+    selected_sensor_type = requested_sensor_type if requested_sensor_type in SENSOR_TYPES else None
     locations = Location.query.order_by(*location_sort_criteria()).all()
     selected_location = db.session.get(Location, selected_location_id) if selected_location_id else None
 
     if selected_location:
-        sensors = _location_sensors(selected_location.id)
+        sensors = _location_sensors(selected_location.id, selected_sensor_type)
     else:
-        sensors = Sensor.query.order_by(Sensor.name.asc(), Sensor.id.asc()).all()
+        query = Sensor.query
+        if selected_sensor_type:
+            query = query.filter(Sensor.sensor_type == selected_sensor_type)
+        sensors = query.order_by(Sensor.name.asc(), Sensor.id.asc()).all()
     sensor_current_values = _load_sensor_current_values(sensors)
     return render_template(
         'sensors.html',
         sensors=sensors,
         sensor_type_labels=SENSOR_TYPE_LABELS,
         sensor_types=SENSOR_TYPES,
+        selected_sensor_type=selected_sensor_type,
         sensor_current_values=sensor_current_values,
         locations=locations,
         selected_location=selected_location,
-        selected_location_id=selected_location.id if selected_location else selected_location_id,
+        selected_location_id=selected_location.id if selected_location else None,
         garden_map=GardenMap.query.order_by(GardenMap.id.asc()).first(),
         user=current_user(),
     )

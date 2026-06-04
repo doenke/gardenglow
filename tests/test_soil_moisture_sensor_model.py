@@ -379,6 +379,9 @@ class SensorModelTest(unittest.TestCase):
 
         all_response = self.client.get('/sensors')
         selected_response = self.client.get(f'/sensors?location_id={self.location_id}')
+        selected_soil_response = self.client.get(f'/sensors?location_id={self.location_id}&sensor_type={SENSOR_TYPE_SOIL_MOISTURE}')
+        selected_temperature_response = self.client.get(f'/sensors?location_id={self.location_id}&sensor_type={SENSOR_TYPE_TEMPERATURE}')
+        all_temperature_response = self.client.get(f'/sensors?sensor_type={SENSOR_TYPE_TEMPERATURE}')
         trash_response = self.client.get(f'/sensors?location_id={trash_id}')
 
         self.assertEqual(all_response.status_code, 200)
@@ -394,9 +397,33 @@ class SensorModelTest(unittest.TestCase):
         self.assertIn('Bodenfeuchte Sensor 1', selected_html)
         self.assertIn('Globaler Sensor', selected_html)
         self.assertIn('Alle Beete', selected_html)
+        self.assertIn('>Alle Typen</a>', selected_html)
+        self.assertIn('href="/sensors?location_id={}&amp;sensor_type=temperature"'.format(self.location_id), selected_html)
+        self.assertIn('href="/sensors" aria-current="page" aria-pressed="true">Sensorbeet</a>', selected_html)
+        self.assertIn('href="/sensors?location_id={}"'.format(trash_id), selected_html)
         self.assertNotIn('openSensorCreateDialog();', selected_html)
         self.assertNotIn('Papierkorb Sensor', selected_html)
         self.assertNotIn('Anderer Beet Sensor', selected_html)
+
+        self.assertEqual(selected_soil_response.status_code, 200)
+        selected_soil_html = selected_soil_response.get_data(as_text=True)
+        self.assertIn('Bodenfeuchte Sensor 1', selected_soil_html)
+        self.assertIn('href="/sensors?location_id={}" aria-current="page" aria-pressed="true">Bodenfeuchte</a>'.format(self.location_id), selected_soil_html)
+        self.assertNotIn('Globaler Sensor', selected_soil_html)
+        self.assertNotIn('Papierkorb Sensor', selected_soil_html)
+
+        self.assertEqual(selected_temperature_response.status_code, 200)
+        selected_temperature_html = selected_temperature_response.get_data(as_text=True)
+        self.assertIn('Globaler Sensor', selected_temperature_html)
+        self.assertNotIn('Bodenfeuchte Sensor 1', selected_temperature_html)
+        self.assertNotIn('Papierkorb Sensor', selected_temperature_html)
+
+        self.assertEqual(all_temperature_response.status_code, 200)
+        all_temperature_html = all_temperature_response.get_data(as_text=True)
+        self.assertIn('Globaler Sensor', all_temperature_html)
+        self.assertIn('Papierkorb Sensor', all_temperature_html)
+        self.assertIn('Anderer Beet Sensor', all_temperature_html)
+        self.assertNotIn('Bodenfeuchte Sensor 1', all_temperature_html)
 
         self.assertEqual(trash_response.status_code, 200)
         trash_html = trash_response.get_data(as_text=True)
