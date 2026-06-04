@@ -22,7 +22,7 @@ class IndexViewTest(unittest.TestCase):
             self.user = User(sub='test-user', name='Test User')
             db.session.add(self.user)
             db.session.flush()
-            self.location = Location(name='Sonnenbeet')
+            self.location = Location(name='Sonnenbeet', description='Sonnig & windgeschützt')
             db.session.add(self.location)
             db.session.flush()
             db.session.add_all([
@@ -61,6 +61,17 @@ class IndexViewTest(unittest.TestCase):
         self.assertIn('class="index-plant-common-name-cell">Echter Lavendel</td>', html)
         self.assertIn('class="index-plant-common-name-cell is-empty"></td>', html)
         self.assertIn('class="index-plant-location-link"', html)
+
+    def test_index_location_table_uses_description_tooltip(self):
+        response = self.client.get('/')
+
+        self.assertEqual(response.status_code, 200)
+        html = response.get_data(as_text=True)
+        self.assertIn('<table class="locations-table">', html)
+        self.assertNotIn('<th>Beschreibung</th>', html)
+        self.assertNotIn('location-description-cell', html)
+        self.assertIn('title="Sonnig &amp; windgeschützt"', html)
+        self.assertIn('data-search-text="Sonnenbeet Sonnig &amp; windgeschützt"', html)
 
     def test_index_links_current_sensor_minimum_and_maximum(self):
         with self.app.app_context():

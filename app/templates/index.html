@@ -38,14 +38,16 @@
   <thead>
     <tr>
       <th>Beet</th>
-      <th>Beschreibung</th>
       <th>Pflanzen</th>
     </tr>
   </thead>
   <tbody>
   {% for l in locations %}
     {% set plant_count = location_plant_counts.get(l.id, 0) %}
-    <tr data-row-link="/locations/{{ l.id }}">
+    <tr
+      data-row-link="/locations/{{ l.id }}"
+      data-search-text="{{ l.name }} {{ l.description or '' }}"
+      {% if l.description %}title="{{ l.description }}"{% endif %}>
       <td data-label="Beet" class="location-name-cell">
         <div class="location-name-row">
           <span class="location-name-main">
@@ -64,7 +66,6 @@
           <span class="plant-count-badge plant-count-badge-mobile" aria-label="{{ plant_count }} Pflanzen">{{ plant_count }}</span>
         </div>
       </td>
-      <td data-label="Beschreibung" class="location-description-cell{% if not l.description %} is-empty{% endif %}">{{ l.description or '' }}</td>
       <td data-label="Pflanzen" class="plant-count-cell"><span class="plant-count-badge" aria-label="{{ plant_count }} Pflanzen">{{ plant_count }}</span></td>
     </tr>
   {% endfor %}
@@ -326,7 +327,8 @@
     const applyFilter = () => {
       const query = input.value.trim().toLowerCase();
       rows.forEach((row) => {
-        row.style.display = row.textContent.toLowerCase().includes(query) ? '' : 'none';
+        const searchableText = row.dataset.searchText || row.textContent;
+        row.style.display = searchableText.toLowerCase().includes(query) ? '' : 'none';
       });
     };
     input.addEventListener('input', applyFilter);
