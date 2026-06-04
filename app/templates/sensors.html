@@ -13,6 +13,28 @@
     {% if selected_location %}
       <span class="chip">für {{ selected_location.name }}</span>
     {% endif %}
+    {% if selected_sensor_type %}
+      <span class="chip">{{ sensor_type_labels[selected_sensor_type] }}</span>
+    {% endif %}
+  </div>
+
+  <div class="sensor-filter-panel mb-1" aria-label="Sensorfilter">
+    <div class="sensor-filter-group" aria-label="Beet auswählen">
+      <span class="sensor-filter-label">Beet</span>
+      <a class="sensor-filter-pill {% if not selected_location %}is-selected{% endif %}" href="{{ url_for('main.sensors', sensor_type=selected_sensor_type) if selected_sensor_type else url_for('main.sensors') }}" {% if not selected_location %}aria-current="page"{% endif %}>Alle Beete</a>
+      {% for location in locations %}
+        {% set location_href = url_for('main.sensors', sensor_type=selected_sensor_type) if selected_location_id == location.id and selected_sensor_type else (url_for('main.sensors') if selected_location_id == location.id else url_for('main.sensors', location_id=location.id, sensor_type=selected_sensor_type)) %}
+        <a class="sensor-filter-pill {% if selected_location_id == location.id %}is-selected{% endif %}" href="{{ location_href }}" {% if selected_location_id == location.id %}aria-current="page" aria-pressed="true"{% endif %}>{{ location.name }}</a>
+      {% endfor %}
+    </div>
+    <div class="sensor-filter-group" aria-label="Sensortyp auswählen">
+      <span class="sensor-filter-label">Sensortyp</span>
+      <a class="sensor-filter-pill {% if not selected_sensor_type %}is-selected{% endif %}" href="{{ url_for('main.sensors', location_id=selected_location_id) if selected_location_id else url_for('main.sensors') }}" {% if not selected_sensor_type %}aria-current="page"{% endif %}>Alle Typen</a>
+      {% for sensor_type in sensor_types %}
+        {% set type_href = url_for('main.sensors', location_id=selected_location_id) if selected_sensor_type == sensor_type and selected_location_id else (url_for('main.sensors') if selected_sensor_type == sensor_type else url_for('main.sensors', location_id=selected_location_id, sensor_type=sensor_type)) %}
+        <a class="sensor-filter-pill {% if selected_sensor_type == sensor_type %}is-selected{% endif %}" href="{{ type_href }}" {% if selected_sensor_type == sensor_type %}aria-current="page" aria-pressed="true"{% endif %}>{{ sensor_type_labels[sensor_type] }}</a>
+      {% endfor %}
+    </div>
   </div>
 
   <div class="actions-inline mb-1">
@@ -147,6 +169,12 @@
 </dialog>
 
 <style>
+.sensor-filter-panel{display:grid;gap:.75rem;padding:.85rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-soft)}
+.sensor-filter-group{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap}
+.sensor-filter-label{font-weight:700;margin-right:.15rem}
+.sensor-filter-pill{display:inline-flex;align-items:center;border:1px solid var(--border);border-radius:999px;padding:.35rem .75rem;background:var(--surface);color:var(--text);text-decoration:none;line-height:1.2}
+.sensor-filter-pill:hover{border-color:var(--primary);text-decoration:none}
+.sensor-filter-pill.is-selected{background:var(--primary);border-color:var(--primary);color:#fff}
 .sensor-dialog{width:min(92vw,620px);border:1px solid var(--border);border-radius:16px;background:var(--surface);color:var(--text);box-shadow:var(--shadow);padding:1rem}
 .sensor-dialog::backdrop{background:rgba(0,0,0,.45);backdrop-filter:blur(2px)}
 .sensor-create-form{gap:.9rem}
