@@ -115,7 +115,7 @@
   </div>
 
   <div class="soil-moisture-chart-wrap">
-    <canvas id="soil-moisture-chart" height="260" aria-label="Bodenfeuchte, Temperatur und Regenmenge für {{ location.name }}" role="img"></canvas>
+    <canvas id="soil-moisture-chart" height="260" data-chart-height="260" data-chart-height-mobile="180" aria-label="Bodenfeuchte, Temperatur und Regenmenge für {{ location.name }}" role="img"></canvas>
   </div>
   <div id="soil-moisture-legend" class="soil-moisture-legend" aria-label="Sensor-Legende">
     {% for sensor_series in soil_moisture_series %}
@@ -458,8 +458,9 @@
 
     const parentWidth = canvas.parentElement ? canvas.parentElement.clientWidth : 0;
     const cssWidth = Math.max(320, parentWidth || canvas.clientWidth || 640);
-    const defaultHeight = Number(canvas.getAttribute('height')) || 260;
-    const cssHeight = window.matchMedia('(max-width: 700px)').matches ? 180 : defaultHeight;
+    const desktopHeight = Number(canvas.dataset.chartHeight) || 260;
+    const mobileHeight = Number(canvas.dataset.chartHeightMobile) || 180;
+    const cssHeight = window.matchMedia('(max-width: 700px)').matches ? mobileHeight : desktopHeight;
     const ratio = window.devicePixelRatio || 1;
     canvas.width = Math.floor(cssWidth * ratio);
     canvas.height = Math.floor(cssHeight * ratio);

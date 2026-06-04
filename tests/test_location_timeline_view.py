@@ -86,6 +86,10 @@ class LocationTimelineViewTest(unittest.TestCase):
         self.assertIn('const dailyTemperatureRange = (points) => {', html)
         self.assertIn("const drawTemperatureRangeArea = (context, ranges, { xFor, yFor, color = '#dc2626' }) => {", html)
         self.assertIn('drawTemperatureRangeArea(context, temperatureRanges', html)
+        self.assertIn('data-chart-height="260" data-chart-height-mobile="180"', html)
+        self.assertIn('const desktopHeight = Number(canvas.dataset.chartHeight) || 260;', html)
+        self.assertIn('const mobileHeight = Number(canvas.dataset.chartHeightMobile) || 180;', html)
+        self.assertNotIn("const defaultHeight = Number(canvas.getAttribute('height')) || 260;", html)
         self.assertNotIn('drawLineSeries(context, sensorSeries.parsedPoints, {\n          xFor,\n          yFor: temperatureYFor', html)
 
     def test_location_timeline_allows_text_only_without_file_warning(self):
