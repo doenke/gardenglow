@@ -1,10 +1,11 @@
 from flask import Flask
 from sqlalchemy import inspect
 from werkzeug.middleware.proxy_fix import ProxyFix
-from .models import db, LightNeed, InfluxIntegrationConfig, Sensor, SENSOR_TYPE_SOIL_MOISTURE
-from .auth import DEFAULT_MAX_AVATAR_SIZE_BYTES, OIDC_ENV_VARS, auth_bp, oauth, oidc_configured_from_env
+from .models import db, LightNeed, InfluxIntegrationConfig, Sensor, User, SENSOR_TYPE_SOIL_MOISTURE, SENSOR_TYPE_TEMPERATURE, SENSOR_TYPE_RAINFALL
+from .auth import DEFAULT_LOCAL_USER_NAME, DEFAULT_LOCAL_USER_SUB, DEFAULT_MAX_AVATAR_SIZE_BYTES, OIDC_ENV_VARS, auth_bp, oauth, oidc_configured_from_env
 from .views import main_bp
 from .map_data import parse_stored_points
+from .services import influx_service
 import os
 
 
@@ -111,7 +112,7 @@ def create_app():
     with app.app_context():
         db.create_all()
         _ensure_sensor_schema_and_migrate_legacy_soil_moisture_sensors()
-        _ensure_influx_integration_config_columns()
+        _migrate_legacy_weather_config_to_sensors()
         _seed_light_needs()
 
         os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
@@ -189,6 +190,7 @@ def _ensure_sensor_schema_and_migrate_legacy_soil_moisture_sensors():
                 ')'
             )
 
+
 def _seed_light_needs():
     """Ensure the default light need catalog values exist."""
     key_label_pairs = [
@@ -203,33 +205,103 @@ def _seed_light_needs():
     db.session.commit()
 
 
-def _ensure_influx_integration_config_columns():
-    """Add newly introduced integration columns to existing SQLite databases."""
+def _legacy_weather_sensor_creator_id():
+    """Return a user id for startup migrations that create sensor rows."""
+    user = User.query.order_by(User.id.asc()).first()
+    if user:
+        return user.id
+
+    user = User(sub=DEFAULT_LOCAL_USER_SUB, name=DEFAULT_LOCAL_USER_NAME)
+    db.session.add(user)
+    db.session.flush()
+    return user.id
+
+
+def _legacy_weather_sensor_key(base_key):
+    existing_keys = {
+        key for (key,) in db.session.query(Sensor.key).filter(Sensor.key.like(f'{base_key}%')).all()
+    }
+    if base_key not in existing_keys:
+        return base_key
+
+    suffix = 2
+    while f'{base_key}-{suffix}' in existing_keys:
+        suffix += 1
+    return f'{base_key}-{suffix}'
+
+
+def _migrate_legacy_weather_config_to_sensors():
+    """Move deprecated global weather fields into regular sensor rows once."""
     inspector = inspect(db.engine)
-    if InfluxIntegrationConfig.__tablename__ not in inspector.get_table_names():
+    table_names = set(inspector.get_table_names())
+    if InfluxIntegrationConfig.__tablename__ not in table_names or Sensor.__tablename__ not in table_names:
         return
 
     existing_columns = {column['name'] for column in inspector.get_columns(InfluxIntegrationConfig.__tablename__)}
-    desired_columns = {
-        'temperature_homeassistant_entity_id': 'VARCHAR(255)',
-        'temperature_influx_measurement': 'VARCHAR(255)',
-        'temperature_influx_field': 'VARCHAR(255)',
-        'temperature_influx_tags': 'TEXT',
-        'rainfall_homeassistant_entity_id': 'VARCHAR(255)',
-        'rainfall_influx_measurement': 'VARCHAR(255)',
-        'rainfall_influx_field': 'VARCHAR(255)',
-        'rainfall_influx_tags': 'TEXT',
+    legacy_kinds = {
+        'temperature': {
+            'sensor_type': SENSOR_TYPE_TEMPERATURE,
+            'name': 'Temperatur',
+            'key': 'temperature',
+        },
+        'rainfall': {
+            'sensor_type': SENSOR_TYPE_RAINFALL,
+            'name': 'Regenmenge',
+            'key': 'rainfall',
+        },
     }
-    missing_columns = [
-        (name, sql_type)
-        for name, sql_type in desired_columns.items()
-        if name not in existing_columns
-    ]
-    if not missing_columns:
+    required_columns = {
+        f'{kind}_{suffix}'
+        for kind in legacy_kinds
+        for suffix in ('homeassistant_entity_id', 'influx_measurement', 'influx_field', 'influx_tags')
+    }
+    if not required_columns.intersection(existing_columns):
         return
 
-    with db.engine.begin() as connection:
-        for name, sql_type in missing_columns:
-            connection.exec_driver_sql(
-                f'ALTER TABLE {InfluxIntegrationConfig.__tablename__} ADD COLUMN {name} {sql_type}'
-            )
+    selectable_columns = ['id'] + [column for column in sorted(required_columns) if column in existing_columns]
+    rows = db.session.execute(
+        db.text(
+            f"SELECT {', '.join(selectable_columns)} "
+            f'FROM {InfluxIntegrationConfig.__tablename__} ORDER BY id ASC'
+        )
+    ).mappings().all()
+    if not rows:
+        return
+
+    creator_id = None
+    migrated = False
+    for row in rows:
+        for kind, definition in legacy_kinds.items():
+            entity_id = (row.get(f'{kind}_homeassistant_entity_id') or '').strip()
+            measurement = (row.get(f'{kind}_influx_measurement') or '').strip()
+            field = (row.get(f'{kind}_influx_field') or '').strip()
+            tags = (row.get(f'{kind}_influx_tags') or '').strip()
+            if not any((entity_id, measurement, field, tags)):
+                continue
+
+            existing_query = Sensor.query.filter(Sensor.sensor_type == definition['sensor_type'])
+            if entity_id:
+                existing_query = existing_query.filter(Sensor.homeassistant_entity_id == entity_id)
+            else:
+                existing_query = existing_query.filter(Sensor.key == definition['key'])
+            if existing_query.first():
+                continue
+
+            defaults = influx_service.homeassistant_entity_influx_defaults(entity_id) if entity_id else {}
+            if creator_id is None:
+                creator_id = _legacy_weather_sensor_creator_id()
+            db.session.add(Sensor(
+                name=definition['name'],
+                key=_legacy_weather_sensor_key(definition['key']),
+                sensor_type=definition['sensor_type'],
+                homeassistant_entity_id=entity_id or None,
+                influx_measurement=measurement or defaults.get('measurement') or None,
+                influx_field=field or defaults.get('field') or None,
+                influx_tags=tags or defaults.get('tags') or None,
+                creator_id=creator_id,
+                is_active=True,
+            ))
+            migrated = True
+
+    if migrated:
+        db.session.commit()

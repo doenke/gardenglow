@@ -7,7 +7,6 @@
     <div class="config-toc-links">
       <a href="#influxdb-config">InfluxDB</a>
       <a href="#homeassistant-config">Homeassistant</a>
-      <a href="#weather-sensors-config">Wetterdaten</a>
       <a href="#connection-options">Verbindungsoptionen</a>
       <a href="#map-upload">Luftbild</a>
       {% if garden_map and garden_map.filename %}
@@ -69,52 +68,6 @@
   </form>
   <form method="post" action="/config/homeassistant/test">
     <button type="submit" class="btn secondary">Homeassistant-Verbindung testen</button>
-  </form>
-</section>
-
-<section id="weather-sensors-config" class="card config-section">
-  <div class="config-section-head">
-    <p class="page-eyebrow">Messwerte</p>
-    <h3 class="m-0">Temperatur und Regenmenge</h3>
-    <p class="text-muted mt-0 mb-0">Globale Homeassistant-Entities für Wetterdaten. Leere Influx-Felder werden analog zu den Bodenfeuchtesensoren automatisch aus der Entity abgeleitet.</p>
-  </div>
-  <form method="post" action="/config/weather-sensors" class="grid mb-1">
-    <fieldset class="grid">
-      <legend>Temperatur</legend>
-      <label for="temperature-homeassistant-entity-id">Homeassistant Entity
-        <input id="temperature-homeassistant-entity-id" type="text" name="temperature_homeassistant_entity_id" value="{{ influx_config.temperature_homeassistant_entity_id if influx_config and influx_config.temperature_homeassistant_entity_id else '' }}" placeholder="sensor.aussentemperatur">
-      </label>
-      <div class="grid grid-auto-200">
-        <label for="temperature-influx-measurement">Influx Measurement
-          <input id="temperature-influx-measurement" type="text" name="temperature_influx_measurement" value="{{ influx_config.temperature_influx_measurement if influx_config and influx_config.temperature_influx_measurement else '' }}" placeholder="Automatisch aus HA">
-        </label>
-        <label for="temperature-influx-field">Influx Field
-          <input id="temperature-influx-field" type="text" name="temperature_influx_field" value="{{ influx_config.temperature_influx_field if influx_config and influx_config.temperature_influx_field else '' }}" placeholder="value">
-        </label>
-      </div>
-      <label for="temperature-influx-tags">Influx Tags (JSON)
-        <input id="temperature-influx-tags" type="text" name="temperature_influx_tags" value="{{ influx_config.temperature_influx_tags if influx_config and influx_config.temperature_influx_tags else '' }}" placeholder='{"entity_id":"aussentemperatur","domain":"sensor"}'>
-      </label>
-    </fieldset>
-
-    <fieldset class="grid">
-      <legend>Regenmenge</legend>
-      <label for="rainfall-homeassistant-entity-id">Homeassistant Entity
-        <input id="rainfall-homeassistant-entity-id" type="text" name="rainfall_homeassistant_entity_id" value="{{ influx_config.rainfall_homeassistant_entity_id if influx_config and influx_config.rainfall_homeassistant_entity_id else '' }}" placeholder="sensor.regenmenge">
-      </label>
-      <div class="grid grid-auto-200">
-        <label for="rainfall-influx-measurement">Influx Measurement
-          <input id="rainfall-influx-measurement" type="text" name="rainfall_influx_measurement" value="{{ influx_config.rainfall_influx_measurement if influx_config and influx_config.rainfall_influx_measurement else '' }}" placeholder="Automatisch aus HA">
-        </label>
-        <label for="rainfall-influx-field">Influx Field
-          <input id="rainfall-influx-field" type="text" name="rainfall_influx_field" value="{{ influx_config.rainfall_influx_field if influx_config and influx_config.rainfall_influx_field else '' }}" placeholder="value">
-        </label>
-      </div>
-      <label for="rainfall-influx-tags">Influx Tags (JSON)
-        <input id="rainfall-influx-tags" type="text" name="rainfall_influx_tags" value="{{ influx_config.rainfall_influx_tags if influx_config and influx_config.rainfall_influx_tags else '' }}" placeholder='{"entity_id":"regenmenge","domain":"sensor"}'>
-      </label>
-    </fieldset>
-    <button type="submit">Wetterdaten-Konfiguration speichern</button>
   </form>
 </section>
 
