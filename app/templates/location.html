@@ -303,7 +303,7 @@
       const pointCount = weatherSensorSeries.length
         ? weatherSensorSeries.reduce((sum, sensorSeries) => sum + (sensorSeries.points || []).length, 0)
         : (weatherItem.points || []).length;
-      if (status) status.textContent = pointCount ? `${weatherItem.unit || ''}` : '(keine Daten)';
+      if (status) status.textContent = pointCount ? '' : '(keine Daten)';
     });
   };
 
