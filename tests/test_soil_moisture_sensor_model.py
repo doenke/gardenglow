@@ -238,9 +238,12 @@ class SensorModelTest(unittest.TestCase):
         self.assertEqual(location_response.status_code, 200)
         self.assertIn('/sensors?location_id={}'.format(self.location_id), location_response.get_data(as_text=True))
         self.assertIn('Zur Sensorübersicht dieses Beets', location_response.get_data(as_text=True))
-        self.assertIn('Bodenfeuchte-Verlauf', location_response.get_data(as_text=True))
-        self.assertIn('Bodenfeuchte-Daten werden im Hintergrund geladen.', location_response.get_data(as_text=True))
-        self.assertNotIn('InfluxDB ist nicht vollständig konfiguriert', location_response.get_data(as_text=True))
+        location_html = location_response.get_data(as_text=True)
+        self.assertIn('Bodenfeuchte-Verlauf', location_html)
+        self.assertIn('Bodenfeuchte-Daten werden im Hintergrund geladen.', location_html)
+        self.assertIn('.soil-moisture-chart-wrap{min-height:180px}', location_html)
+        self.assertIn("window.matchMedia('(max-width: 700px)').matches ? 180", location_html)
+        self.assertNotIn('InfluxDB ist nicht vollständig konfiguriert', location_html)
 
 
     def test_sensor_list_renders_current_value_instead_of_position(self):
