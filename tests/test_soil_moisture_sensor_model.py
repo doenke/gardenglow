@@ -395,6 +395,7 @@ class SensorModelTest(unittest.TestCase):
         self.assertIn('Bodenfeuchte Sensor 1', selected_html)
         self.assertIn('Globaler Sensor', selected_html)
         self.assertIn('Alle Beete', selected_html)
+        self.assertNotIn('openSensorCreateDialog();', selected_html)
         self.assertNotIn('Papierkorb Sensor', selected_html)
         self.assertNotIn('Anderer Beet Sensor', selected_html)
 
