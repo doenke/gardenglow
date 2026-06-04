@@ -367,6 +367,73 @@
     });
   };
 
+
+  const dailyTemperatureRange = (points) => {
+    const buckets = new Map();
+    points.forEach((point) => {
+      const date = new Date(point.time);
+      if (Number.isNaN(date.getTime())) return;
+      const dayStart = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+      const existing = buckets.get(dayStart) || { firstTime: point.time, lastTime: point.time, min: point.value, max: point.value };
+      existing.firstTime = Math.min(existing.firstTime, point.time);
+      existing.lastTime = Math.max(existing.lastTime, point.time);
+      existing.min = Math.min(existing.min, point.value);
+      existing.max = Math.max(existing.max, point.value);
+      buckets.set(dayStart, existing);
+    });
+    return Array.from(buckets.values())
+      .map((range) => ({ ...range, time: range.firstTime + ((range.lastTime - range.firstTime) / 2) }))
+      .sort((a, b) => a.time - b.time);
+  };
+
+  const drawTemperatureRangeArea = (context, ranges, { xFor, yFor, color = '#dc2626' }) => {
+    if (!ranges.length) return;
+    context.save();
+    if (ranges.length === 1) {
+      const range = ranges[0];
+      const x = xFor(range.time);
+      const yMin = yFor(range.min);
+      const yMax = yFor(range.max);
+      context.fillStyle = 'rgba(220, 38, 38, .18)';
+      context.strokeStyle = color;
+      context.lineWidth = 2;
+      context.beginPath();
+      context.rect(x - 8, Math.min(yMax, yMin), 16, Math.max(2, Math.abs(yMin - yMax)));
+      context.fill();
+      context.stroke();
+      context.restore();
+      return;
+    }
+
+    context.fillStyle = 'rgba(220, 38, 38, .18)';
+    context.beginPath();
+    ranges.forEach((range, index) => {
+      const x = xFor(range.time);
+      const y = yFor(range.max);
+      if (index === 0) context.moveTo(x, y);
+      else context.lineTo(x, y);
+    });
+    [...ranges].reverse().forEach((range) => {
+      context.lineTo(xFor(range.time), yFor(range.min));
+    });
+    context.closePath();
+    context.fill();
+
+    context.strokeStyle = color;
+    context.lineWidth = 1.8;
+    ['max', 'min'].forEach((edge) => {
+      context.beginPath();
+      ranges.forEach((range, index) => {
+        const x = xFor(range.time);
+        const y = yFor(range[edge]);
+        if (index === 0) context.moveTo(x, y);
+        else context.lineTo(x, y);
+      });
+      context.stroke();
+    });
+    context.restore();
+  };
+
   const drawSoilMoistureChart = () => {
     const canvas = document.getElementById('soil-moisture-chart');
     const dataNode = document.getElementById('soil-moisture-series-data');
@@ -418,6 +485,11 @@
     const temperatureSeries = weatherSensorSeries(temperature);
     const rainfallSeries = weatherSensorSeries(rainfall);
     const temperaturePoints = temperatureSeries.flatMap((sensorSeries) => sensorSeries.parsedPoints);
+    const temperatureRanges = dailyTemperatureRange(temperaturePoints);
+    const temperatureRangePoints = temperatureRanges.flatMap((range) => [
+      { time: range.time, value: range.min },
+      { time: range.time, value: range.max },
+    ]);
     const rainfallPoints = rainfallSeries.flatMap((sensorSeries) => sensorSeries.parsedPoints);
     const soilPoints = soilSeries.flatMap((sensorSeries) => sensorSeries.parsedPoints);
     const allPoints = [...soilPoints, ...temperaturePoints, ...rainfallPoints];
@@ -450,7 +522,7 @@
     }
 
     const soilDomain = valueDomain(soilPoints, { minFloor: 0, maxCeil: 100, padding: 5 });
-    const temperatureDomain = valueDomain(temperaturePoints, { padding: 2 });
+    const temperatureDomain = valueDomain(temperatureRangePoints, { padding: 2 });
     const rainfallDomain = valueDomain(rainfallPoints, { minFloor: 0, padding: 1 });
     const soilYFor = soilDomain ? yFactory(soilDomain) : null;
     const temperatureYFor = temperatureDomain ? yFactory(temperatureDomain) : null;
@@ -528,15 +600,11 @@
         color: soilMoistureColors[index % soilMoistureColors.length],
       });
     });
-    if (temperatureYFor) {
-      temperatureSeries.forEach((sensorSeries, index) => {
-        drawLineSeries(context, sensorSeries.parsedPoints, {
-          xFor,
-          yFor: temperatureYFor,
-          color: index % 2 ? '#f97316' : '#dc2626',
-          pointRadius: 2.6,
-          lineWidth: 2.4,
-        });
+    if (temperatureYFor && temperatureRanges.length) {
+      drawTemperatureRangeArea(context, temperatureRanges, {
+        xFor,
+        yFor: temperatureYFor,
+        color: '#dc2626',
       });
     }
   };
