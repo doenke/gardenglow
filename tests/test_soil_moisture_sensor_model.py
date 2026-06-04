@@ -242,7 +242,7 @@ class SensorModelTest(unittest.TestCase):
         self.assertIn('Bodenfeuchte-Verlauf', location_html)
         self.assertIn('Bodenfeuchte-Daten werden im Hintergrund geladen.', location_html)
         self.assertIn('.soil-moisture-chart-wrap{min-height:180px}', location_html)
-        self.assertIn("window.matchMedia('(max-width: 700px)').matches ? 180", location_html)
+        self.assertIn("window.matchMedia('(max-width: 700px)').matches ? mobileHeight : desktopHeight", location_html)
         self.assertNotIn('InfluxDB ist nicht vollständig konfiguriert', location_html)
 
 
