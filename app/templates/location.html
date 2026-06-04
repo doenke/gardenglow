@@ -386,7 +386,7 @@
       .sort((a, b) => a.time - b.time);
   };
 
-  const drawTemperatureRangeArea = (context, ranges, { xFor, yFor, color = '#dc2626' }) => {
+  const drawTemperatureRangeArea = (context, ranges, { xFor, yFor }) => {
     if (!ranges.length) return;
     context.save();
     if (ranges.length === 1) {
@@ -395,12 +395,9 @@
       const yMin = yFor(range.min);
       const yMax = yFor(range.max);
       context.fillStyle = 'rgba(220, 38, 38, .18)';
-      context.strokeStyle = color;
-      context.lineWidth = 2;
       context.beginPath();
       context.rect(x - 8, Math.min(yMax, yMin), 16, Math.max(2, Math.abs(yMin - yMax)));
       context.fill();
-      context.stroke();
       context.restore();
       return;
     }
@@ -419,18 +416,6 @@
     context.closePath();
     context.fill();
 
-    context.strokeStyle = color;
-    context.lineWidth = 1.8;
-    ['max', 'min'].forEach((edge) => {
-      context.beginPath();
-      ranges.forEach((range, index) => {
-        const x = xFor(range.time);
-        const y = yFor(range[edge]);
-        if (index === 0) context.moveTo(x, y);
-        else context.lineTo(x, y);
-      });
-      context.stroke();
-    });
     context.restore();
   };
 
@@ -604,7 +589,6 @@
       drawTemperatureRangeArea(context, temperatureRanges, {
         xFor,
         yFor: temperatureYFor,
-        color: '#dc2626',
       });
     }
   };

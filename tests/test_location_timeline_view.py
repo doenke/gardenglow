@@ -84,8 +84,10 @@ class LocationTimelineViewTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         html = response.get_data(as_text=True)
         self.assertIn('const dailyTemperatureRange = (points) => {', html)
-        self.assertIn("const drawTemperatureRangeArea = (context, ranges, { xFor, yFor, color = '#dc2626' }) => {", html)
+        self.assertIn('const drawTemperatureRangeArea = (context, ranges, { xFor, yFor }) => {', html)
         self.assertIn('drawTemperatureRangeArea(context, temperatureRanges', html)
+        self.assertNotIn('context.strokeStyle = color;\n    context.lineWidth = 1.8;', html)
+        self.assertNotIn('context.strokeStyle = color;\n      context.lineWidth = 2;', html)
         self.assertNotIn('drawLineSeries(context, sensorSeries.parsedPoints, {\n          xFor,\n          yFor: temperatureYFor', html)
 
     def test_location_timeline_allows_text_only_without_file_warning(self):
