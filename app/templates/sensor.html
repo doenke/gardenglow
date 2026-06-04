@@ -29,15 +29,28 @@
     <label for="sensor-homeassistant-entity-id">Homeassistant Entity-ID</label>
     <input id="sensor-homeassistant-entity-id" name="homeassistant_entity_id" value="{{ sensor.homeassistant_entity_id or '' }}" placeholder="z. B. sensor.hochbeet_1_bodenfeuchte">
 
-    <fieldset class="grid sensor-fieldset">
+    <fieldset class="grid sensor-fieldset" data-influx-mode-fieldset>
       <legend>Influx</legend>
-      <p class="text-muted m-0">Bei Homeassistant-Entities wird der Standard der HA-InfluxDB-Integration genutzt: <code>_field=value</code>, Tags <code>entity_id</code> ohne Domain und <code>domain</code>.</p>
-      <label for="sensor-influx-measurement">Measurement</label>
-      <input id="sensor-influx-measurement" name="influx_measurement" value="{{ sensor.influx_measurement or '' }}" placeholder="für Homeassistant leer lassen">
-      <label for="sensor-influx-field">Field</label>
-      <input id="sensor-influx-field" name="influx_field" value="{{ sensor.influx_field or '' }}" placeholder="value">
-      <label for="sensor-influx-tags">Tags</label>
-      <textarea id="sensor-influx-tags" name="influx_tags" placeholder='{"entity_id":"bodenfeuchtigkeit","domain":"sensor"}'>{{ sensor.influx_tags or '' }}</textarea>
+      <p class="text-muted m-0">Wähle, ob nur die Homeassistant Entity-ID angegeben wird oder ob die Influx-Details manuell gepflegt werden.</p>
+      <div class="sensor-influx-mode-options" role="radiogroup" aria-label="Influx-Konfiguration">
+        <label class="radio-card">
+          <input type="radio" name="influx_details_mode" value="ha_entity" {% if sensor_uses_ha_defaults %}checked{% endif %} data-influx-mode-option>
+          <span>Nur HA Entity</span>
+        </label>
+        <label class="radio-card">
+          <input type="radio" name="influx_details_mode" value="details" {% if not sensor_uses_ha_defaults %}checked{% endif %} data-influx-mode-option>
+          <span>Komplette Details</span>
+        </label>
+      </div>
+      <p class="text-muted m-0" data-influx-ha-help>Bei Homeassistant-Entities nutzt Garten automatisch den Standard der HA-InfluxDB-Integration: <code>_field=value</code>, Tags <code>entity_id</code> ohne Domain und <code>domain</code>.</p>
+      <div class="grid sensor-influx-details" data-influx-details {% if sensor_uses_ha_defaults %}hidden{% endif %}>
+        <label for="sensor-influx-measurement">Measurement</label>
+        <input id="sensor-influx-measurement" name="influx_measurement" value="{{ sensor.influx_measurement or '' }}" placeholder="für Homeassistant leer lassen">
+        <label for="sensor-influx-field">Field</label>
+        <input id="sensor-influx-field" name="influx_field" value="{{ sensor.influx_field or '' }}" placeholder="value">
+        <label for="sensor-influx-tags">Tags</label>
+        <textarea id="sensor-influx-tags" name="influx_tags" placeholder='{"entity_id":"bodenfeuchtigkeit","domain":"sensor"}'>{{ sensor.influx_tags or '' }}</textarea>
+      </div>
     </fieldset>
 
     <fieldset class="grid sensor-fieldset sensor-position-fieldset">
@@ -86,6 +99,9 @@
 <style>
 .sensor-form{max-width:760px}
 .sensor-fieldset{border:1px solid var(--border);border-radius:12px;padding:.8rem}
+.sensor-influx-mode-options{display:flex;gap:.75rem;flex-wrap:wrap}
+.radio-card{display:flex;align-items:center;gap:.4rem;border:1px solid var(--border);border-radius:10px;padding:.45rem .65rem;background:var(--surface-soft);cursor:pointer}
+.sensor-influx-details[hidden]{display:none}
 .sensor-position-fieldset{gap:.65rem}
 .sensor-map-picker{position:relative;width:100%;max-width:100%;background:var(--surface-soft);border:1px solid var(--border);border-radius:10px;overflow:hidden;cursor:crosshair}
 .sensor-map-image{width:100%;border-radius:0}
@@ -99,9 +115,20 @@
   const measurementInput = document.getElementById('sensor-influx-measurement');
   const fieldInput = document.getElementById('sensor-influx-field');
   const tagsInput = document.getElementById('sensor-influx-tags');
+  const influxModeOptions = document.querySelectorAll('[data-influx-mode-option]');
+  const influxDetails = document.querySelector('[data-influx-details]');
+  const influxHaHelp = document.querySelector('[data-influx-ha-help]');
   if (!entityInput || !measurementInput || !fieldInput || !tagsInput) return;
 
   let lastGenerated = defaultsForEntity(entityInput.value) || {measurement: '', field: '', tags: ''};
+
+  function syncInfluxDetailsMode() {
+    const selectedMode = document.querySelector('[data-influx-mode-option]:checked')?.value || 'details';
+    const useHaEntityOnly = selectedMode === 'ha_entity';
+    if (influxDetails) influxDetails.hidden = useHaEntityOnly;
+    if (influxHaHelp) influxHaHelp.hidden = !useHaEntityOnly;
+    if (useHaEntityOnly) applyHomeassistantDefaults();
+  }
 
   function defaultsForEntity(rawEntity) {
     const entity = (rawEntity || '').trim();
@@ -136,6 +163,8 @@
 
   entityInput.addEventListener('input', applyHomeassistantDefaults);
   entityInput.addEventListener('change', applyHomeassistantDefaults);
+  influxModeOptions.forEach((input) => input.addEventListener('change', syncInfluxDetailsMode));
+  syncInfluxDetailsMode();
 
   const calibrationPoints = {{ (garden_map.calibration_points | stored_points if garden_map else []) | tojson }};
   const toGeo = (px, py) => {
