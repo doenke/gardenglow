@@ -239,10 +239,10 @@ class SensorModelTest(unittest.TestCase):
         self.assertIn('/sensors?location_id={}'.format(self.location_id), location_response.get_data(as_text=True))
         self.assertIn('Zur Sensorübersicht dieses Beets', location_response.get_data(as_text=True))
         location_html = location_response.get_data(as_text=True)
-        self.assertIn('Bodenfeuchte-Verlauf', location_html)
+        self.assertIn('Sensor-Verlauf', location_html)
         self.assertIn('Bodenfeuchte-Daten werden im Hintergrund geladen.', location_html)
         self.assertIn('.soil-moisture-chart-wrap{min-height:180px}', location_html)
-        self.assertIn("window.matchMedia('(max-width: 700px)').matches ? 180", location_html)
+        self.assertIn("window.matchMedia('(max-width: 700px)').matches ? mobileHeight : desktopHeight", location_html)
         self.assertNotIn('InfluxDB ist nicht vollständig konfiguriert', location_html)
 
 
@@ -302,7 +302,7 @@ class SensorModelTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         html = response.get_data(as_text=True)
-        self.assertIn('Bodenfeuchte-Verlauf', html)
+        self.assertIn('Sensor-Verlauf', html)
         self.assertIn('Bodenfeuchte-Daten werden im Hintergrund geladen.', html)
 
     def test_location_detail_does_not_use_unassigned_sensor_for_trash(self):
@@ -319,7 +319,7 @@ class SensorModelTest(unittest.TestCase):
 
         self.assertEqual(page_response.status_code, 200)
         page_html = page_response.get_data(as_text=True)
-        self.assertNotIn('Bodenfeuchte-Verlauf', page_html)
+        self.assertNotIn('Sensor-Verlauf', page_html)
         self.assertEqual(response.status_code, 200)
         payload = response.get_json()
         self.assertEqual(payload['sensors'], [])
@@ -663,7 +663,7 @@ class SensorModelTest(unittest.TestCase):
             response = self.client.get(f'/locations/{self.location_id}/soil-moisture')
 
         self.assertEqual(page_response.status_code, 200)
-        self.assertIn('Bodenfeuchte-Verlauf', page_response.get_data(as_text=True))
+        self.assertIn('Sensor-Verlauf', page_response.get_data(as_text=True))
         self.assertEqual(response.status_code, 200)
         payload = response.get_json()
         self.assertFalse(payload['has_series_data'])
