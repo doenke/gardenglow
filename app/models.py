@@ -21,9 +21,22 @@ plant_soil_property = db.Table(
     db.Column('soil_property_id', db.Integer, db.ForeignKey('soil_property.id'), primary_key=True),
 )
 
-soil_moisture_sensor_location = db.Table(
-    'soil_moisture_sensor_location',
-    db.Column('sensor_id', db.Integer, db.ForeignKey('soil_moisture_sensor.id'), primary_key=True),
+SENSOR_TYPE_SOIL_MOISTURE = 'soil_moisture'
+SENSOR_TYPE_TEMPERATURE = 'temperature'
+SENSOR_TYPE_RAINFALL = 'rainfall'
+SENSOR_TYPE_IRRIGATION = 'irrigation'
+
+SENSOR_TYPE_LABELS = {
+    SENSOR_TYPE_SOIL_MOISTURE: 'Bodenfeuchte',
+    SENSOR_TYPE_TEMPERATURE: 'Temperatur',
+    SENSOR_TYPE_RAINFALL: 'Niederschlag',
+    SENSOR_TYPE_IRRIGATION: 'Bewässerung',
+}
+SENSOR_TYPES = tuple(SENSOR_TYPE_LABELS.keys())
+
+sensor_location = db.Table(
+    'sensor_location',
+    db.Column('sensor_id', db.Integer, db.ForeignKey('sensor.id'), primary_key=True),
     db.Column('location_id', db.Integer, db.ForeignKey('location.id'), primary_key=True),
 )
 
@@ -58,15 +71,18 @@ class Location(db.Model):
     polygon_points = db.Column(db.Text)
 
 
-class SoilMoistureSensor(db.Model):
+class Sensor(db.Model):
+    __tablename__ = 'sensor'
     __table_args__ = (
-        db.Index('ix_soil_moisture_sensor_key', 'key'),
-        db.Index('ix_soil_moisture_sensor_is_active', 'is_active'),
+        db.Index('ix_sensor_key', 'key'),
+        db.Index('ix_sensor_sensor_type', 'sensor_type'),
+        db.Index('ix_sensor_is_active', 'is_active'),
     )
 
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(255), nullable=False)
     key = db.Column(db.String(128), unique=True, nullable=False)
+    sensor_type = db.Column(db.String(32), nullable=False, default=SENSOR_TYPE_SOIL_MOISTURE)
     homeassistant_entity_id = db.Column(db.String(255))
     influx_measurement = db.Column(db.String(255))
     influx_field = db.Column(db.String(255))
@@ -77,10 +93,14 @@ class SoilMoistureSensor(db.Model):
     is_active = db.Column(db.Boolean, nullable=False, default=True)
     locations = db.relationship(
         'Location',
-        secondary=soil_moisture_sensor_location,
+        secondary=sensor_location,
         lazy='select',
         order_by='Location.name',
     )
+
+    @property
+    def type_label(self):
+        return SENSOR_TYPE_LABELS.get(self.sensor_type, self.sensor_type or 'Sensor')
 
 
 class InfluxIntegrationConfig(db.Model):

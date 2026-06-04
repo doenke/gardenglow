@@ -1,7 +1,7 @@
 from flask import Flask
 from sqlalchemy import inspect
 from werkzeug.middleware.proxy_fix import ProxyFix
-from .models import db, LightNeed, InfluxIntegrationConfig
+from .models import db, LightNeed, InfluxIntegrationConfig, Sensor, SENSOR_TYPE_SOIL_MOISTURE
 from .auth import DEFAULT_MAX_AVATAR_SIZE_BYTES, OIDC_ENV_VARS, auth_bp, oauth, oidc_configured_from_env
 from .views import main_bp
 from .map_data import parse_stored_points
@@ -110,6 +110,7 @@ def create_app():
 
     with app.app_context():
         db.create_all()
+        _ensure_sensor_schema_and_migrate_legacy_soil_moisture_sensors()
         _ensure_influx_integration_config_columns()
         _seed_light_needs()
 
@@ -119,6 +120,74 @@ def create_app():
 
     return app
 
+
+
+def _ensure_sensor_schema_and_migrate_legacy_soil_moisture_sensors():
+    """Keep sensor schema compatible and migrate legacy soil moisture sensor rows."""
+    inspector = inspect(db.engine)
+    table_names = set(inspector.get_table_names())
+
+    if Sensor.__tablename__ not in table_names:
+        return
+
+    sensor_columns = {column['name'] for column in inspector.get_columns(Sensor.__tablename__)}
+    with db.engine.begin() as connection:
+        if 'sensor_type' not in sensor_columns:
+            connection.exec_driver_sql(
+                f'ALTER TABLE {Sensor.__tablename__} ADD COLUMN sensor_type VARCHAR(32)'
+            )
+        connection.exec_driver_sql(
+            f"UPDATE {Sensor.__tablename__} "
+            f"SET sensor_type = '{SENSOR_TYPE_SOIL_MOISTURE}' "
+            "WHERE sensor_type IS NULL OR sensor_type = ''"
+        )
+
+        if 'sensor_location' not in table_names:
+            connection.exec_driver_sql(
+                'CREATE TABLE sensor_location ('
+                'sensor_id INTEGER NOT NULL, '
+                'location_id INTEGER NOT NULL, '
+                'PRIMARY KEY (sensor_id, location_id), '
+                'FOREIGN KEY(sensor_id) REFERENCES sensor (id), '
+                'FOREIGN KEY(location_id) REFERENCES location (id)'
+                ')'
+            )
+
+        if 'soil_moisture_sensor' in table_names:
+            legacy_columns = {column['name'] for column in inspector.get_columns('soil_moisture_sensor')}
+            migrated_columns = [
+                'id',
+                'name',
+                'key',
+                'homeassistant_entity_id',
+                'influx_measurement',
+                'influx_field',
+                'influx_tags',
+                'map_x',
+                'map_y',
+                'creator_id',
+                'is_active',
+            ]
+            available_columns = [column for column in migrated_columns if column in legacy_columns]
+            insert_columns = ', '.join(available_columns + ['sensor_type'])
+            select_columns = ', '.join(f'legacy.{column}' for column in available_columns)
+            connection.exec_driver_sql(
+                f'INSERT INTO {Sensor.__tablename__} ({insert_columns}) '
+                f"SELECT {select_columns}, '{SENSOR_TYPE_SOIL_MOISTURE}' "
+                'FROM soil_moisture_sensor legacy '
+                f'WHERE NOT EXISTS (SELECT 1 FROM {Sensor.__tablename__} sensor WHERE sensor.id = legacy.id)'
+            )
+
+        if 'soil_moisture_sensor_location' in table_names:
+            connection.exec_driver_sql(
+                'INSERT INTO sensor_location (sensor_id, location_id) '
+                'SELECT legacy.sensor_id, legacy.location_id '
+                'FROM soil_moisture_sensor_location legacy '
+                'WHERE NOT EXISTS ('
+                'SELECT 1 FROM sensor_location current '
+                'WHERE current.sensor_id = legacy.sensor_id AND current.location_id = legacy.location_id'
+                ')'
+            )
 
 def _seed_light_needs():
     """Ensure the default light need catalog values exist."""

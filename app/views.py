@@ -15,7 +15,7 @@ import requests
 from functools import wraps
 from datetime import datetime, timezone, timedelta
 from flask import Blueprint, abort, current_app, g, render_template, request, redirect, url_for, session, jsonify, send_from_directory, flash, send_file
-from .models import db, utc_now, User, Location, Plant, PlantPhoto, PlantNote, GardenMap, TimelineEntry, LightNeed, SoilProperty, SoilMoistureSensor, PlantDatabaseIdentifier, InfluxIntegrationConfig, plant_soil_property, soil_moisture_sensor_location
+from .models import db, utc_now, User, Location, Plant, PlantPhoto, PlantNote, GardenMap, TimelineEntry, LightNeed, SoilProperty, Sensor, PlantDatabaseIdentifier, InfluxIntegrationConfig, plant_soil_property, sensor_location, SENSOR_TYPE_LABELS, SENSOR_TYPE_SOIL_MOISTURE, SENSOR_TYPES
 from .map_data import MapPointValidationError, parse_stored_points, validate_calibration_points, validate_polygon_points
 from .services.timeline_service import save_uploaded_attachment, set_single_title_entry, delete_timeline_entry, build_unique_upload_name
 from .services import influx_service
@@ -550,10 +550,10 @@ def build_unique_sensor_key(sensor, preferred_value):
     base = slugify_sensor_key(preferred_value)
     candidate = base
     counter = 2
-    query = SoilMoistureSensor.query
+    query = Sensor.query
     if sensor and sensor.id:
-        query = query.filter(SoilMoistureSensor.id != sensor.id)
-    existing_keys = {key for (key,) in query.with_entities(SoilMoistureSensor.key).all()}
+        query = query.filter(Sensor.id != sensor.id)
+    existing_keys = {key for (key,) in query.with_entities(Sensor.key).all()}
     while candidate in existing_keys:
         suffix = f'-{counter}'
         candidate = f'{base[:128 - len(suffix)]}{suffix}'
@@ -601,9 +601,14 @@ def apply_sensor_form(sensor, form):
     if not locations:
         return False, 'Bitte mindestens ein Beet auswählen.'
 
+    sensor_type = (form.get('sensor_type') or form.get('type') or SENSOR_TYPE_SOIL_MOISTURE).strip()
+    if sensor_type not in SENSOR_TYPES:
+        return False, 'Bitte einen gültigen Sensortyp auswählen.'
+
     entity_id = (form.get('homeassistant_entity_id') or '').strip() or None
     ha_influx_defaults = influx_service.homeassistant_entity_influx_defaults(entity_id) if entity_id else {}
     sensor.name = name
+    sensor.sensor_type = sensor_type
     sensor.homeassistant_entity_id = entity_id
     sensor.influx_measurement = (form.get('influx_measurement') or '').strip() or (
         ha_influx_defaults.get('measurement') if ha_influx_defaults else None
@@ -1234,11 +1239,12 @@ def _selected_soil_moisture_range():
 
 def _location_soil_moisture_sensors(location_id):
     return (
-        SoilMoistureSensor.query
-        .join(soil_moisture_sensor_location, SoilMoistureSensor.id == soil_moisture_sensor_location.c.sensor_id)
-        .filter(soil_moisture_sensor_location.c.location_id == location_id)
-        .filter(SoilMoistureSensor.is_active.is_(True))
-        .order_by(SoilMoistureSensor.name.asc(), SoilMoistureSensor.id.asc())
+        Sensor.query
+        .join(sensor_location, Sensor.id == sensor_location.c.sensor_id)
+        .filter(sensor_location.c.location_id == location_id)
+        .filter(Sensor.is_active.is_(True))
+        .filter(Sensor.sensor_type == SENSOR_TYPE_SOIL_MOISTURE)
+        .order_by(Sensor.name.asc(), Sensor.id.asc())
         .all()
     )
 
@@ -1473,9 +1479,10 @@ def _load_sensor_current_values(sensors):
 
 def _load_sensor_current_extremes():
     sensors = (
-        SoilMoistureSensor.query
-        .filter(SoilMoistureSensor.is_active.is_(True))
-        .order_by(SoilMoistureSensor.name.asc(), SoilMoistureSensor.id.asc())
+        Sensor.query
+        .filter(Sensor.is_active.is_(True))
+        .filter(Sensor.sensor_type == SENSOR_TYPE_SOIL_MOISTURE)
+        .order_by(Sensor.name.asc(), Sensor.id.asc())
         .all()
     )
     sensor_current_values = _load_sensor_current_values(sensors)
@@ -1499,12 +1506,13 @@ def _load_sensor_current_extremes():
 
 def _soil_moisture_current_for_location(location):
     sensors = (
-        SoilMoistureSensor.query
+        Sensor.query
         .filter(
-            SoilMoistureSensor.is_active.is_(True),
-            SoilMoistureSensor.locations.any(Location.id == location.id),
+            Sensor.is_active.is_(True),
+            Sensor.sensor_type == SENSOR_TYPE_SOIL_MOISTURE,
+            Sensor.locations.any(Location.id == location.id),
         )
-        .order_by(SoilMoistureSensor.name.asc(), SoilMoistureSensor.id.asc())
+        .order_by(Sensor.name.asc(), Sensor.id.asc())
         .all()
     )
     sensor_values = []
@@ -2130,13 +2138,15 @@ def delete_location(location_id):
 @login_required
 def sensors():
     selected_location_id = request.args.get('location_id', type=int)
-    sensors = SoilMoistureSensor.query.order_by(SoilMoistureSensor.name.asc(), SoilMoistureSensor.id.asc()).all()
+    sensors = Sensor.query.order_by(Sensor.name.asc(), Sensor.id.asc()).all()
     sensor_current_values = _load_sensor_current_values(sensors)
     locations = Location.query.order_by(*location_sort_criteria()).all()
     selected_location = db.session.get(Location, selected_location_id) if selected_location_id else None
     return render_template(
         'sensors.html',
         sensors=sensors,
+        sensor_type_labels=SENSOR_TYPE_LABELS,
+        sensor_types=SENSOR_TYPES,
         sensor_current_values=sensor_current_values,
         locations=locations,
         selected_location=selected_location,
@@ -2149,7 +2159,7 @@ def sensors():
 @main_bp.route('/sensors/new', methods=['POST'])
 @login_required
 def new_sensor():
-    sensor = SoilMoistureSensor(creator_id=current_user().id, key='pending')
+    sensor = Sensor(creator_id=current_user().id, key='pending')
     is_valid, error_message = apply_sensor_form(sensor, request.form)
     if not is_valid:
         flash(error_message, 'warning')
@@ -2163,13 +2173,15 @@ def new_sensor():
 @main_bp.route('/sensors/<int:sensor_id>')
 @login_required
 def sensor_detail(sensor_id):
-    sensor = session_get_or_404(SoilMoistureSensor, sensor_id)
+    sensor = session_get_or_404(Sensor, sensor_id)
     locations = Location.query.order_by(*location_sort_criteria()).all()
     return render_template(
         'sensor.html',
         sensor=sensor,
         locations=locations,
         selected_location_ids={location.id for location in sensor.locations},
+        sensor_type_labels=SENSOR_TYPE_LABELS,
+        sensor_types=SENSOR_TYPES,
         garden_map=GardenMap.query.order_by(GardenMap.id.asc()).first(),
         user=current_user(),
     )
@@ -2178,7 +2190,7 @@ def sensor_detail(sensor_id):
 @main_bp.route('/sensors/<int:sensor_id>/edit', methods=['POST'])
 @login_required
 def edit_sensor(sensor_id):
-    sensor = session_get_or_404(SoilMoistureSensor, sensor_id)
+    sensor = session_get_or_404(Sensor, sensor_id)
     is_valid, error_message = apply_sensor_form(sensor, request.form)
     if not is_valid:
         flash(error_message, 'warning')
@@ -2191,7 +2203,7 @@ def edit_sensor(sensor_id):
 @main_bp.route('/sensors/<int:sensor_id>/influx/test', methods=['POST'])
 @login_required
 def test_sensor_influx_value(sensor_id):
-    sensor = session_get_or_404(SoilMoistureSensor, sensor_id)
+    sensor = session_get_or_404(Sensor, sensor_id)
     config = _sensor_influx_config()
     if not config.enabled:
         flash('InfluxDB ist nicht vollständig konfiguriert; der letzte Sensorwert kann nicht abgerufen werden.', 'warning')
@@ -2217,7 +2229,7 @@ def test_sensor_influx_value(sensor_id):
 @main_bp.route('/sensors/<int:sensor_id>/delete', methods=['POST'])
 @login_required
 def delete_sensor(sensor_id):
-    sensor = session_get_or_404(SoilMoistureSensor, sensor_id)
+    sensor = session_get_or_404(Sensor, sensor_id)
     db.session.delete(sensor)
     db.session.commit()
     flash('Sensor wurde gelöscht.', 'success')
