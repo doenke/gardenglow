@@ -53,24 +53,30 @@
 </section>
 
 <dialog id="sensor-create-dialog" class="sensor-dialog" aria-labelledby="sensor-create-dialog-title">
-  <form method="post" action="/sensors/new" class="grid">
+  <form method="post" action="/sensors/new" class="grid sensor-create-form">
     <div class="dialog-head">
       <h3 id="sensor-create-dialog-title" class="m-0">Sensor anlegen</h3>
       <button type="button" id="close-sensor-create-dialog" class="btn secondary dialog-close" aria-label="Dialog schließen">×</button>
     </div>
 
-    <label for="sensor-label">Sensor-Bezeichnung</label>
-    <input id="sensor-label" name="sensor_label" placeholder="z. B. Sensor Hochbeet 1" autocomplete="off" data-1p-ignore required autofocus>
+    <div class="sensor-form-field">
+      <label for="sensor-label">Sensor-Bezeichnung</label>
+      <input id="sensor-label" name="sensor_label" placeholder="z. B. Sensor Hochbeet 1" autocomplete="off" data-1p-ignore required autofocus>
+    </div>
 
-    <label for="sensor-type">Sensortyp</label>
-    <select id="sensor-type" name="sensor_type" required>
-      {% for sensor_type in sensor_types %}
-      <option value="{{ sensor_type }}" {% if sensor_type == 'soil_moisture' %}selected{% endif %}>{{ sensor_type_labels[sensor_type] }}</option>
-      {% endfor %}
-    </select>
+    <div class="sensor-form-field">
+      <label for="sensor-type">Sensortyp</label>
+      <select id="sensor-type" name="sensor_type" required>
+        {% for sensor_type in sensor_types %}
+        <option value="{{ sensor_type }}" {% if sensor_type == 'soil_moisture' %}selected{% endif %}>{{ sensor_type_labels[sensor_type] }}</option>
+        {% endfor %}
+      </select>
+    </div>
 
-    <label for="sensor-homeassistant-entity-id">Homeassistant Entity-ID</label>
-    <input id="sensor-homeassistant-entity-id" name="homeassistant_entity_id" placeholder="z. B. sensor.hochbeet_1_bodenfeuchte">
+    <div class="sensor-form-field">
+      <label for="sensor-homeassistant-entity-id">Homeassistant Entity-ID</label>
+      <input id="sensor-homeassistant-entity-id" name="homeassistant_entity_id" placeholder="z. B. sensor.hochbeet_1_bodenfeuchte">
+    </div>
 
     <fieldset class="grid sensor-fieldset" data-influx-mode-fieldset>
       <legend>Influx</legend>
@@ -87,12 +93,18 @@
       </div>
       <p class="text-muted m-0" data-influx-ha-help>Bei Homeassistant-Entities nutzt Garten automatisch den Standard der HA-InfluxDB-Integration: <code>_field=value</code>, Tags <code>entity_id</code> ohne Domain und <code>domain</code>.</p>
       <div class="grid sensor-influx-details" data-influx-details hidden>
-        <label for="sensor-influx-measurement">Measurement</label>
-        <input id="sensor-influx-measurement" name="influx_measurement" placeholder="für Homeassistant leer lassen">
-        <label for="sensor-influx-field">Field</label>
-        <input id="sensor-influx-field" name="influx_field" placeholder="value">
-        <label for="sensor-influx-tags">Tags</label>
-        <textarea id="sensor-influx-tags" name="influx_tags" placeholder='{"entity_id":"bodenfeuchtigkeit","domain":"sensor"}'></textarea>
+        <div class="sensor-form-field">
+          <label for="sensor-influx-measurement">Measurement</label>
+          <input id="sensor-influx-measurement" name="influx_measurement" placeholder="für Homeassistant leer lassen">
+        </div>
+        <div class="sensor-form-field">
+          <label for="sensor-influx-field">Field</label>
+          <input id="sensor-influx-field" name="influx_field" placeholder="value">
+        </div>
+        <div class="sensor-form-field">
+          <label for="sensor-influx-tags">Tags</label>
+          <textarea id="sensor-influx-tags" name="influx_tags" placeholder='{"entity_id":"bodenfeuchtigkeit","domain":"sensor"}'></textarea>
+        </div>
       </div>
     </fieldset>
 
@@ -100,12 +112,14 @@
       <legend>Position</legend>
       <p class="text-muted m-0">Klicke/tippe in die komplette Luftbild-Übersicht, um die Sensorposition zu setzen.</p>
       <div class="field-pair">
-        <label for="sensor-map-x">Breitengrad
+        <div class="sensor-form-field">
+          <label for="sensor-map-x">Breitengrad</label>
           <input id="sensor-map-x" name="map_x" type="number" step="any" inputmode="decimal" placeholder="z. B. 52.5200">
-        </label>
-        <label for="sensor-map-y">Längengrad
+        </div>
+        <div class="sensor-form-field">
+          <label for="sensor-map-y">Längengrad</label>
           <input id="sensor-map-y" name="map_y" type="number" step="any" inputmode="decimal" placeholder="z. B. 13.4050">
-        </label>
+        </div>
       </div>
       {% if garden_map and garden_map.filename %}
       <div class="sensor-map-picker" data-map-picker data-map-x-input="sensor-map-x" data-map-y-input="sensor-map-y">
@@ -115,13 +129,15 @@
       {% endif %}
     </fieldset>
 
-    <label for="sensor-location-ids">Beete</label>
-    <select id="sensor-location-ids" name="location_ids" multiple size="{{ [locations|length, 6]|min }}" aria-describedby="sensor-location-help">
-      {% for location in locations %}
-      <option value="{{ location.id }}" {% if selected_location_id == location.id %}selected{% endif %}>{{ location.name }}</option>
-      {% endfor %}
-    </select>
-    <small id="sensor-location-help" class="text-muted">Mehrere Beete mit Strg/Cmd oder Shift auswählen. Keine Auswahl bedeutet: Sensor gilt für alle produktiven Beete. Papierkorb auswählen bedeutet: Sensor ist keinem produktiven Beet zugeordnet.</small>
+    <div class="sensor-form-field">
+      <label for="sensor-location-ids">Beete</label>
+      <select id="sensor-location-ids" name="location_ids" multiple size="{{ [locations|length, 6]|min }}" aria-describedby="sensor-location-help">
+        {% for location in locations %}
+        <option value="{{ location.id }}" {% if selected_location_id == location.id %}selected{% endif %}>{{ location.name }}</option>
+        {% endfor %}
+      </select>
+      <small id="sensor-location-help" class="text-muted">Mehrere Beete mit Strg/Cmd oder Shift auswählen. Keine Auswahl bedeutet: Sensor gilt für alle produktiven Beete. Papierkorb auswählen bedeutet: Sensor ist keinem produktiven Beet zugeordnet.</small>
+    </div>
 
     <div class="actions-inline">
       <button type="submit">Anlegen</button>
@@ -133,6 +149,9 @@
 <style>
 .sensor-dialog{width:min(92vw,620px);border:1px solid var(--border);border-radius:16px;background:var(--surface);color:var(--text);box-shadow:var(--shadow);padding:1rem}
 .sensor-dialog::backdrop{background:rgba(0,0,0,.45);backdrop-filter:blur(2px)}
+.sensor-create-form{gap:.9rem}
+.sensor-form-field{display:grid;gap:.35rem}
+.sensor-form-field>label{font-weight:700}
 .sensor-fieldset{border:1px solid var(--border);border-radius:12px;padding:.8rem}
 .sensor-influx-mode-options{display:flex;gap:.75rem;flex-wrap:wrap}
 .radio-card{display:flex;align-items:center;gap:.4rem;border:1px solid var(--border);border-radius:10px;padding:.45rem .65rem;background:var(--surface-soft);cursor:pointer}
