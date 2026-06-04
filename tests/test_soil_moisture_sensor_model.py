@@ -155,6 +155,36 @@ class SensorModelTest(unittest.TestCase):
                 {'entity_id': 'third_reality_inc_3rsm0347z_bodenfeuchtigkeit', 'domain': 'sensor'},
             )
 
+    def test_sensor_routes_override_influx_details_in_ha_entity_mode(self):
+        response = self.client.post('/sensors/new', data={
+            'name': 'HA-only Bodensensor',
+            'homeassistant_entity_id': 'sensor.ha_only_bodenfeuchtigkeit',
+            'influx_details_mode': 'ha_entity',
+            'influx_measurement': 'custom_measurement',
+            'influx_field': 'custom_field',
+            'influx_tags': '{"custom":"tag"}',
+            'location_ids': [str(self.location_id)],
+        }, follow_redirects=False)
+
+        self.assertEqual(response.status_code, 302)
+        with self.app.app_context():
+            sensor = Sensor.query.filter_by(name='HA-only Bodensensor').one()
+            self.assertIsNone(sensor.influx_measurement)
+            self.assertEqual(sensor.influx_field, 'value')
+            self.assertEqual(json.loads(sensor.influx_tags), {'entity_id': 'ha_only_bodenfeuchtigkeit', 'domain': 'sensor'})
+
+    def test_sensor_routes_require_entity_in_ha_entity_mode(self):
+        response = self.client.post('/sensors/new', data={
+            'name': 'HA-only ohne Entity',
+            'influx_details_mode': 'ha_entity',
+            'influx_measurement': 'custom_measurement',
+        }, follow_redirects=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('Bitte eine Homeassistant Entity-ID angeben.', response.get_data(as_text=True))
+        with self.app.app_context():
+            self.assertFalse(Sensor.query.filter_by(name='HA-only ohne Entity').first())
+
     def test_sensor_detail_can_test_latest_influx_value(self):
         with self.app.app_context():
             db.session.add(InfluxIntegrationConfig(
@@ -187,11 +217,16 @@ class SensorModelTest(unittest.TestCase):
         self.assertIn('Sensor anlegen', sensors_response.get_data(as_text=True))
         self.assertIn('Sensortyp', sensors_response.get_data(as_text=True))
         self.assertIn('Temperatur', sensors_response.get_data(as_text=True))
-        self.assertIn('Homeassistant Entity-ID', sensors_response.get_data(as_text=True))
+        sensors_html = sensors_response.get_data(as_text=True)
+        self.assertIn('Homeassistant Entity-ID', sensors_html)
+        self.assertIn('Nur HA Entity', sensors_html)
+        self.assertIn('Komplette Details', sensors_html)
         self.assertEqual(sensor_response.status_code, 200)
         self.assertIn('/sensors/{}/edit'.format(self.sensor_id), sensor_response.get_data(as_text=True))
         self.assertIn('soil_moisture', sensor_response.get_data(as_text=True))
-        self.assertIn('Letzten Influx-Wert testen', sensor_response.get_data(as_text=True))
+        sensor_html = sensor_response.get_data(as_text=True)
+        self.assertIn('Letzten Influx-Wert testen', sensor_html)
+        self.assertIn('Komplette Details', sensor_html)
         self.assertEqual(location_response.status_code, 200)
         self.assertIn('/sensors?location_id={}'.format(self.location_id), location_response.get_data(as_text=True))
         self.assertIn('Zur Sensorübersicht dieses Beets', location_response.get_data(as_text=True))

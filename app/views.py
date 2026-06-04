@@ -588,6 +588,31 @@ def get_selected_sensor_locations(form):
     return Location.query.filter(Location.id.in_(selected_ids)).order_by(*location_sort_criteria()).all()
 
 
+def sensor_uses_homeassistant_influx_defaults(sensor):
+    entity_id = (getattr(sensor, 'homeassistant_entity_id', None) or '').strip()
+    if not entity_id:
+        return False
+
+    defaults = influx_service.homeassistant_entity_influx_defaults(entity_id)
+    current_measurement = (getattr(sensor, 'influx_measurement', None) or '').strip()
+    current_field = (getattr(sensor, 'influx_field', None) or '').strip()
+    current_tags = (getattr(sensor, 'influx_tags', None) or '').strip()
+    default_measurement = (defaults.get('measurement') or '').strip()
+    default_field = (defaults.get('field') or '').strip()
+    default_tags = (defaults.get('tags') or '').strip()
+
+    if current_measurement != default_measurement or current_field != default_field:
+        return False
+
+    if current_tags == default_tags:
+        return True
+
+    try:
+        return json.loads(current_tags) == json.loads(default_tags)
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return False
+
+
 def apply_sensor_form(sensor, form):
     name = (form.get('sensor_label') or form.get('name') or '').strip()
     if not name:
@@ -608,19 +633,29 @@ def apply_sensor_form(sensor, form):
         return False, 'Bitte einen gültigen Sensortyp auswählen.'
 
     entity_id = (form.get('homeassistant_entity_id') or '').strip() or None
+    influx_details_mode = (form.get('influx_details_mode') or 'details').strip()
+    use_homeassistant_defaults = influx_details_mode == 'ha_entity'
+    if use_homeassistant_defaults and not entity_id:
+        return False, 'Bitte eine Homeassistant Entity-ID angeben.'
+
     ha_influx_defaults = influx_service.homeassistant_entity_influx_defaults(entity_id) if entity_id else {}
     sensor.name = name
     sensor.sensor_type = sensor_type
     sensor.homeassistant_entity_id = entity_id
-    sensor.influx_measurement = (form.get('influx_measurement') or '').strip() or (
-        ha_influx_defaults.get('measurement') if ha_influx_defaults else None
-    ) or None
-    sensor.influx_field = (form.get('influx_field') or '').strip() or (
-        ha_influx_defaults.get('field') if ha_influx_defaults else None
-    ) or None
-    sensor.influx_tags = (form.get('influx_tags') or '').strip() or (
-        ha_influx_defaults.get('tags') if ha_influx_defaults else None
-    ) or None
+    if use_homeassistant_defaults:
+        sensor.influx_measurement = (ha_influx_defaults.get('measurement') if ha_influx_defaults else None) or None
+        sensor.influx_field = (ha_influx_defaults.get('field') if ha_influx_defaults else None) or None
+        sensor.influx_tags = (ha_influx_defaults.get('tags') if ha_influx_defaults else None) or None
+    else:
+        sensor.influx_measurement = (form.get('influx_measurement') or '').strip() or (
+            ha_influx_defaults.get('measurement') if ha_influx_defaults else None
+        ) or None
+        sensor.influx_field = (form.get('influx_field') or '').strip() or (
+            ha_influx_defaults.get('field') if ha_influx_defaults else None
+        ) or None
+        sensor.influx_tags = (form.get('influx_tags') or '').strip() or (
+            ha_influx_defaults.get('tags') if ha_influx_defaults else None
+        ) or None
     sensor.map_x = map_x
     sensor.map_y = map_y
     sensor.key = build_unique_sensor_key(sensor, entity_id or name)
@@ -2193,6 +2228,7 @@ def sensor_detail(sensor_id):
         selected_location_ids={location.id for location in sensor.locations},
         sensor_type_labels=SENSOR_TYPE_LABELS,
         sensor_types=SENSOR_TYPES,
+        sensor_uses_ha_defaults=sensor_uses_homeassistant_influx_defaults(sensor),
         garden_map=GardenMap.query.order_by(GardenMap.id.asc()).first(),
         user=current_user(),
     )
