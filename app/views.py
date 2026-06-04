@@ -2282,8 +2282,14 @@ def test_sensor_influx_value(sensor_id):
         return redirect(url_for('main.sensor_detail', sensor_id=sensor.id))
 
     value = datapoint.get('value')
+    numeric_value = _numeric_sensor_value(value)
+    display_value = (
+        _format_sensor_value(numeric_value, _sensor_value_unit(sensor))
+        if numeric_value is not None
+        else value
+    )
     timestamp = datapoint.get('time') or 'Zeitpunkt unbekannt'
-    flash(f'Letzter Influx-Wert: {value} ({timestamp})', 'success')
+    flash(f'Letzter Influx-Wert: {display_value} ({timestamp})', 'success')
     return redirect(url_for('main.sensor_detail', sensor_id=sensor.id))
 
 

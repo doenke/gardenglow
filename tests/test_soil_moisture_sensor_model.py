@@ -209,7 +209,7 @@ class SensorModelTest(unittest.TestCase):
         adapter_factory.assert_called_once()
         latest_value.assert_called_once()
         html = response.get_data(as_text=True)
-        self.assertIn('Letzter Influx-Wert: 42.5 (2026-06-03T08:00:00Z)', html)
+        self.assertIn('Letzter Influx-Wert: 42,5 % (2026-06-03T08:00:00Z)', html)
 
     def test_sensor_pages_render_forms_and_location_action(self):
         sensors_response = self.client.get('/sensors')
