@@ -84,7 +84,7 @@ class LocationTimelineViewTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         html = response.get_data(as_text=True)
         self.assertIn('const dailyTemperatureRange = (points) => {', html)
-        self.assertIn("const drawTemperatureRangeArea = (context, ranges, { xFor, yFor, color = '#dc2626' }) => {", html)
+        self.assertIn('const drawTemperatureRangeArea = (context, ranges, { xFor, yFor }) => {', html)
         self.assertIn('drawTemperatureRangeArea(context, temperatureRanges', html)
         self.assertIn('data-chart-height="260" data-chart-height-mobile="180"', html)
         self.assertIn('const desktopHeight = Number(canvas.dataset.chartHeight) || 260;', html)
