@@ -16,7 +16,6 @@ from datetime import datetime, timezone, timedelta
 from flask import Blueprint, abort, current_app, g, render_template, request, redirect, url_for, session, jsonify, send_from_directory, flash, send_file
 from .models import db, utc_now, User, Location, Plant, PlantPhoto, PlantNote, GardenMap, TimelineEntry, LightNeed, SoilProperty, Sensor, PlantDatabaseIdentifier, InfluxIntegrationConfig, plant_soil_property, sensor_location, SENSOR_TYPE_LABELS, SENSOR_TYPE_SOIL_MOISTURE, SENSOR_TYPE_TEMPERATURE, SENSOR_TYPE_RAINFALL, SENSOR_TYPES
 from sqlalchemy import or_
-from
 from .map_data import MapPointValidationError, parse_stored_points, validate_calibration_points, validate_polygon_points
 from .services.timeline_service import save_uploaded_attachment, set_single_title_entry, delete_timeline_entry, build_unique_upload_name
 from .services import influx_service
@@ -603,7 +602,9 @@ def apply_sensor_form(sensor, form):
     # Beet zugeordnet sein, wird stattdessen der Papierkorb ausgewählt.
     locations = get_selected_sensor_locations(form)
 
-    sensor_type = (form.get('sensor_type') or form.get('type') or SENSOR_TYPE_SOIL_MOISTURE).strip()
+    sensor_type = (form.get('sensor_type') or form.get('type') or '').strip()
+    if not sensor_type:
+        return False, 'Bitte einen Sensortyp auswählen.'
     if sensor_type not in SENSOR_TYPES:
         return False, 'Bitte einen gültigen Sensortyp auswählen.'
 

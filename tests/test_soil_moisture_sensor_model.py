@@ -9,7 +9,7 @@ from unittest.mock import patch
 os.environ.setdefault('SECRET_KEY', 'x' * 40)
 
 from app import create_app
-from app.models import InfluxIntegrationConfig, Location, Plant, Sensor, User, db, sensor_location, SENSOR_TYPE_SOIL_MOISTURE, SENSOR_TYPE_TEMPERATURE, SENSOR_TYPE_RAINFALL
+from app.models import InfluxIntegrationConfig, Location, Plant, Sensor, User, db, sensor_location, SENSOR_TYPE_SOIL_MOISTURE, SENSOR_TYPE_TEMPERATURE, SENSOR_TYPE_RAINFALL, SENSOR_TYPE_IRRIGATION
 
 
 class SensorModelTest(unittest.TestCase):
@@ -88,6 +88,7 @@ class SensorModelTest(unittest.TestCase):
 
         response = self.client.post('/sensors/new', data={
             'name': 'Neuer Bodensensor',
+            'sensor_type': SENSOR_TYPE_RAINFALL,
             'homeassistant_entity_id': 'sensor.neuer_bodensensor',
             'influx_measurement': 'soil',
             'influx_field': 'moisture',
@@ -101,7 +102,7 @@ class SensorModelTest(unittest.TestCase):
         with self.app.app_context():
             sensor = Sensor.query.filter_by(homeassistant_entity_id='sensor.neuer_bodensensor').one()
             self.assertEqual(sensor.key, 'sensor-neuer-bodensensor')
-            self.assertEqual(sensor.sensor_type, SENSOR_TYPE_SOIL_MOISTURE)
+            self.assertEqual(sensor.sensor_type, SENSOR_TYPE_RAINFALL)
             self.assertEqual(sensor.influx_measurement, 'soil')
             self.assertEqual(sensor.influx_field, 'moisture')
             self.assertEqual(sensor.influx_tags, 'bed=one')
@@ -138,6 +139,7 @@ class SensorModelTest(unittest.TestCase):
     def test_sensor_routes_fill_homeassistant_influx_defaults_when_blank(self):
         response = self.client.post('/sensors/new', data={
             'name': 'Homeassistant Bodensensor',
+            'sensor_type': SENSOR_TYPE_SOIL_MOISTURE,
             'homeassistant_entity_id': 'sensor.third_reality_inc_3rsm0347z_bodenfeuchtigkeit',
             'influx_measurement': '',
             'influx_field': '',
@@ -184,14 +186,23 @@ class SensorModelTest(unittest.TestCase):
         location_response = self.client.get(f'/locations/{self.location_id}')
 
         self.assertEqual(sensors_response.status_code, 200)
-        self.assertIn('Sensor anlegen', sensors_response.get_data(as_text=True))
-        self.assertIn('Sensortyp', sensors_response.get_data(as_text=True))
-        self.assertIn('Temperatur', sensors_response.get_data(as_text=True))
-        self.assertIn('Homeassistant Entity-ID', sensors_response.get_data(as_text=True))
+        sensors_html = sensors_response.get_data(as_text=True)
+        self.assertIn('Sensor anlegen', sensors_html)
+        self.assertIn('Sensortyp', sensors_html)
+        self.assertIn('Bodenfeuchte', sensors_html)
+        self.assertIn('Temperatur', sensors_html)
+        self.assertIn('Niederschlag', sensors_html)
+        self.assertIn('Bewässerung', sensors_html)
+        self.assertIn('data-label="Typ"', sensors_html)
+        self.assertIn('Homeassistant Entity-ID', sensors_html)
+        self.assertNotIn('Bodenfeuchte-Sensoren', sensors_html)
         self.assertEqual(sensor_response.status_code, 200)
-        self.assertIn('/sensors/{}/edit'.format(self.sensor_id), sensor_response.get_data(as_text=True))
-        self.assertIn('soil_moisture', sensor_response.get_data(as_text=True))
-        self.assertIn('Letzten Influx-Wert testen', sensor_response.get_data(as_text=True))
+        sensor_html = sensor_response.get_data(as_text=True)
+        self.assertIn('/sensors/{}/edit'.format(self.sensor_id), sensor_html)
+        self.assertIn('soil_moisture', sensor_html)
+        self.assertIn('Sensortyp', sensor_html)
+        self.assertIn('Bewässerung', sensor_html)
+        self.assertIn('Letzten Influx-Wert testen', sensor_html)
         self.assertEqual(location_response.status_code, 200)
         self.assertIn('/sensors?location_id={}'.format(self.location_id), location_response.get_data(as_text=True))
         self.assertIn('Zur Sensorübersicht dieses Beets', location_response.get_data(as_text=True))
@@ -256,6 +267,7 @@ class SensorModelTest(unittest.TestCase):
     def test_empty_sensor_location_selection_means_all_productive_beds(self):
         response = self.client.post('/sensors/new', data={
             'name': 'Globaler Bodensensor',
+            'sensor_type': SENSOR_TYPE_IRRIGATION,
             'homeassistant_entity_id': 'sensor.globaler_bodensensor',
             'influx_measurement': 'soil',
             'influx_field': 'moisture',
