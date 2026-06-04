@@ -220,7 +220,7 @@ class SensorModelTest(unittest.TestCase):
         self.assertNotIn('<th>Position</th>', html)
         self.assertNotIn('data-label="Position"', html)
 
-    def test_location_detail_hides_soil_moisture_without_linked_sensor(self):
+    def test_location_detail_uses_unassigned_sensor_for_productive_beds(self):
         with self.app.app_context():
             sensor = db.session.get(Sensor, self.sensor_id)
             sensor.locations.clear()
@@ -230,8 +230,48 @@ class SensorModelTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         html = response.get_data(as_text=True)
-        self.assertNotIn('aria-label="Aktuelle Bodenfeuchte"', html)
-        self.assertNotIn('Bodenfeuchte-Verlauf', html)
+        self.assertIn('Bodenfeuchte-Verlauf', html)
+        self.assertIn('Bodenfeuchte-Daten werden im Hintergrund geladen.', html)
+
+    def test_location_detail_does_not_use_unassigned_sensor_for_trash(self):
+        with self.app.app_context():
+            sensor = db.session.get(Sensor, self.sensor_id)
+            sensor.locations.clear()
+            trash = Location(name='Papierkorb')
+            db.session.add(trash)
+            db.session.commit()
+            trash_id = trash.id
+
+        page_response = self.client.get(f'/locations/{trash_id}')
+        response = self.client.get(f'/locations/{trash_id}/soil-moisture')
+
+        self.assertEqual(page_response.status_code, 200)
+        page_html = page_response.get_data(as_text=True)
+        self.assertNotIn('Bodenfeuchte-Verlauf', page_html)
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertEqual(payload['sensors'], [])
+        self.assertEqual(payload['current']['sensor_values'], [])
+
+    def test_empty_sensor_location_selection_means_all_productive_beds(self):
+        response = self.client.post('/sensors/new', data={
+            'name': 'Globaler Bodensensor',
+            'homeassistant_entity_id': 'sensor.globaler_bodensensor',
+            'influx_measurement': 'soil',
+            'influx_field': 'moisture',
+            'influx_tags': 'bed=all',
+        }, follow_redirects=False)
+
+        self.assertEqual(response.status_code, 302)
+        with self.app.app_context():
+            sensor = Sensor.query.filter_by(homeassistant_entity_id='sensor.globaler_bodensensor').one()
+            self.assertEqual(sensor.locations, [])
+
+        list_response = self.client.get('/sensors')
+        self.assertEqual(list_response.status_code, 200)
+        html = list_response.get_data(as_text=True)
+        self.assertIn('Alle produktiven Beete', html)
+        self.assertIn('Keine Auswahl bedeutet: Sensor gilt für alle produktiven Beete.', html)
 
     def test_location_detail_offers_one_year_soil_moisture_range(self):
         response = self.client.get(f'/locations/{self.location_id}?moisture_range=1y')
