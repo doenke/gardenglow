@@ -9,7 +9,7 @@ from unittest.mock import patch
 os.environ.setdefault('SECRET_KEY', 'x' * 40)
 
 from app import create_app
-from app.models import InfluxIntegrationConfig, Location, Plant, Sensor, User, db, sensor_location, SENSOR_TYPE_SOIL_MOISTURE, SENSOR_TYPE_TEMPERATURE, SENSOR_TYPE_RAINFALL
+from app.models import InfluxIntegrationConfig, Location, Plant, Sensor, User, db, sensor_location, SENSOR_TYPE_SOIL_MOISTURE, SENSOR_TYPE_TEMPERATURE, SENSOR_TYPE_RAINFALL, SENSOR_TYPE_IRRIGATION
 
 
 class SensorModelTest(unittest.TestCase):
@@ -427,6 +427,59 @@ class SensorModelTest(unittest.TestCase):
             {int(item['points'][0]['value']) for item in temperature_series},
             expected_sensor_ids,
         )
+
+
+    def test_location_sensor_mapping_applies_type_filter_and_global_assignment(self):
+        with self.app.app_context():
+            from app.views import _location_irrigation_sensors, _location_soil_moisture_sensors
+
+            trash = Location(name='Papierkorb')
+            db.session.add(trash)
+            db.session.flush()
+            global_soil = Sensor(
+                name='Globale Bodenfeuchte',
+                key='soil-global',
+                sensor_type=SENSOR_TYPE_SOIL_MOISTURE,
+                creator_id=self.user_id,
+                is_active=True,
+            )
+            global_temperature = Sensor(
+                name='Globale Temperatur',
+                key='temperature-global-filtered',
+                sensor_type=SENSOR_TYPE_TEMPERATURE,
+                creator_id=self.user_id,
+                is_active=True,
+            )
+            global_irrigation = Sensor(
+                name='Globale Bewässerung',
+                key='irrigation-global',
+                sensor_type=SENSOR_TYPE_IRRIGATION,
+                creator_id=self.user_id,
+                is_active=True,
+            )
+            trash_soil = Sensor(
+                name='Papierkorb Bodenfeuchte',
+                key='soil-trash',
+                sensor_type=SENSOR_TYPE_SOIL_MOISTURE,
+                creator_id=self.user_id,
+                is_active=True,
+            )
+            trash_soil.locations.append(trash)
+            db.session.add_all([global_soil, global_temperature, global_irrigation, trash_soil])
+            db.session.commit()
+            global_soil_id = global_soil.id
+            global_temperature_id = global_temperature.id
+            global_irrigation_id = global_irrigation.id
+            trash_soil_id = trash_soil.id
+
+            soil_sensor_ids = {sensor.id for sensor in _location_soil_moisture_sensors(self.location_id)}
+            irrigation_sensor_ids = {sensor.id for sensor in _location_irrigation_sensors(self.location_id)}
+
+        self.assertIn(self.sensor_id, soil_sensor_ids)
+        self.assertIn(global_soil_id, soil_sensor_ids)
+        self.assertNotIn(global_temperature_id, soil_sensor_ids)
+        self.assertNotIn(trash_soil_id, soil_sensor_ids)
+        self.assertEqual(irrigation_sensor_ids, {global_irrigation_id})
 
     def test_location_detail_hides_soil_moisture_when_influx_fails(self):
         class FailingAdapter:

@@ -14,9 +14,8 @@ import requests
 from functools import wraps
 from datetime import datetime, timezone, timedelta
 from flask import Blueprint, abort, current_app, g, render_template, request, redirect, url_for, session, jsonify, send_from_directory, flash, send_file
-from .models import db, utc_now, User, Location, Plant, PlantPhoto, PlantNote, GardenMap, TimelineEntry, LightNeed, SoilProperty, Sensor, PlantDatabaseIdentifier, InfluxIntegrationConfig, plant_soil_property, sensor_location, SENSOR_TYPE_LABELS, SENSOR_TYPE_SOIL_MOISTURE, SENSOR_TYPE_TEMPERATURE, SENSOR_TYPE_RAINFALL, SENSOR_TYPES
+from .models import db, utc_now, User, Location, Plant, PlantPhoto, PlantNote, GardenMap, TimelineEntry, LightNeed, SoilProperty, Sensor, PlantDatabaseIdentifier, InfluxIntegrationConfig, plant_soil_property, SENSOR_TYPE_LABELS, SENSOR_TYPE_SOIL_MOISTURE, SENSOR_TYPE_TEMPERATURE, SENSOR_TYPE_RAINFALL, SENSOR_TYPE_IRRIGATION, SENSOR_TYPES
 from sqlalchemy import or_
-from
 from .map_data import MapPointValidationError, parse_stored_points, validate_calibration_points, validate_polygon_points
 from .services.timeline_service import save_uploaded_attachment, set_single_title_entry, delete_timeline_entry, build_unique_upload_name
 from .services import influx_service
@@ -1265,8 +1264,16 @@ def _location_sensors(location_id, sensor_type=None):
     return query.order_by(Sensor.name.asc(), Sensor.id.asc()).all()
 
 
+def _location_sensors_by_type(location_id, sensor_type):
+    return _location_sensors(location_id, sensor_type)
+
+
 def _location_soil_moisture_sensors(location_id):
-    return _location_sensors(location_id, SENSOR_TYPE_SOIL_MOISTURE)
+    return _location_sensors_by_type(location_id, SENSOR_TYPE_SOIL_MOISTURE)
+
+
+def _location_irrigation_sensors(location_id):
+    return _location_sensors_by_type(location_id, SENSOR_TYPE_IRRIGATION)
 
 
 def _empty_soil_moisture_series(sensors):
@@ -1299,26 +1306,11 @@ def _empty_weather_sensor_series(sensors_by_kind=None):
 
 
 def _location_weather_sensors(location_id):
-    """Return weather sensors for a location, treating unassigned sensors as global."""
-    trash_location = Location.query.filter_by(name=TRASH_LOCATION_NAME).order_by(Location.id.asc()).first()
-    sensors_by_kind = {}
-    for kind, sensor_type in _weather_sensor_types().items():
-        sensors = (
-            Sensor.query
-            .outerjoin(sensor_location, Sensor.id == sensor_location.c.sensor_id)
-            .filter(Sensor.is_active.is_(True))
-            .filter(Sensor.sensor_type == sensor_type)
-            .filter(db.or_(sensor_location.c.location_id.is_(None), sensor_location.c.location_id == location_id))
-            .order_by(Sensor.name.asc(), Sensor.id.asc())
-            .all()
-        )
-        if trash_location and trash_location.id != location_id:
-            sensors = [
-                sensor for sensor in sensors
-                if not sensor.locations or any(location.id == location_id for location in sensor.locations)
-            ]
-        sensors_by_kind[kind] = sensors
-    return sensors_by_kind
+    """Return weather sensors for a location using the central location mapping rules."""
+    return {
+        kind: _location_sensors_by_type(location_id, sensor_type)
+        for kind, sensor_type in _weather_sensor_types().items()
+    }
 
 
 def _load_location_weather_sensor_series(location_id, lookback):
