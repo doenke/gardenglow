@@ -1,6 +1,7 @@
 import json
 import os
 import re
+import sqlite3
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -8,10 +9,10 @@ from unittest.mock import patch
 os.environ.setdefault('SECRET_KEY', 'x' * 40)
 
 from app import create_app
-from app.models import InfluxIntegrationConfig, Location, Plant, SoilMoistureSensor, User, db, soil_moisture_sensor_location
+from app.models import InfluxIntegrationConfig, Location, Plant, Sensor, User, db, sensor_location, SENSOR_TYPE_SOIL_MOISTURE, SENSOR_TYPE_TEMPERATURE
 
 
-class SoilMoistureSensorModelTest(unittest.TestCase):
+class SensorModelTest(unittest.TestCase):
     def setUp(self):
         self.db_fd, self.db_path = tempfile.mkstemp(suffix='.sqlite')
         os.close(self.db_fd)
@@ -28,7 +29,7 @@ class SoilMoistureSensorModelTest(unittest.TestCase):
             db.session.add(self.location)
             db.session.flush()
             self.plant = Plant(name='Minze', location_id=self.location.id, creator_id=self.user.id, map_x=10, map_y=20)
-            self.sensor = SoilMoistureSensor(
+            self.sensor = Sensor(
                 name='Bodenfeuchte Sensor 1',
                 key='soil-sensor-1',
                 homeassistant_entity_id='sensor.bodenfeuchte_1',
@@ -59,10 +60,12 @@ class SoilMoistureSensorModelTest(unittest.TestCase):
 
     def test_sensor_model_persists_fields_and_location_relationship(self):
         with self.app.app_context():
-            sensor = db.session.get(SoilMoistureSensor, self.sensor_id)
+            sensor = db.session.get(Sensor, self.sensor_id)
 
             self.assertEqual(sensor.key, 'soil-sensor-1')
             self.assertEqual(sensor.homeassistant_entity_id, 'sensor.bodenfeuchte_1')
+            self.assertEqual(sensor.sensor_type, SENSOR_TYPE_SOIL_MOISTURE)
+            self.assertEqual(sensor.type_label, 'Bodenfeuchte')
             self.assertEqual(sensor.influx_measurement, 'soil_moisture')
             self.assertEqual(sensor.influx_field, 'value')
             self.assertEqual(sensor.influx_tags, '{"source": "homeassistant"}')
@@ -71,7 +74,7 @@ class SoilMoistureSensorModelTest(unittest.TestCase):
             self.assertTrue(sensor.is_active)
             self.assertEqual([location.name for location in sensor.locations], ['Sensorbeet'])
 
-            association_rows = db.session.execute(soil_moisture_sensor_location.select()).fetchall()
+            association_rows = db.session.execute(sensor_location.select()).fetchall()
             self.assertEqual(len(association_rows), 1)
             self.assertEqual(association_rows[0].sensor_id, sensor.id)
             self.assertEqual(association_rows[0].location_id, self.location_id)
@@ -96,8 +99,9 @@ class SoilMoistureSensorModelTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 302)
         with self.app.app_context():
-            sensor = SoilMoistureSensor.query.filter_by(homeassistant_entity_id='sensor.neuer_bodensensor').one()
+            sensor = Sensor.query.filter_by(homeassistant_entity_id='sensor.neuer_bodensensor').one()
             self.assertEqual(sensor.key, 'sensor-neuer-bodensensor')
+            self.assertEqual(sensor.sensor_type, SENSOR_TYPE_SOIL_MOISTURE)
             self.assertEqual(sensor.influx_measurement, 'soil')
             self.assertEqual(sensor.influx_field, 'moisture')
             self.assertEqual(sensor.influx_tags, 'bed=one')
@@ -108,6 +112,7 @@ class SoilMoistureSensorModelTest(unittest.TestCase):
 
         response = self.client.post(f'/sensors/{sensor_id}/edit', data={
             'name': 'Aktualisierter Bodensensor',
+            'sensor_type': SENSOR_TYPE_TEMPERATURE,
             'homeassistant_entity_id': 'sensor.aktualisierter_bodensensor',
             'influx_measurement': 'soil',
             'influx_field': 'value',
@@ -119,10 +124,11 @@ class SoilMoistureSensorModelTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 302)
         with self.app.app_context():
-            sensor = db.session.get(SoilMoistureSensor, sensor_id)
+            sensor = db.session.get(Sensor, sensor_id)
             self.assertEqual(sensor.name, 'Aktualisierter Bodensensor')
             self.assertEqual(sensor.key, 'sensor-aktualisierter-bodensensor')
             self.assertEqual(sensor.homeassistant_entity_id, 'sensor.aktualisierter_bodensensor')
+            self.assertEqual(sensor.sensor_type, SENSOR_TYPE_TEMPERATURE)
             self.assertEqual(sensor.influx_field, 'value')
             self.assertEqual(sensor.influx_tags, 'bed=two')
             self.assertEqual(sensor.map_x, 98.1)
@@ -141,7 +147,7 @@ class SoilMoistureSensorModelTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 302)
         with self.app.app_context():
-            sensor = SoilMoistureSensor.query.filter_by(name='Homeassistant Bodensensor').one()
+            sensor = Sensor.query.filter_by(name='Homeassistant Bodensensor').one()
             self.assertIsNone(sensor.influx_measurement)
             self.assertEqual(sensor.influx_field, 'value')
             self.assertEqual(
@@ -178,7 +184,9 @@ class SoilMoistureSensorModelTest(unittest.TestCase):
         location_response = self.client.get(f'/locations/{self.location_id}')
 
         self.assertEqual(sensors_response.status_code, 200)
-        self.assertIn('Bodenfeuchte-Sensor anlegen', sensors_response.get_data(as_text=True))
+        self.assertIn('Sensor anlegen', sensors_response.get_data(as_text=True))
+        self.assertIn('Sensortyp', sensors_response.get_data(as_text=True))
+        self.assertIn('Temperatur', sensors_response.get_data(as_text=True))
         self.assertIn('Homeassistant Entity-ID', sensors_response.get_data(as_text=True))
         self.assertEqual(sensor_response.status_code, 200)
         self.assertIn('/sensors/{}/edit'.format(self.sensor_id), sensor_response.get_data(as_text=True))
@@ -214,7 +222,7 @@ class SoilMoistureSensorModelTest(unittest.TestCase):
 
     def test_location_detail_hides_soil_moisture_without_linked_sensor(self):
         with self.app.app_context():
-            sensor = db.session.get(SoilMoistureSensor, self.sensor_id)
+            sensor = db.session.get(Sensor, self.sensor_id)
             sensor.locations.clear()
             db.session.commit()
 
@@ -329,8 +337,8 @@ class SoilMoistureSensorModelTest(unittest.TestCase):
 
     def test_location_detail_renders_aggregated_current_soil_moisture(self):
         with self.app.app_context():
-            first_sensor = db.session.get(SoilMoistureSensor, self.sensor_id)
-            second_sensor = SoilMoistureSensor(
+            first_sensor = db.session.get(Sensor, self.sensor_id)
+            second_sensor = Sensor(
                 name='Bodenfeuchte Sensor 2',
                 key='soil-sensor-2',
                 influx_measurement='soil_moisture',
@@ -338,7 +346,7 @@ class SoilMoistureSensorModelTest(unittest.TestCase):
                 creator_id=self.user_id,
             )
             second_sensor.locations.append(db.session.get(Location, self.location_id))
-            inactive_sensor = SoilMoistureSensor(
+            inactive_sensor = Sensor(
                 name='Inaktiver Bodenfeuchte Sensor',
                 key='soil-sensor-inactive',
                 influx_measurement='soil_moisture',
@@ -404,6 +412,84 @@ class SoilMoistureSensorModelTest(unittest.TestCase):
         self.assertNotIn('soil-sensor-1', html)
         self.assertNotIn('/sensors/{}'.format(self.sensor_id), html)
         self.assertNotIn('class=\"soil-moisture-sensor-marker\"', html)
+
+
+class SensorLegacyMigrationTest(unittest.TestCase):
+    def test_create_app_migrates_legacy_soil_moisture_sensor_tables(self):
+        db_fd, db_path = tempfile.mkstemp(suffix='.sqlite')
+        os.close(db_fd)
+        try:
+            with sqlite3.connect(db_path) as connection:
+                connection.execute("""CREATE TABLE soil_moisture_sensor (
+                    id INTEGER PRIMARY KEY,
+                    name VARCHAR(255) NOT NULL,
+                    key VARCHAR(128) NOT NULL,
+                    homeassistant_entity_id VARCHAR(255),
+                    influx_measurement VARCHAR(255),
+                    influx_field VARCHAR(255),
+                    influx_tags TEXT,
+                    map_x FLOAT,
+                    map_y FLOAT,
+                    creator_id INTEGER NOT NULL,
+                    is_active BOOLEAN NOT NULL
+                )""")
+                connection.execute("""CREATE TABLE soil_moisture_sensor_location (
+                    sensor_id INTEGER NOT NULL,
+                    location_id INTEGER NOT NULL,
+                    PRIMARY KEY (sensor_id, location_id)
+                )""")
+                connection.execute(
+                    """INSERT INTO soil_moisture_sensor (
+                        id, name, key, homeassistant_entity_id, influx_measurement, influx_field,
+                        influx_tags, map_x, map_y, creator_id, is_active
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        42,
+                        'Legacy Bodensensor',
+                        'legacy-soil',
+                        'sensor.legacy_soil',
+                        'soil_moisture',
+                        'value',
+                        '{"legacy":true}',
+                        12.3,
+                        45.6,
+                        7,
+                        True,
+                    ),
+                )
+                connection.execute(
+                    'INSERT INTO soil_moisture_sensor_location (sensor_id, location_id) VALUES (?, ?)',
+                    (42, 99),
+                )
+
+            os.environ['DATABASE_URL'] = f'sqlite:///{db_path}'
+            app = create_app()
+            app.config.update(TESTING=True)
+
+            with app.app_context():
+                sensor = db.session.get(Sensor, 42)
+                self.assertIsNotNone(sensor)
+                self.assertEqual(sensor.name, 'Legacy Bodensensor')
+                self.assertEqual(sensor.key, 'legacy-soil')
+                self.assertEqual(sensor.sensor_type, SENSOR_TYPE_SOIL_MOISTURE)
+                self.assertEqual(sensor.homeassistant_entity_id, 'sensor.legacy_soil')
+                self.assertEqual(sensor.influx_measurement, 'soil_moisture')
+                self.assertEqual(sensor.influx_field, 'value')
+                self.assertEqual(sensor.influx_tags, '{"legacy":true}')
+                self.assertEqual(sensor.map_x, 12.3)
+                self.assertEqual(sensor.map_y, 45.6)
+                self.assertTrue(sensor.is_active)
+
+                association_rows = db.session.execute(sensor_location.select()).fetchall()
+                self.assertEqual(len(association_rows), 1)
+                self.assertEqual(association_rows[0].sensor_id, 42)
+                self.assertEqual(association_rows[0].location_id, 99)
+
+                db.session.remove()
+                db.drop_all()
+        finally:
+            os.environ.pop('DATABASE_URL', None)
+            os.unlink(db_path)
 
 
 if __name__ == '__main__':

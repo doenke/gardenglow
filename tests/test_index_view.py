@@ -6,7 +6,7 @@ from unittest.mock import patch
 os.environ.setdefault('SECRET_KEY', 'x' * 40)
 
 from app import create_app
-from app.models import InfluxIntegrationConfig, Location, Plant, SoilMoistureSensor, User, db
+from app.models import InfluxIntegrationConfig, Location, Plant, Sensor, User, db
 
 
 class IndexViewTest(unittest.TestCase):
@@ -64,12 +64,12 @@ class IndexViewTest(unittest.TestCase):
 
     def test_index_links_current_sensor_minimum_and_maximum(self):
         with self.app.app_context():
-            first_sensor = SoilMoistureSensor(
+            first_sensor = Sensor(
                 name='Trockener Sensor',
                 key='dry-sensor',
                 creator_id=self.user_id,
             )
-            second_sensor = SoilMoistureSensor(
+            second_sensor = Sensor(
                 name='Feuchter Sensor',
                 key='wet-sensor',
                 creator_id=self.user_id,
@@ -105,7 +105,7 @@ class IndexViewTest(unittest.TestCase):
     def test_index_shows_one_current_sensor_value_for_one_sensor(self):
         with self.app.app_context():
             db.session.add_all([
-                SoilMoistureSensor(
+                Sensor(
                     name='Einzelsensor',
                     key='single-sensor',
                     creator_id=self.user_id,

@@ -3,7 +3,7 @@
 <nav class="page-breadcrumb" aria-label="Breadcrumb">
   <a href="/">Übersicht</a>
   <span class="separator" aria-hidden="true">/</span>
-  <a href="/sensors">Bodenfeuchte-Sensoren</a>
+  <a href="/sensors">Sensoren</a>
   <span class="separator" aria-hidden="true">/</span>
   <span aria-current="page">{{ sensor.name }}</span>
 </nav>
@@ -18,6 +18,13 @@
   <form method="post" action="/sensors/{{ sensor.id }}/edit" class="grid sensor-form">
     <label for="sensor-label">Sensor-Bezeichnung</label>
     <input id="sensor-label" name="sensor_label" value="{{ sensor.name }}" autocomplete="off" data-1p-ignore required>
+
+    <label for="sensor-type">Sensortyp</label>
+    <select id="sensor-type" name="sensor_type" required>
+      {% for sensor_type in sensor_types %}
+      <option value="{{ sensor_type }}" {% if sensor.sensor_type == sensor_type %}selected{% endif %}>{{ sensor_type_labels[sensor_type] }}</option>
+      {% endfor %}
+    </select>
 
     <label for="sensor-homeassistant-entity-id">Homeassistant Entity-ID</label>
     <input id="sensor-homeassistant-entity-id" name="homeassistant_entity_id" value="{{ sensor.homeassistant_entity_id or '' }}" placeholder="z. B. sensor.hochbeet_1_bodenfeuchte">
