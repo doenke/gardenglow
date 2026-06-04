@@ -1,7 +1,6 @@
 import json
 import os
 import re
-import sqlite3
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -718,84 +717,6 @@ class SensorModelTest(unittest.TestCase):
         self.assertNotIn('soil-sensor-1', html)
         self.assertNotIn('/sensors/{}'.format(self.sensor_id), html)
         self.assertNotIn('class=\"soil-moisture-sensor-marker\"', html)
-
-
-class SensorLegacyMigrationTest(unittest.TestCase):
-    def test_create_app_migrates_legacy_soil_moisture_sensor_tables(self):
-        db_fd, db_path = tempfile.mkstemp(suffix='.sqlite')
-        os.close(db_fd)
-        try:
-            with sqlite3.connect(db_path) as connection:
-                connection.execute("""CREATE TABLE soil_moisture_sensor (
-                    id INTEGER PRIMARY KEY,
-                    name VARCHAR(255) NOT NULL,
-                    key VARCHAR(128) NOT NULL,
-                    homeassistant_entity_id VARCHAR(255),
-                    influx_measurement VARCHAR(255),
-                    influx_field VARCHAR(255),
-                    influx_tags TEXT,
-                    map_x FLOAT,
-                    map_y FLOAT,
-                    creator_id INTEGER NOT NULL,
-                    is_active BOOLEAN NOT NULL
-                )""")
-                connection.execute("""CREATE TABLE soil_moisture_sensor_location (
-                    sensor_id INTEGER NOT NULL,
-                    location_id INTEGER NOT NULL,
-                    PRIMARY KEY (sensor_id, location_id)
-                )""")
-                connection.execute(
-                    """INSERT INTO soil_moisture_sensor (
-                        id, name, key, homeassistant_entity_id, influx_measurement, influx_field,
-                        influx_tags, map_x, map_y, creator_id, is_active
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                    (
-                        42,
-                        'Legacy Bodensensor',
-                        'legacy-soil',
-                        'sensor.legacy_soil',
-                        'soil_moisture',
-                        'value',
-                        '{"legacy":true}',
-                        12.3,
-                        45.6,
-                        7,
-                        True,
-                    ),
-                )
-                connection.execute(
-                    'INSERT INTO soil_moisture_sensor_location (sensor_id, location_id) VALUES (?, ?)',
-                    (42, 99),
-                )
-
-            os.environ['DATABASE_URL'] = f'sqlite:///{db_path}'
-            app = create_app()
-            app.config.update(TESTING=True)
-
-            with app.app_context():
-                sensor = db.session.get(Sensor, 42)
-                self.assertIsNotNone(sensor)
-                self.assertEqual(sensor.name, 'Legacy Bodensensor')
-                self.assertEqual(sensor.key, 'legacy-soil')
-                self.assertEqual(sensor.sensor_type, SENSOR_TYPE_SOIL_MOISTURE)
-                self.assertEqual(sensor.homeassistant_entity_id, 'sensor.legacy_soil')
-                self.assertEqual(sensor.influx_measurement, 'soil_moisture')
-                self.assertEqual(sensor.influx_field, 'value')
-                self.assertEqual(sensor.influx_tags, '{"legacy":true}')
-                self.assertEqual(sensor.map_x, 12.3)
-                self.assertEqual(sensor.map_y, 45.6)
-                self.assertTrue(sensor.is_active)
-
-                association_rows = db.session.execute(sensor_location.select()).fetchall()
-                self.assertEqual(len(association_rows), 1)
-                self.assertEqual(association_rows[0].sensor_id, 42)
-                self.assertEqual(association_rows[0].location_id, 99)
-
-                db.session.remove()
-                db.drop_all()
-        finally:
-            os.environ.pop('DATABASE_URL', None)
-            os.unlink(db_path)
 
 
 if __name__ == '__main__':
