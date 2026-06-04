@@ -602,7 +602,9 @@ def apply_sensor_form(sensor, form):
     # Beet zugeordnet sein, wird stattdessen der Papierkorb ausgewählt.
     locations = get_selected_sensor_locations(form)
 
-    sensor_type = (form.get('sensor_type') or form.get('type') or SENSOR_TYPE_SOIL_MOISTURE).strip()
+    sensor_type = (form.get('sensor_type') or form.get('type') or '').strip()
+    if not sensor_type:
+        return False, 'Bitte einen Sensortyp auswählen.'
     if sensor_type not in SENSOR_TYPES:
         return False, 'Bitte einen gültigen Sensortyp auswählen.'
 

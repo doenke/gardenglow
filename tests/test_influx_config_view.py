@@ -81,6 +81,8 @@ class InfluxConfigViewTest(unittest.TestCase):
         html = response.get_data(as_text=True)
         self.assertIn('id="influxdb-config"', html)
         self.assertIn('id="homeassistant-config"', html)
+        self.assertIn('role="menuitem">Sensoren</a>', html)
+        self.assertNotIn('Bodenfeuchte-Sensoren', html)
         self.assertIn('Diese Konfiguration wird aktuell noch nirgendwo in der Anwendung verwendet.', html)
         self.assertNotIn('Inhaltsverzeichnis', html)
         self.assertNotIn('Springe direkt zum passenden Kapitel', html)
