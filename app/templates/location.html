@@ -298,7 +298,11 @@
       const item = document.querySelector(`.weather-legend-item[data-weather-kind="${kind}"]`);
       if (!item) return;
       const status = item.querySelector('small');
-      if (status) status.textContent = (weatherItem.points || []).length ? `${weatherItem.unit || ''}` : '(keine Daten)';
+      const weatherSensorSeries = Array.isArray(weatherItem.series) ? weatherItem.series : [];
+      const pointCount = weatherSensorSeries.length
+        ? weatherSensorSeries.reduce((sum, sensorSeries) => sum + (sensorSeries.points || []).length, 0)
+        : (weatherItem.points || []).length;
+      if (status) status.textContent = pointCount ? `${weatherItem.unit || ''}` : '(keine Daten)';
     });
   };
 
@@ -402,8 +406,17 @@
     const soilSeries = series.map((sensorSeries) => ({ ...sensorSeries, parsedPoints: parseSeriesPoints(sensorSeries.points) }));
     const temperature = weatherSeries.temperature || {};
     const rainfall = weatherSeries.rainfall || {};
-    const temperaturePoints = parseSeriesPoints(temperature.points);
-    const rainfallPoints = parseSeriesPoints(rainfall.points);
+    const weatherSensorSeries = (weatherItem) => {
+      const sensorSeries = Array.isArray(weatherItem.series) ? weatherItem.series : [];
+      if (sensorSeries.length) {
+        return sensorSeries.map((item) => ({ ...item, parsedPoints: parseSeriesPoints(item.points) }));
+      }
+      return [{ sensor_id: null, name: weatherItem.label || '', parsedPoints: parseSeriesPoints(weatherItem.points) }];
+    };
+    const temperatureSeries = weatherSensorSeries(temperature);
+    const rainfallSeries = weatherSensorSeries(rainfall);
+    const temperaturePoints = temperatureSeries.flatMap((sensorSeries) => sensorSeries.parsedPoints);
+    const rainfallPoints = rainfallSeries.flatMap((sensorSeries) => sensorSeries.parsedPoints);
     const soilPoints = soilSeries.flatMap((sensorSeries) => sensorSeries.parsedPoints);
     const allPoints = [...soilPoints, ...temperaturePoints, ...rainfallPoints];
 
@@ -495,11 +508,13 @@
       const barWidth = Math.max(3, Math.min(18, plotWidth / Math.max(8, rainfallPoints.length) * 0.7));
       context.fillStyle = 'rgba(15, 118, 110, .45)';
       context.strokeStyle = '#0f766e';
-      rainfallPoints.forEach((point) => {
-        const x = xFor(point.time) - barWidth / 2;
-        const y = rainfallYFor(point.value);
-        context.fillRect(x, Math.min(y, baseline), barWidth, Math.max(1, Math.abs(baseline - y)));
-        context.strokeRect(x, Math.min(y, baseline), barWidth, Math.max(1, Math.abs(baseline - y)));
+      rainfallSeries.forEach((sensorSeries) => {
+        sensorSeries.parsedPoints.forEach((point) => {
+          const x = xFor(point.time) - barWidth / 2;
+          const y = rainfallYFor(point.value);
+          context.fillRect(x, Math.min(y, baseline), barWidth, Math.max(1, Math.abs(baseline - y)));
+          context.strokeRect(x, Math.min(y, baseline), barWidth, Math.max(1, Math.abs(baseline - y)));
+        });
       });
     }
 
@@ -512,12 +527,14 @@
       });
     });
     if (temperatureYFor) {
-      drawLineSeries(context, temperaturePoints, {
-        xFor,
-        yFor: temperatureYFor,
-        color: '#dc2626',
-        pointRadius: 2.6,
-        lineWidth: 2.4,
+      temperatureSeries.forEach((sensorSeries, index) => {
+        drawLineSeries(context, sensorSeries.parsedPoints, {
+          xFor,
+          yFor: temperatureYFor,
+          color: index % 2 ? '#f97316' : '#dc2626',
+          pointRadius: 2.6,
+          lineWidth: 2.4,
+        });
       });
     }
   };

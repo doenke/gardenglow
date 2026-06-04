@@ -81,6 +81,8 @@ class InfluxConfigViewTest(unittest.TestCase):
         html = response.get_data(as_text=True)
         self.assertIn('id="influxdb-config"', html)
         self.assertIn('id="homeassistant-config"', html)
+        self.assertIn('role="menuitem">Sensoren</a>', html)
+        self.assertNotIn('Bodenfeuchte-Sensoren', html)
         self.assertIn('Diese Konfiguration wird aktuell noch nirgendwo in der Anwendung verwendet.', html)
         self.assertNotIn('Inhaltsverzeichnis', html)
         self.assertNotIn('Springe direkt zum passenden Kapitel', html)
@@ -120,8 +122,8 @@ class InfluxConfigViewTest(unittest.TestCase):
         self.assertIn('action="/config/homeassistant/test"', html)
         self.assertIn('Homeassistant-Verbindung testen', html)
         self.assertIn('action="/config/connection-options"', html)
-        self.assertIn('action="/config/weather-sensors"', html)
-        self.assertIn('Temperatur und Regenmenge', html)
+        self.assertNotIn('action="/config/weather-sensors"', html)
+        self.assertNotIn('Globale Homeassistant-Entities für Wetterdaten', html)
 
     def test_homeassistant_config_saves_without_changing_influx_values(self):
         with self.app.app_context():
@@ -150,26 +152,6 @@ class InfluxConfigViewTest(unittest.TestCase):
             self.assertEqual(config.homeassistant_url, 'https://ha.local:8123')
             self.assertEqual(config.homeassistant_token, 'new-ha-token')
 
-
-    def test_weather_sensor_config_saves_homeassistant_defaults(self):
-        response = self.client.post(
-            '/config/weather-sensors',
-            data={
-                'temperature_homeassistant_entity_id': ' sensor.aussentemperatur ',
-                'rainfall_homeassistant_entity_id': 'sensor.regenmenge',
-            },
-        )
-
-        self.assertEqual(response.status_code, 302)
-        self.assertIn('#weather-sensors-config', response.headers['Location'])
-        with self.app.app_context():
-            config = InfluxIntegrationConfig.query.one()
-            self.assertEqual(config.temperature_homeassistant_entity_id, 'sensor.aussentemperatur')
-            self.assertEqual(config.temperature_influx_field, 'value')
-            self.assertEqual(config.temperature_influx_tags, '{"entity_id":"aussentemperatur","domain":"sensor"}')
-            self.assertEqual(config.rainfall_homeassistant_entity_id, 'sensor.regenmenge')
-            self.assertEqual(config.rainfall_influx_field, 'value')
-            self.assertEqual(config.rainfall_influx_tags, '{"entity_id":"regenmenge","domain":"sensor"}')
 
     def test_connection_options_save_separately(self):
         response = self.client.post(

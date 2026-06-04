@@ -9,7 +9,7 @@ from unittest.mock import patch
 os.environ.setdefault('SECRET_KEY', 'x' * 40)
 
 from app import create_app
-from app.models import InfluxIntegrationConfig, Location, Plant, Sensor, User, db, sensor_location, SENSOR_TYPE_SOIL_MOISTURE, SENSOR_TYPE_TEMPERATURE
+from app.models import InfluxIntegrationConfig, Location, Plant, Sensor, User, db, sensor_location, SENSOR_TYPE_SOIL_MOISTURE, SENSOR_TYPE_TEMPERATURE, SENSOR_TYPE_RAINFALL, SENSOR_TYPE_IRRIGATION
 
 
 class SensorModelTest(unittest.TestCase):
@@ -88,6 +88,7 @@ class SensorModelTest(unittest.TestCase):
 
         response = self.client.post('/sensors/new', data={
             'name': 'Neuer Bodensensor',
+            'sensor_type': SENSOR_TYPE_RAINFALL,
             'homeassistant_entity_id': 'sensor.neuer_bodensensor',
             'influx_measurement': 'soil',
             'influx_field': 'moisture',
@@ -101,7 +102,7 @@ class SensorModelTest(unittest.TestCase):
         with self.app.app_context():
             sensor = Sensor.query.filter_by(homeassistant_entity_id='sensor.neuer_bodensensor').one()
             self.assertEqual(sensor.key, 'sensor-neuer-bodensensor')
-            self.assertEqual(sensor.sensor_type, SENSOR_TYPE_SOIL_MOISTURE)
+            self.assertEqual(sensor.sensor_type, SENSOR_TYPE_RAINFALL)
             self.assertEqual(sensor.influx_measurement, 'soil')
             self.assertEqual(sensor.influx_field, 'moisture')
             self.assertEqual(sensor.influx_tags, 'bed=one')
@@ -138,6 +139,7 @@ class SensorModelTest(unittest.TestCase):
     def test_sensor_routes_fill_homeassistant_influx_defaults_when_blank(self):
         response = self.client.post('/sensors/new', data={
             'name': 'Homeassistant Bodensensor',
+            'sensor_type': SENSOR_TYPE_SOIL_MOISTURE,
             'homeassistant_entity_id': 'sensor.third_reality_inc_3rsm0347z_bodenfeuchtigkeit',
             'influx_measurement': '',
             'influx_field': '',
@@ -214,17 +216,22 @@ class SensorModelTest(unittest.TestCase):
         location_response = self.client.get(f'/locations/{self.location_id}')
 
         self.assertEqual(sensors_response.status_code, 200)
-        self.assertIn('Sensor anlegen', sensors_response.get_data(as_text=True))
-        self.assertIn('Sensortyp', sensors_response.get_data(as_text=True))
-        self.assertIn('Temperatur', sensors_response.get_data(as_text=True))
         sensors_html = sensors_response.get_data(as_text=True)
+        self.assertIn('Sensor anlegen', sensors_html)
+        self.assertIn('Sensortyp', sensors_html)
+        self.assertIn('Bodenfeuchte', sensors_html)
+        self.assertIn('Temperatur', sensors_html)
+        self.assertIn('Niederschlag', sensors_html)
+        self.assertIn('Bewässerung', sensors_html)
+        self.assertIn('data-label="Typ"', sensors_html)
         self.assertIn('Homeassistant Entity-ID', sensors_html)
-        self.assertIn('Nur HA Entity', sensors_html)
-        self.assertIn('Komplette Details', sensors_html)
+        self.assertNotIn('Bodenfeuchte-Sensoren', sensors_html)
         self.assertEqual(sensor_response.status_code, 200)
-        self.assertIn('/sensors/{}/edit'.format(self.sensor_id), sensor_response.get_data(as_text=True))
-        self.assertIn('soil_moisture', sensor_response.get_data(as_text=True))
         sensor_html = sensor_response.get_data(as_text=True)
+        self.assertIn('/sensors/{}/edit'.format(self.sensor_id), sensor_html)
+        self.assertIn('soil_moisture', sensor_html)
+        self.assertIn('Sensortyp', sensor_html)
+        self.assertIn('Bewässerung', sensor_html)
         self.assertIn('Letzten Influx-Wert testen', sensor_html)
         self.assertIn('Komplette Details', sensor_html)
         self.assertEqual(location_response.status_code, 200)
@@ -291,6 +298,7 @@ class SensorModelTest(unittest.TestCase):
     def test_empty_sensor_location_selection_means_all_productive_beds(self):
         response = self.client.post('/sensors/new', data={
             'name': 'Globaler Bodensensor',
+            'sensor_type': SENSOR_TYPE_IRRIGATION,
             'homeassistant_entity_id': 'sensor.globaler_bodensensor',
             'influx_measurement': 'soil',
             'influx_field': 'moisture',
@@ -361,12 +369,26 @@ class SensorModelTest(unittest.TestCase):
                 influx_org='Garten',
                 influx_bucket='soil',
                 influx_token='token',
-                temperature_homeassistant_entity_id='sensor.aussentemperatur',
-                temperature_influx_field='value',
-                temperature_influx_tags='{"entity_id":"aussentemperatur","domain":"sensor"}',
-                rainfall_homeassistant_entity_id='sensor.regenmenge',
-                rainfall_influx_field='value',
-                rainfall_influx_tags='{"entity_id":"regenmenge","domain":"sensor"}',
+            ))
+            db.session.add(Sensor(
+                name='Temperatur',
+                key='temperature',
+                sensor_type=SENSOR_TYPE_TEMPERATURE,
+                homeassistant_entity_id='sensor.aussentemperatur',
+                influx_field='value',
+                influx_tags='{"entity_id":"aussentemperatur","domain":"sensor"}',
+                creator_id=self.user_id,
+                is_active=True,
+            ))
+            db.session.add(Sensor(
+                name='Regenmenge',
+                key='rainfall',
+                sensor_type=SENSOR_TYPE_RAINFALL,
+                homeassistant_entity_id='sensor.regenmenge',
+                influx_field='value',
+                influx_tags='{"entity_id":"regenmenge","domain":"sensor"}',
+                creator_id=self.user_id,
+                is_active=True,
             ))
             db.session.commit()
 
@@ -383,6 +405,124 @@ class SensorModelTest(unittest.TestCase):
         self.assertEqual(payload['weather_series']['rainfall']['unit'], 'mm')
         self.assertEqual(payload['weather_series']['rainfall']['points'][0]['value'], 4.2)
         self.assertTrue(payload['has_series_data'])
+
+
+    def test_weather_sensors_scope_unassigned_to_all_beds_but_exclude_trash_only(self):
+        class FakeAdapter:
+            def query_sensor(self, sensor, start, stop):
+                return [{'time': '2026-06-01T12:00:00+00:00', 'value': sensor.id}]
+
+        with self.app.app_context():
+            trash = Location(name='Papierkorb')
+            other = Location(name='Anderes Beet')
+            db.session.add_all([trash, other])
+            db.session.flush()
+            db.session.add(InfluxIntegrationConfig(
+                influx_url='https://influx.local',
+                influx_org='Garten',
+                influx_bucket='soil',
+                influx_token='token',
+            ))
+            global_sensor = Sensor(
+                name='Globale Temperatur',
+                key='temperature-global',
+                sensor_type=SENSOR_TYPE_TEMPERATURE,
+                creator_id=self.user_id,
+                is_active=True,
+            )
+            local_sensor = Sensor(
+                name='Beet Temperatur',
+                key='temperature-local',
+                sensor_type=SENSOR_TYPE_TEMPERATURE,
+                creator_id=self.user_id,
+                is_active=True,
+            )
+            local_sensor.locations.append(self.location)
+            trash_sensor = Sensor(
+                name='Papierkorb Temperatur',
+                key='temperature-trash',
+                sensor_type=SENSOR_TYPE_TEMPERATURE,
+                creator_id=self.user_id,
+                is_active=True,
+            )
+            trash_sensor.locations.append(trash)
+            other_sensor = Sensor(
+                name='Anderes Beet Temperatur',
+                key='temperature-other',
+                sensor_type=SENSOR_TYPE_TEMPERATURE,
+                creator_id=self.user_id,
+                is_active=True,
+            )
+            other_sensor.locations.append(other)
+            db.session.add_all([global_sensor, local_sensor, trash_sensor, other_sensor])
+            db.session.commit()
+            expected_sensor_ids = {global_sensor.id, local_sensor.id}
+
+        with patch('app.views.influx_service.get_sensor_time_series_adapter', return_value=FakeAdapter()), \
+                patch('app.views.latest_sensor_value', return_value={'time': '2026-06-03T08:00:00Z', 'value': 35.2}):
+            response = self.client.get(f'/locations/{self.location_id}/soil-moisture')
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        temperature_series = payload['weather_series']['temperature']['series']
+        self.assertEqual({item['sensor_id'] for item in temperature_series}, expected_sensor_ids)
+        self.assertEqual(
+            {int(item['points'][0]['value']) for item in temperature_series},
+            expected_sensor_ids,
+        )
+
+
+    def test_location_sensor_mapping_applies_type_filter_and_global_assignment(self):
+        with self.app.app_context():
+            from app.views import _location_irrigation_sensors, _location_soil_moisture_sensors
+
+            trash = Location(name='Papierkorb')
+            db.session.add(trash)
+            db.session.flush()
+            global_soil = Sensor(
+                name='Globale Bodenfeuchte',
+                key='soil-global',
+                sensor_type=SENSOR_TYPE_SOIL_MOISTURE,
+                creator_id=self.user_id,
+                is_active=True,
+            )
+            global_temperature = Sensor(
+                name='Globale Temperatur',
+                key='temperature-global-filtered',
+                sensor_type=SENSOR_TYPE_TEMPERATURE,
+                creator_id=self.user_id,
+                is_active=True,
+            )
+            global_irrigation = Sensor(
+                name='Globale Bewässerung',
+                key='irrigation-global',
+                sensor_type=SENSOR_TYPE_IRRIGATION,
+                creator_id=self.user_id,
+                is_active=True,
+            )
+            trash_soil = Sensor(
+                name='Papierkorb Bodenfeuchte',
+                key='soil-trash',
+                sensor_type=SENSOR_TYPE_SOIL_MOISTURE,
+                creator_id=self.user_id,
+                is_active=True,
+            )
+            trash_soil.locations.append(trash)
+            db.session.add_all([global_soil, global_temperature, global_irrigation, trash_soil])
+            db.session.commit()
+            global_soil_id = global_soil.id
+            global_temperature_id = global_temperature.id
+            global_irrigation_id = global_irrigation.id
+            trash_soil_id = trash_soil.id
+
+            soil_sensor_ids = {sensor.id for sensor in _location_soil_moisture_sensors(self.location_id)}
+            irrigation_sensor_ids = {sensor.id for sensor in _location_irrigation_sensors(self.location_id)}
+
+        self.assertIn(self.sensor_id, soil_sensor_ids)
+        self.assertIn(global_soil_id, soil_sensor_ids)
+        self.assertNotIn(global_temperature_id, soil_sensor_ids)
+        self.assertNotIn(trash_soil_id, soil_sensor_ids)
+        self.assertEqual(irrigation_sensor_ids, {global_irrigation_id})
 
     def test_location_detail_hides_soil_moisture_when_influx_fails(self):
         class FailingAdapter:
