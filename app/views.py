@@ -2158,10 +2158,21 @@ def delete_location(location_id):
 @login_required
 def sensors():
     selected_location_id = request.args.get('location_id', type=int)
-    sensors = Sensor.query.order_by(Sensor.name.asc(), Sensor.id.asc()).all()
-    sensor_current_values = _load_sensor_current_values(sensors)
     locations = Location.query.order_by(*location_sort_criteria()).all()
     selected_location = db.session.get(Location, selected_location_id) if selected_location_id else None
+
+    sensors_query = Sensor.query
+    if selected_location:
+        explicit_location_filter = Sensor.locations.any(Location.id == selected_location.id)
+        if selected_location.name == TRASH_LOCATION_NAME:
+            sensors_query = sensors_query.filter(explicit_location_filter)
+        else:
+            sensors_query = sensors_query.filter(or_(
+                explicit_location_filter,
+                ~Sensor.locations.any(),
+            ))
+    sensors = sensors_query.order_by(Sensor.name.asc(), Sensor.id.asc()).all()
+    sensor_current_values = _load_sensor_current_values(sensors)
     return render_template(
         'sensors.html',
         sensors=sensors,

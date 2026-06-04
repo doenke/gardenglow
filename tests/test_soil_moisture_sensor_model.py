@@ -160,6 +160,7 @@ class SensorModelTest(unittest.TestCase):
     def test_sensor_routes_override_influx_details_in_ha_entity_mode(self):
         response = self.client.post('/sensors/new', data={
             'name': 'HA-only Bodensensor',
+            'sensor_type': SENSOR_TYPE_SOIL_MOISTURE,
             'homeassistant_entity_id': 'sensor.ha_only_bodenfeuchtigkeit',
             'influx_details_mode': 'ha_entity',
             'influx_measurement': 'custom_measurement',
@@ -178,6 +179,7 @@ class SensorModelTest(unittest.TestCase):
     def test_sensor_routes_require_entity_in_ha_entity_mode(self):
         response = self.client.post('/sensors/new', data={
             'name': 'HA-only ohne Entity',
+            'sensor_type': SENSOR_TYPE_SOIL_MOISTURE,
             'influx_details_mode': 'ha_entity',
             'influx_measurement': 'custom_measurement',
         }, follow_redirects=True)
@@ -313,8 +315,70 @@ class SensorModelTest(unittest.TestCase):
         list_response = self.client.get('/sensors')
         self.assertEqual(list_response.status_code, 200)
         html = list_response.get_data(as_text=True)
-        self.assertIn('Alle produktiven Beete', html)
+        self.assertIn('Alle Beete', html)
         self.assertIn('Keine Auswahl bedeutet: Sensor gilt für alle produktiven Beete.', html)
+
+    def test_sensor_list_filters_by_selected_location(self):
+        with self.app.app_context():
+            trash = Location(name='Papierkorb')
+            other = Location(name='Anderes Beet')
+            db.session.add_all([trash, other])
+            db.session.flush()
+
+            global_sensor = Sensor(
+                name='Globaler Sensor',
+                key='global-list-sensor',
+                sensor_type=SENSOR_TYPE_TEMPERATURE,
+                creator_id=self.user_id,
+                is_active=True,
+            )
+            trash_sensor = Sensor(
+                name='Papierkorb Sensor',
+                key='trash-list-sensor',
+                sensor_type=SENSOR_TYPE_TEMPERATURE,
+                creator_id=self.user_id,
+                is_active=True,
+            )
+            trash_sensor.locations.append(trash)
+            other_sensor = Sensor(
+                name='Anderer Beet Sensor',
+                key='other-list-sensor',
+                sensor_type=SENSOR_TYPE_TEMPERATURE,
+                creator_id=self.user_id,
+                is_active=True,
+            )
+            other_sensor.locations.append(other)
+            db.session.add_all([global_sensor, trash_sensor, other_sensor])
+            db.session.commit()
+            trash_id = trash.id
+
+        all_response = self.client.get('/sensors')
+        selected_response = self.client.get(f'/sensors?location_id={self.location_id}')
+        trash_response = self.client.get(f'/sensors?location_id={trash_id}')
+
+        self.assertEqual(all_response.status_code, 200)
+        all_html = all_response.get_data(as_text=True)
+        self.assertIn('Bodenfeuchte Sensor 1', all_html)
+        self.assertIn('Globaler Sensor', all_html)
+        self.assertIn('Papierkorb Sensor', all_html)
+        self.assertIn('Anderer Beet Sensor', all_html)
+
+        self.assertEqual(selected_response.status_code, 200)
+        selected_html = selected_response.get_data(as_text=True)
+        self.assertIn('für Sensorbeet', selected_html)
+        self.assertIn('Bodenfeuchte Sensor 1', selected_html)
+        self.assertIn('Globaler Sensor', selected_html)
+        self.assertIn('Alle Beete', selected_html)
+        self.assertNotIn('Papierkorb Sensor', selected_html)
+        self.assertNotIn('Anderer Beet Sensor', selected_html)
+
+        self.assertEqual(trash_response.status_code, 200)
+        trash_html = trash_response.get_data(as_text=True)
+        self.assertIn('für Papierkorb', trash_html)
+        self.assertIn('Papierkorb Sensor', trash_html)
+        self.assertNotIn('Globaler Sensor', trash_html)
+        self.assertNotIn('Bodenfeuchte Sensor 1', trash_html)
+        self.assertNotIn('Anderer Beet Sensor', trash_html)
 
     def test_location_detail_offers_one_year_soil_moisture_range(self):
         response = self.client.get(f'/locations/{self.location_id}?moisture_range=1y')
