@@ -9,7 +9,7 @@ from unittest.mock import patch
 os.environ.setdefault('SECRET_KEY', 'x' * 40)
 
 from app import create_app
-from app.models import InfluxIntegrationConfig, Location, Plant, Sensor, User, db, sensor_location, SENSOR_TYPE_SOIL_MOISTURE, SENSOR_TYPE_TEMPERATURE, SENSOR_TYPE_RAINFALL, SENSOR_TYPE_IRRIGATION
+from app.models import InfluxIntegrationConfig, Location, Plant, Sensor, User, db, sensor_location, SENSOR_TYPE_LABELS, SENSOR_TYPE_SOIL_MOISTURE, SENSOR_TYPE_TEMPERATURE, SENSOR_TYPE_RAINFALL, SENSOR_TYPE_IRRIGATION
 
 
 class SensorModelTest(unittest.TestCase):
@@ -78,6 +78,26 @@ class SensorModelTest(unittest.TestCase):
             self.assertEqual(len(association_rows), 1)
             self.assertEqual(association_rows[0].sensor_id, sensor.id)
             self.assertEqual(association_rows[0].location_id, self.location_id)
+
+
+    def test_sensor_type_labels_cover_supported_sensor_types(self):
+        self.assertEqual(SENSOR_TYPE_LABELS[SENSOR_TYPE_SOIL_MOISTURE], 'Bodenfeuchte')
+        self.assertEqual(SENSOR_TYPE_LABELS[SENSOR_TYPE_TEMPERATURE], 'Temperatur')
+        self.assertEqual(SENSOR_TYPE_LABELS[SENSOR_TYPE_RAINFALL], 'Niederschlag')
+        self.assertEqual(SENSOR_TYPE_LABELS[SENSOR_TYPE_IRRIGATION], 'Bewässerung')
+
+    def test_sensor_routes_reject_invalid_sensor_type(self):
+        response = self.client.post('/sensors/new', data={
+            'name': 'Ungültiger Sensortyp',
+            'sensor_type': 'legacy_soil_moisture_sensor',
+            'homeassistant_entity_id': 'sensor.invalid_type',
+            'location_ids': [str(self.location_id)],
+        }, follow_redirects=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('Bitte einen gültigen Sensortyp auswählen.', response.get_data(as_text=True))
+        with self.app.app_context():
+            self.assertFalse(Sensor.query.filter_by(name='Ungültiger Sensortyp').first())
 
     def test_sensor_routes_create_and_update_sensor_locations(self):
         with self.app.app_context():
@@ -344,6 +364,34 @@ class SensorModelTest(unittest.TestCase):
         self.assertIn('Alle Beete', html)
         self.assertIn('Keine Auswahl bedeutet: Sensor gilt für alle produktiven Beete.', html)
 
+
+    def test_trash_location_selection_means_no_productive_bed(self):
+        with self.app.app_context():
+            trash = Location(name='Papierkorb')
+            db.session.add(trash)
+            db.session.commit()
+            trash_id = trash.id
+
+        response = self.client.post('/sensors/new', data={
+            'name': 'Papierkorb Bodensensor',
+            'sensor_type': SENSOR_TYPE_SOIL_MOISTURE,
+            'homeassistant_entity_id': 'sensor.papierkorb_bodensensor',
+            'location_ids': [str(trash_id)],
+        }, follow_redirects=False)
+
+        self.assertEqual(response.status_code, 302)
+        with self.app.app_context():
+            from app.views import _location_soil_moisture_sensors
+
+            sensor = Sensor.query.filter_by(homeassistant_entity_id='sensor.papierkorb_bodensensor').one()
+            sensor_id = sensor.id
+            self.assertEqual([location.name for location in sensor.locations], ['Papierkorb'])
+            productive_sensor_ids = {sensor.id for sensor in _location_soil_moisture_sensors(self.location_id)}
+            trash_sensor_ids = {sensor.id for sensor in _location_soil_moisture_sensors(trash_id)}
+
+        self.assertNotIn(sensor_id, productive_sensor_ids)
+        self.assertIn(sensor_id, trash_sensor_ids)
+
     def test_sensor_list_filters_by_selected_location(self):
         with self.app.app_context():
             trash = Location(name='Papierkorb')
@@ -448,9 +496,9 @@ class SensorModelTest(unittest.TestCase):
     def test_location_soil_moisture_payload_includes_weather_series(self):
         class FakeAdapter:
             def query_sensor(self, source, start, stop):
-                if source.key == 'temperature':
+                if source.sensor_type == SENSOR_TYPE_TEMPERATURE:
                     return [{'time': '2026-06-01T12:00:00+00:00', 'value': 21.5}]
-                if source.key == 'rainfall':
+                if source.sensor_type == SENSOR_TYPE_RAINFALL:
                     return [{'time': '2026-06-01T12:00:00+00:00', 'value': 4.2}]
                 return [{'time': '2026-06-01T12:00:00+00:00', 'value': 35.2}]
 
@@ -463,7 +511,7 @@ class SensorModelTest(unittest.TestCase):
             ))
             db.session.add(Sensor(
                 name='Temperatur',
-                key='temperature',
+                key='garden-weather-outdoor',
                 sensor_type=SENSOR_TYPE_TEMPERATURE,
                 homeassistant_entity_id='sensor.aussentemperatur',
                 influx_field='value',
@@ -473,7 +521,7 @@ class SensorModelTest(unittest.TestCase):
             ))
             db.session.add(Sensor(
                 name='Regenmenge',
-                key='rainfall',
+                key='garden-weather-rain-gauge',
                 sensor_type=SENSOR_TYPE_RAINFALL,
                 homeassistant_entity_id='sensor.regenmenge',
                 influx_field='value',

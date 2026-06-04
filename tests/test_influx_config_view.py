@@ -6,7 +6,7 @@ from unittest.mock import Mock, patch
 os.environ.setdefault('SECRET_KEY', 'x' * 40)
 
 from app import create_app
-from app.models import InfluxIntegrationConfig, User, db
+from app.models import InfluxIntegrationConfig, Sensor, User, db
 
 
 class InfluxConfigViewTest(unittest.TestCase):
@@ -62,6 +62,28 @@ class InfluxConfigViewTest(unittest.TestCase):
             self.assertEqual(config.timeout_seconds, 42)
             self.assertIsNotNone(config.created_at)
             self.assertIsNotNone(config.updated_at)
+
+
+    def test_influx_config_ignores_deprecated_global_weather_sensor_fields(self):
+        response = self.client.post(
+            '/config/influx',
+            data={
+                'influx_url': 'https://influx.local:8086',
+                'influx_org': 'Garten',
+                'influx_bucket': 'soil',
+                'temperature_homeassistant_entity_id': 'sensor.aussentemperatur',
+                'temperature_influx_field': 'value',
+                'rainfall_homeassistant_entity_id': 'sensor.regenmenge',
+                'rainfall_influx_field': 'value',
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        with self.app.app_context():
+            config = InfluxIntegrationConfig.query.one()
+            self.assertFalse(hasattr(config, 'temperature_homeassistant_entity_id'))
+            self.assertFalse(hasattr(config, 'rainfall_homeassistant_entity_id'))
+            self.assertEqual(Sensor.query.count(), 0)
 
     def test_config_form_masks_existing_tokens_and_keeps_them_when_blank(self):
         with self.app.app_context():
