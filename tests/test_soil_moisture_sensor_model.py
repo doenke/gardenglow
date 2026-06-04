@@ -342,7 +342,7 @@ class SensorModelTest(unittest.TestCase):
         self.assertEqual(list_response.status_code, 200)
         html = list_response.get_data(as_text=True)
         self.assertIn('Alle Beete', html)
-        self.assertIn('Keine Auswahl bedeutet: Sensor gilt für alle produktiven Beete.', html)
+        self.assertIn('Keine Auswahl bedeutet: Sensor gilt für alle produktiven Beete, denen kein Sensor dieses Typs explizit zugeordnet ist.', html)
 
     def test_sensor_list_filters_by_selected_location(self):
         with self.app.app_context():
@@ -498,7 +498,7 @@ class SensorModelTest(unittest.TestCase):
         self.assertTrue(payload['has_series_data'])
 
 
-    def test_weather_sensors_scope_unassigned_to_all_beds_but_exclude_trash_only(self):
+    def test_weather_sensors_scope_unassigned_fallback_skips_beds_with_explicit_type(self):
         class FakeAdapter:
             def query_sensor(self, sensor, start, stop):
                 return [{'time': '2026-06-01T12:00:00+00:00', 'value': sensor.id}]
@@ -547,7 +547,7 @@ class SensorModelTest(unittest.TestCase):
             other_sensor.locations.append(other)
             db.session.add_all([global_sensor, local_sensor, trash_sensor, other_sensor])
             db.session.commit()
-            expected_sensor_ids = {global_sensor.id, local_sensor.id}
+            expected_sensor_ids = {local_sensor.id}
 
         with patch('app.views.influx_service.get_sensor_time_series_adapter', return_value=FakeAdapter()), \
                 patch('app.views.latest_sensor_value', return_value={'time': '2026-06-03T08:00:00Z', 'value': 35.2}):
@@ -610,7 +610,7 @@ class SensorModelTest(unittest.TestCase):
             irrigation_sensor_ids = {sensor.id for sensor in _location_irrigation_sensors(self.location_id)}
 
         self.assertIn(self.sensor_id, soil_sensor_ids)
-        self.assertIn(global_soil_id, soil_sensor_ids)
+        self.assertNotIn(global_soil_id, soil_sensor_ids)
         self.assertNotIn(global_temperature_id, soil_sensor_ids)
         self.assertNotIn(trash_soil_id, soil_sensor_ids)
         self.assertEqual(irrigation_sensor_ids, {global_irrigation_id})

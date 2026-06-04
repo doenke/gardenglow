@@ -78,7 +78,7 @@
       <option value="{{ location.id }}" {% if location.id in selected_location_ids %}selected{% endif %}>{{ location.name }}</option>
       {% endfor %}
     </select>
-    <small id="sensor-location-help" class="text-muted">Mehrere Beete mit Strg/Cmd oder Shift auswählen. Keine Auswahl bedeutet: Sensor gilt für alle produktiven Beete. Papierkorb auswählen bedeutet: Sensor ist keinem produktiven Beet zugeordnet.</small>
+    <small id="sensor-location-help" class="text-muted">Mehrere Beete mit Strg/Cmd oder Shift auswählen. Keine Auswahl bedeutet: Sensor gilt für alle produktiven Beete, denen kein Sensor dieses Typs explizit zugeordnet ist. Papierkorb auswählen bedeutet: Sensor ist keinem produktiven Beet zugeordnet.</small>
 
     <div class="actions-inline">
       <button type="submit">Speichern</button>

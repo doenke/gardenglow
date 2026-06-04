@@ -15,7 +15,6 @@ from functools import wraps
 from datetime import datetime, timezone, timedelta
 from flask import Blueprint, abort, current_app, g, render_template, request, redirect, url_for, session, jsonify, send_from_directory, flash, send_file
 from .models import db, utc_now, User, Location, Plant, PlantPhoto, PlantNote, GardenMap, TimelineEntry, LightNeed, SoilProperty, Sensor, PlantDatabaseIdentifier, InfluxIntegrationConfig, plant_soil_property, SENSOR_TYPE_LABELS, SENSOR_TYPE_SOIL_MOISTURE, SENSOR_TYPE_TEMPERATURE, SENSOR_TYPE_RAINFALL, SENSOR_TYPE_IRRIGATION, SENSOR_TYPES
-from sqlalchemy import or_
 from .map_data import MapPointValidationError, parse_stored_points, validate_calibration_points, validate_polygon_points
 from .services.timeline_service import save_uploaded_attachment, set_single_title_entry, delete_timeline_entry, build_unique_upload_name
 from .services import influx_service
@@ -622,9 +621,10 @@ def apply_sensor_form(sensor, form):
     if not map_x_valid or not map_y_valid:
         return False, 'Bitte gültige Koordinaten für map_x und map_y angeben.'
 
-    # Eine leere Standortliste ist eine bewusste Auswahl: Der Sensor gilt
-    # dadurch für alle produktiven Beete. Soll ein Sensor keinem produktiven
-    # Beet zugeordnet sein, wird stattdessen der Papierkorb ausgewählt.
+    # Eine leere Standortliste ist eine bewusste Auswahl: Der Sensor gilt als
+    # Fallback für produktive Beete, denen kein Sensor desselben Typs explizit
+    # zugeordnet ist. Soll ein Sensor keinem produktiven Beet zugeordnet sein,
+    # wird stattdessen der Papierkorb ausgewählt.
     locations = get_selected_sensor_locations(form)
 
     sensor_type = (form.get('sensor_type') or form.get('type') or sensor.sensor_type or SENSOR_TYPE_SOIL_MOISTURE).strip()
@@ -1273,30 +1273,51 @@ def _selected_soil_moisture_range():
     return selected_key, SOIL_MOISTURE_RANGE_BY_KEY[selected_key]['delta']
 
 
+def _sensor_sort_key(sensor):
+    return ((sensor.name or '').casefold(), sensor.id or 0)
+
+
+def _location_sensors_for_type(location, sensor_type):
+    base_query = (
+        Sensor.query
+        .filter(Sensor.is_active.is_(True))
+        .filter(Sensor.sensor_type == sensor_type)
+    )
+    explicit_query = base_query.filter(Sensor.locations.any(Location.id == location.id))
+    if location.name == TRASH_LOCATION_NAME:
+        return explicit_query.order_by(Sensor.name.asc(), Sensor.id.asc()).all()
+
+    explicit_sensors = explicit_query.order_by(Sensor.name.asc(), Sensor.id.asc()).all()
+    if explicit_sensors:
+        return explicit_sensors
+
+    # Semantik der Standort-Auswahl bei Sensoren:
+    # - explizit ausgewählte Beete gelten nur für diese Beete
+    # - keine ausgewählten Beete gelten als Fallback für alle produktiven Beete,
+    #   aber nur solange diesem Beet kein Sensor desselben Typs explizit
+    #   zugeordnet ist
+    # - der Papierkorb modelliert ausdrücklich "kein produktives Beet"
+    return (
+        base_query
+        .filter(~Sensor.locations.any())
+        .order_by(Sensor.name.asc(), Sensor.id.asc())
+        .all()
+    )
+
+
 def _location_sensors(location_id, sensor_type=None):
     location = db.session.get(Location, location_id)
     if not location:
         return []
 
-    query = Sensor.query.filter(Sensor.is_active.is_(True))
     if sensor_type:
-        query = query.filter(Sensor.sensor_type == sensor_type)
+        return _location_sensors_for_type(location, sensor_type)
 
-    explicit_location_filter = Sensor.locations.any(Location.id == location.id)
-    if location.name == TRASH_LOCATION_NAME:
-        query = query.filter(explicit_location_filter)
-    else:
-        # Semantik der Standort-Auswahl bei Sensoren:
-        # - explizit ausgewählte Beete gelten nur für diese Beete
-        # - keine ausgewählten Beete gelten als globaler Sensor für alle
-        #   produktiven Beete
-        # - der Papierkorb modelliert ausdrücklich "kein produktives Beet"
-        query = query.filter(or_(
-            explicit_location_filter,
-            ~Sensor.locations.any(),
-        ))
-
-    return query.order_by(Sensor.name.asc(), Sensor.id.asc()).all()
+    sensors_by_id = {}
+    for current_type in SENSOR_TYPES:
+        for sensor in _location_sensors_for_type(location, current_type):
+            sensors_by_id[sensor.id] = sensor
+    return sorted(sensors_by_id.values(), key=_sensor_sort_key)
 
 
 def _location_sensors_by_type(location_id, sensor_type):
@@ -2176,17 +2197,10 @@ def sensors():
     locations = Location.query.order_by(*location_sort_criteria()).all()
     selected_location = db.session.get(Location, selected_location_id) if selected_location_id else None
 
-    sensors_query = Sensor.query
     if selected_location:
-        explicit_location_filter = Sensor.locations.any(Location.id == selected_location.id)
-        if selected_location.name == TRASH_LOCATION_NAME:
-            sensors_query = sensors_query.filter(explicit_location_filter)
-        else:
-            sensors_query = sensors_query.filter(or_(
-                explicit_location_filter,
-                ~Sensor.locations.any(),
-            ))
-    sensors = sensors_query.order_by(Sensor.name.asc(), Sensor.id.asc()).all()
+        sensors = _location_sensors(selected_location.id)
+    else:
+        sensors = Sensor.query.order_by(Sensor.name.asc(), Sensor.id.asc()).all()
     sensor_current_values = _load_sensor_current_values(sensors)
     return render_template(
         'sensors.html',
