@@ -5,7 +5,7 @@ import unittest
 os.environ.setdefault('SECRET_KEY', 'x' * 40)
 
 from app import create_app
-from app.models import Location, Plant, TimelineEntry, User, db
+from app.models import Location, Plant, Sensor, TimelineEntry, User, db, SENSOR_TYPE_TEMPERATURE
 
 
 class LocationTimelineViewTest(unittest.TestCase):
@@ -65,6 +65,28 @@ class LocationTimelineViewTest(unittest.TestCase):
             entry = TimelineEntry.query.filter_by(scope_type='location', scope_id=self.location_id).one()
             self.assertEqual(entry.title, 'Beet vorbereitet')
             self.assertEqual(entry.description, 'Kompost eingearbeitet')
+
+    def test_location_weather_chart_renders_daily_temperature_range_area(self):
+        with self.app.app_context():
+            location = db.session.get(Location, self.location_id)
+            sensor = Sensor(
+                name='Außentemperatur',
+                key='outside_temperature',
+                sensor_type=SENSOR_TYPE_TEMPERATURE,
+                creator_id=self.user_id,
+            )
+            sensor.locations.append(location)
+            db.session.add(sensor)
+            db.session.commit()
+
+        response = self.client.get(f'/locations/{self.location_id}')
+
+        self.assertEqual(response.status_code, 200)
+        html = response.get_data(as_text=True)
+        self.assertIn('const dailyTemperatureRange = (points) => {', html)
+        self.assertIn("const drawTemperatureRangeArea = (context, ranges, { xFor, yFor, color = '#dc2626' }) => {", html)
+        self.assertIn('drawTemperatureRangeArea(context, temperatureRanges', html)
+        self.assertNotIn('drawLineSeries(context, sensorSeries.parsedPoints, {\n          xFor,\n          yFor: temperatureYFor', html)
 
     def test_location_timeline_allows_text_only_without_file_warning(self):
         response = self.client.post(
