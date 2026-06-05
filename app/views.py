@@ -89,6 +89,7 @@ DEFAULT_SOIL_MOISTURE_RANGE = '7d'
 WEATHER_SERIES_DEFINITIONS = {
     'temperature': {'label': 'Temperatur', 'unit': '°C'},
     'rainfall': {'label': 'Regenmenge', 'unit': 'mm'},
+    'irrigation': {'label': 'Bewässerung', 'unit': 'min'},
 }
 
 ENVIRONMENT_VARIABLES = [
@@ -1340,6 +1341,7 @@ def _weather_sensor_types():
     return {
         'temperature': SENSOR_TYPE_TEMPERATURE,
         'rainfall': SENSOR_TYPE_RAINFALL,
+        'irrigation': SENSOR_TYPE_IRRIGATION,
     }
 
 
@@ -1394,6 +1396,10 @@ def _load_location_weather_sensor_series(location_id, lookback):
                 sensor_points = adapter.query_sensor(sensor, start, stop)
             except Exception as exc:  # pragma: no cover - concrete InfluxDB failures are integration-specific
                 errors.append(f'{sensor.name}: {exc}')
+            if kind == 'rainfall':
+                sensor_points = _aggregate_daily_sum_points(sensor_points)
+            elif kind == 'irrigation':
+                sensor_points = _aggregate_daily_active_minutes_points(sensor_points, start, stop)
             flat_points.extend(sensor_points)
             for sensor_series in series[kind]['series']:
                 if sensor_series['sensor_id'] == sensor.id:
@@ -1448,6 +1454,77 @@ def _influx_service_config_from_db_or_app():
         timeout_seconds=influx_config.timeout_seconds,
         verify_tls=influx_config.verify_tls,
     )
+
+
+
+def _parse_sensor_time(raw_time):
+    if isinstance(raw_time, datetime):
+        parsed = raw_time
+    else:
+        try:
+            parsed = datetime.fromisoformat(str(raw_time).replace('Z', '+00:00'))
+        except (TypeError, ValueError):
+            return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _daily_bucket_time(day_start):
+    return (day_start + timedelta(hours=12)).isoformat()
+
+
+def _aggregate_daily_sum_points(points):
+    buckets = {}
+    for point in points or []:
+        point_time = _parse_sensor_time(point.get('time'))
+        value = _numeric_sensor_value(point.get('value'))
+        if point_time is None or value is None:
+            continue
+        day_start = point_time.replace(hour=0, minute=0, second=0, microsecond=0)
+        buckets[day_start] = buckets.get(day_start, 0.0) + value
+    return [
+        {'time': _daily_bucket_time(day_start), 'value': value}
+        for day_start, value in sorted(buckets.items())
+    ]
+
+
+def _aggregate_daily_active_minutes_points(points, start, stop):
+    normalized_points = []
+    range_start = _parse_sensor_time(start)
+    range_stop = _parse_sensor_time(stop)
+    if range_start is None or range_stop is None or range_stop <= range_start:
+        return []
+
+    for point in points or []:
+        point_time = _parse_sensor_time(point.get('time'))
+        value = _numeric_sensor_value(point.get('value'))
+        if point_time is None or value is None:
+            continue
+        normalized_points.append({'time': point_time, 'value': value})
+    normalized_points.sort(key=lambda point: point['time'])
+
+    buckets = {}
+    for index, point in enumerate(normalized_points):
+        if point['value'] < 0.5:
+            continue
+        interval_start = max(point['time'], range_start)
+        next_time = normalized_points[index + 1]['time'] if index + 1 < len(normalized_points) else range_stop
+        interval_stop = min(next_time, range_stop)
+        if interval_stop <= interval_start:
+            continue
+        current = interval_start
+        while current < interval_stop:
+            day_start = current.replace(hour=0, minute=0, second=0, microsecond=0)
+            next_day = day_start + timedelta(days=1)
+            segment_stop = min(interval_stop, next_day)
+            buckets[day_start] = buckets.get(day_start, 0.0) + (segment_stop - current).total_seconds() / 60
+            current = segment_stop
+
+    return [
+        {'time': _daily_bucket_time(day_start), 'value': round(minutes, 1)}
+        for day_start, minutes in sorted(buckets.items())
+    ]
 
 
 def _numeric_sensor_value(raw_value):
