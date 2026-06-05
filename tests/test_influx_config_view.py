@@ -125,6 +125,34 @@ class InfluxConfigViewTest(unittest.TestCase):
         self.assertNotIn('action="/config/weather-sensors"', html)
         self.assertNotIn('Globale Homeassistant-Entities für Wetterdaten', html)
 
+    def test_saves_global_soil_moisture_target(self):
+        response = self.client.post(
+            '/config/soil-moisture-target',
+            data={'target_soil_moisture_percent': '55,5'},
+        )
+
+        self.assertEqual(response.status_code, 302)
+        with self.app.app_context():
+            config = InfluxIntegrationConfig.query.one()
+            self.assertEqual(config.target_soil_moisture_percent, 55.5)
+
+        response = self.client.get('/config')
+        html = response.get_data(as_text=True)
+        self.assertIn('id="soil-moisture-target"', html)
+        self.assertIn('value="55.5"', html)
+
+    def test_global_soil_moisture_target_can_be_cleared(self):
+        with self.app.app_context():
+            db.session.add(InfluxIntegrationConfig(target_soil_moisture_percent=55))
+            db.session.commit()
+
+        response = self.client.post('/config/soil-moisture-target', data={'target_soil_moisture_percent': ''})
+
+        self.assertEqual(response.status_code, 302)
+        with self.app.app_context():
+            config = InfluxIntegrationConfig.query.one()
+            self.assertIsNone(config.target_soil_moisture_percent)
+
     def test_homeassistant_config_saves_without_changing_influx_values(self):
         with self.app.app_context():
             db.session.add(InfluxIntegrationConfig(

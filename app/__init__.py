@@ -1,7 +1,7 @@
 from flask import Flask
 from sqlalchemy import inspect
 from werkzeug.middleware.proxy_fix import ProxyFix
-from .models import db, LightNeed, InfluxIntegrationConfig, Sensor, User, SENSOR_TYPE_SOIL_MOISTURE, SENSOR_TYPE_TEMPERATURE, SENSOR_TYPE_RAINFALL
+from .models import db, LightNeed, InfluxIntegrationConfig, Location, Sensor, User, SENSOR_TYPE_SOIL_MOISTURE, SENSOR_TYPE_TEMPERATURE, SENSOR_TYPE_RAINFALL
 from .auth import DEFAULT_LOCAL_USER_NAME, DEFAULT_LOCAL_USER_SUB, DEFAULT_MAX_AVATAR_SIZE_BYTES, OIDC_ENV_VARS, auth_bp, oauth, oidc_configured_from_env
 from .views import main_bp
 from .map_data import parse_stored_points
@@ -112,6 +112,7 @@ def create_app():
     with app.app_context():
         db.create_all()
         _ensure_sensor_schema()
+        _ensure_soil_moisture_target_schema()
         _migrate_legacy_weather_config_to_sensors()
         _seed_light_needs()
 
@@ -154,6 +155,27 @@ def _ensure_sensor_schema():
                 ')'
             )
 
+
+
+def _ensure_soil_moisture_target_schema():
+    """Keep soil moisture target columns compatible with existing databases."""
+    inspector = inspect(db.engine)
+    table_names = set(inspector.get_table_names())
+    target_column = 'target_soil_moisture_percent'
+
+    table_models = (
+        (Location.__tablename__, 'FLOAT'),
+        (InfluxIntegrationConfig.__tablename__, 'FLOAT'),
+    )
+    with db.engine.begin() as connection:
+        for table_name, column_type in table_models:
+            if table_name not in table_names:
+                continue
+            existing_columns = {column['name'] for column in inspector.get_columns(table_name)}
+            if target_column not in existing_columns:
+                connection.exec_driver_sql(
+                    f'ALTER TABLE {table_name} ADD COLUMN {target_column} {column_type}'
+                )
 
 def _seed_light_needs():
     """Ensure the default light need catalog values exist."""

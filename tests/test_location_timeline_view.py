@@ -5,7 +5,7 @@ import unittest
 os.environ.setdefault('SECRET_KEY', 'x' * 40)
 
 from app import create_app
-from app.models import Location, Plant, Sensor, TimelineEntry, User, db, SENSOR_TYPE_TEMPERATURE
+from app.models import InfluxIntegrationConfig, Location, Plant, Sensor, TimelineEntry, User, db, SENSOR_TYPE_TEMPERATURE
 
 
 class LocationTimelineViewTest(unittest.TestCase):
@@ -157,6 +157,47 @@ class LocationTimelineViewTest(unittest.TestCase):
             self.assertIsNone(entry.description)
             self.assertIsNone(entry.attachment_filename)
 
+    def test_location_soil_moisture_target_overrides_global_target(self):
+        with self.app.app_context():
+            db.session.add(InfluxIntegrationConfig(target_soil_moisture_percent=50))
+            db.session.commit()
+
+        response = self.client.get(f'/locations/{self.location_id}')
+        html = response.get_data(as_text=True)
+        self.assertIn('Aktive Ziellinie: 50 % · Globale Vorgabe', html)
+        self.assertIn('id="target-soil-moisture-data"', html)
+        self.assertIn('Ziel-Bodenfeuchte', html)
+
+        response = self.client.post(
+            f'/locations/{self.location_id}/target-soil-moisture',
+            data={'target_soil_moisture_percent': '62.5'},
+        )
+        self.assertEqual(response.status_code, 302)
+
+        response = self.client.get(f'/locations/{self.location_id}/soil-moisture')
+        payload = response.get_json()
+        self.assertEqual(payload['target_soil_moisture']['value'], 62.5)
+        self.assertEqual(payload['target_soil_moisture']['source'], 'location')
+
+    def test_location_soil_moisture_target_can_fall_back_to_global(self):
+        with self.app.app_context():
+            db.session.add(InfluxIntegrationConfig(target_soil_moisture_percent=47))
+            db.session.commit()
+
+        self.client.post(
+            f'/locations/{self.location_id}/target-soil-moisture',
+            data={'target_soil_moisture_percent': '61'},
+        )
+        self.client.post(
+            f'/locations/{self.location_id}/target-soil-moisture',
+            data={'target_soil_moisture_percent': ''},
+        )
+
+        response = self.client.get(f'/locations/{self.location_id}/soil-moisture')
+        payload = response.get_json()
+        self.assertEqual(payload['target_soil_moisture']['value'], 47)
+        self.assertEqual(payload['target_soil_moisture']['source'], 'global')
 
 if __name__ == '__main__':
     unittest.main()
+
