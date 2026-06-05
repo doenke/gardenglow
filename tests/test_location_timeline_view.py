@@ -89,6 +89,10 @@ class LocationTimelineViewTest(unittest.TestCase):
         self.assertIn('data-chart-height="260" data-chart-height-mobile="180"', html)
         self.assertIn('const desktopHeight = Number(canvas.dataset.chartHeight) || 260;', html)
         self.assertIn('const mobileHeight = Number(canvas.dataset.chartHeightMobile) || 180;', html)
+        self.assertIn('const padding = { top: 24, right: 188, bottom: 38, left: 52 };', html)
+        self.assertIn('const rightAxisGap = 64;', html)
+        self.assertIn('x: cssWidth - padding.right + (rightAxisGap * 2),', html)
+        self.assertIn('titleOffset: 46,', html)
         self.assertNotIn("const defaultHeight = Number(canvas.getAttribute('height')) || 260;", html)
         self.assertNotIn('drawLineSeries(context, sensorSeries.parsedPoints, {\n          xFor,\n          yFor: temperatureYFor', html)
 

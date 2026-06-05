@@ -533,7 +533,8 @@
       return;
     }
 
-    const padding = { top: 24, right: 132, bottom: 38, left: 52 };
+    const padding = { top: 24, right: 188, bottom: 38, left: 52 };
+    const rightAxisGap = 64;
     const plotWidth = cssWidth - padding.left - padding.right;
     const plotHeight = cssHeight - padding.top - padding.bottom;
     const minTime = Math.min(...allPoints.map((point) => point.time));
@@ -592,7 +593,7 @@
         minValue: rainfallDomain.minValue,
         maxValue: rainfallDomain.maxValue,
         yFor: rainfallYFor,
-        x: cssWidth - 76,
+        x: cssWidth - padding.right + rightAxisGap,
         align: 'left',
         color: '#0f766e',
         labelForTick: (value) => `${Math.round(value)} mm`,
@@ -605,12 +606,12 @@
         minValue: irrigationDomain.minValue,
         maxValue: irrigationDomain.maxValue,
         yFor: irrigationYFor,
-        x: cssWidth - 22,
+        x: cssWidth - padding.right + (rightAxisGap * 2),
         align: 'left',
         color: '#f97316',
         labelForTick: (value) => `${Math.round(value)} min`,
         title: 'Bewässerung',
-        titleOffset: 64,
+        titleOffset: 46,
       });
     }
 
