@@ -458,9 +458,9 @@ class SensorModelTest(unittest.TestCase):
             db.session.commit()
 
         with patch('app.views.influx_service.get_sensor_time_series_adapter', return_value=FakeAdapter()) as adapter_factory:
-            page_response = self.client.get(f'/locations/{self.location_id}?moisture_range=24h')
+            page_response = self.client.get(f'/locations/{self.location_id}?moisture_range=7d')
             adapter_factory.assert_not_called()
-            response = self.client.get(f'/locations/{self.location_id}/soil-moisture?moisture_range=24h')
+            response = self.client.get(f'/locations/{self.location_id}/soil-moisture?moisture_range=7d')
 
         self.assertEqual(page_response.status_code, 200)
         self.assertEqual(adapter_factory.call_count, 2)
@@ -469,7 +469,7 @@ class SensorModelTest(unittest.TestCase):
         self.assertNotIn('\"value\": 35.2', page_html)
         self.assertEqual(response.status_code, 200)
         payload = response.get_json()
-        self.assertEqual(payload['range_key'], '24h')
+        self.assertEqual(payload['range_key'], '7d')
         self.assertEqual(payload['series'][0]['sensor_id'], self.sensor_id)
         self.assertEqual(payload['series'][0]['points'][0]['value'], 35.2)
         self.assertNotIn('Für den gewählten Zeitraum wurden keine Bodenfeuchte-Daten gefunden.', payload['hints'])

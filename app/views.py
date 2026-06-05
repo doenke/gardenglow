@@ -80,7 +80,6 @@ LIGHT_NEED_OPTIONS = [
 LIGHT_NEED_KEY_TO_LABEL = {item['key']: item['label'] for item in LIGHT_NEED_OPTIONS}
 LIGHT_NEED_ICON_BY_KEY = {item['key']: item['icon'] for item in LIGHT_NEED_OPTIONS}
 SOIL_MOISTURE_RANGE_OPTIONS = [
-    {'key': '24h', 'label': '24 Stunden', 'delta': timedelta(hours=24)},
     {'key': '7d', 'label': '7 Tage', 'delta': timedelta(days=7)},
     {'key': '30d', 'label': '30 Tage', 'delta': timedelta(days=30)},
     {'key': '1y', 'label': '1 Jahr', 'delta': timedelta(days=365)},
