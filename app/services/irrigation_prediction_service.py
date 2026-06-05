@@ -27,6 +27,8 @@ LATEST_LOOKBACK = timedelta(hours=24)
 DEFAULT_TARGET_SOIL_MOISTURE_PERCENT = 55.0
 MIN_TRAINING_SAMPLES = 2
 RIDGE_LAMBDA = 0.1
+EXCLUDED_LOCATION_NAMES = {'Papierkorb'}
+
 FEATURE_NAMES = (
     'soil_moisture_percent',
     'target_soil_moisture_percent',
@@ -72,7 +74,12 @@ def train_due_models(
     adapter = adapter or influx_service.get_sensor_time_series_adapter(adapter_config)
     stored_config = _first_influx_integration_config()
     global_target = getattr(stored_config, 'target_soil_moisture_percent', None) if stored_config else None
-    locations = Location.query.filter(Location.name != 'Papierkorb').order_by(Location.name.asc(), Location.id.asc()).all()
+    locations = (
+        Location.query
+        .filter(~Location.name.in_(EXCLUDED_LOCATION_NAMES))
+        .order_by(Location.name.asc(), Location.id.asc())
+        .all()
+    )
     summary = {'checked': len(locations), 'trained': 0, 'failed': 0, 'skipped': False, 'errors': []}
     for location in locations:
         model = _model_for_location(location)
@@ -111,6 +118,9 @@ def predict_for_location(
     """Return an API-ready irrigation prediction for one bed/location."""
     now = _as_utc(now or datetime.now(timezone.utc))
     target = _target_or_default(target_soil_moisture_percent)
+    if _prediction_excluded_for_location(location):
+        return _excluded_prediction_payload(location, target, max_minutes)
+
     adapter = adapter or influx_service.get_sensor_time_series_adapter()
 
     model = _model_for_location(location)
@@ -163,6 +173,9 @@ def train_model_for_location(
     max_minutes: float = 120.0,
     training_lookback: timedelta = TRAINING_LOOKBACK,
 ) -> IrrigationPredictionModel:
+    if _prediction_excluded_for_location(location):
+        raise ValueError('Für den Papierkorb wird kein Bewässerungs-Prognosemodell trainiert.')
+
     now = _as_utc(now or datetime.now(timezone.utc))
     target = _target_or_default(target_soil_moisture_percent)
     start = now - training_lookback
@@ -240,6 +253,27 @@ def _effective_influx_config() -> influx_service.InfluxIntegrationConfig:
             verify_tls=stored_config.verify_tls,
         )
     return influx_service.InfluxIntegrationConfig.from_mapping(current_app.config)
+
+
+def _prediction_excluded_for_location(location: Location) -> bool:
+    return (getattr(location, 'name', '') or '').strip() in EXCLUDED_LOCATION_NAMES
+
+
+def _excluded_prediction_payload(location: Location, target: float, max_minutes: float) -> dict[str, Any]:
+    return {
+        'location_id': location.id,
+        'location_name': location.name,
+        'target_soil_moisture_percent': target,
+        'predicted_minutes': None,
+        'raw_predicted_minutes': None,
+        'max_minutes': max_minutes,
+        'source': 'unavailable',
+        'trained_now': False,
+        'training_error': None,
+        'model': None,
+        'features': None,
+    }
+
 
 def _model_for_location(location: Location) -> IrrigationPredictionModel | None:
     if not location.id:

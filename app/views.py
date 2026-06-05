@@ -2057,12 +2057,17 @@ def _irrigation_training_report():
     config = _irrigation_prediction_config()
     models_by_location_id = {
         model.location_id: model
-        for model in IrrigationPredictionModel.query.all()
+        for model in (
+            IrrigationPredictionModel.query
+            .join(Location)
+            .filter(Location.name != TRASH_LOCATION_NAME)
+            .all()
+        )
     }
     rows = []
     trained_models = 0
     due_models = 0
-    for location in Location.query.order_by(Location.name).all():
+    for location in Location.query.filter(Location.name != TRASH_LOCATION_NAME).order_by(Location.name).all():
         model = models_by_location_id.get(location.id)
         trained_at = _as_utc_datetime(model.trained_at) if model and model.trained_at else None
         is_due = irrigation_prediction_service._training_due(model, now, config.train_interval)
@@ -2120,7 +2125,7 @@ def admin():
 @login_required
 def train_irrigation_prediction_models():
     location_id = (request.form.get('location_id') or '').strip()
-    query = Location.query.order_by(Location.name)
+    query = Location.query.filter(Location.name != TRASH_LOCATION_NAME).order_by(Location.name)
     if location_id:
         try:
             query = query.filter(Location.id == int(location_id))
@@ -2130,7 +2135,7 @@ def train_irrigation_prediction_models():
 
     locations = query.all()
     if not locations:
-        flash('Keine Beete für das Modelltraining gefunden.', 'warning')
+        flash('Keine produktiven Beete für das Modelltraining gefunden. Der Papierkorb erhält kein Prognosemodell.', 'warning')
         return redirect(url_for('main.admin'))
 
     config = _irrigation_prediction_config()
