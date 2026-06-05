@@ -2155,7 +2155,7 @@ def train_irrigation_prediction_models():
             trained_count += 1
 
     if trained_count:
-        flash(f'Modelltraining für {trained_count} Beet(er) abgeschlossen.', 'success')
+        flash(f"Modelltraining für {trained_count} {'Beet' if trained_count == 1 else 'Beete'} abgeschlossen.", 'success')
     if failed:
         flash('Modelltraining fehlgeschlagen: ' + '; '.join(failed), 'error')
     return redirect(url_for('main.admin'))
