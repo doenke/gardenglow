@@ -116,6 +116,8 @@ ENVIRONMENT_VARIABLES = [
     {'name': 'IRRIGATION_PREDICTION_MAX_MINUTES', 'config_key': 'IRRIGATION_PREDICTION_MAX_MINUTES', 'default': '120'},
     {'name': 'IRRIGATION_PREDICTION_TRAIN_INTERVAL_DAYS', 'config_key': 'IRRIGATION_PREDICTION_TRAIN_INTERVAL_DAYS', 'default': '7'},
     {'name': 'IRRIGATION_PREDICTION_TRAINING_LOOKBACK_DAYS', 'config_key': 'IRRIGATION_PREDICTION_TRAINING_LOOKBACK_DAYS', 'default': '90'},
+    {'name': 'IRRIGATION_PREDICTION_TRAIN_CRON_TIME', 'config_key': 'IRRIGATION_PREDICTION_TRAIN_CRON_TIME', 'default': '03:00'},
+    {'name': 'IRRIGATION_PREDICTION_TRAIN_CRON_ENABLED', 'config_key': 'IRRIGATION_PREDICTION_TRAIN_CRON_ENABLED', 'default': 'true'},
     {'name': 'OIDC_SERVER_METADATA_URL', 'config_key': None, 'default': ''},
     {'name': 'OIDC_CLIENT_ID', 'config_key': None, 'default': ''},
     {'name': 'OIDC_CLIENT_SECRET', 'config_key': None, 'default': '', 'sensitive': True},

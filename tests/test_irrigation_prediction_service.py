@@ -19,6 +19,7 @@ from app.models import (
     SENSOR_TYPE_SOIL_MOISTURE,
 )
 from app.services import irrigation_prediction_service
+from app.services import irrigation_prediction_scheduler
 
 
 class FakeAdapter:
@@ -40,6 +41,7 @@ class IrrigationPredictionServiceTest(unittest.TestCase):
         self.db_fd, self.db_path = tempfile.mkstemp(suffix='.sqlite')
         os.close(self.db_fd)
         os.environ['DATABASE_URL'] = f'sqlite:///{self.db_path}'
+        os.environ['IRRIGATION_PREDICTION_TRAIN_CRON_ENABLED'] = 'false'
         self.app = create_app()
         self.app.config.update(TESTING=True, WIDGET_API_KEY='secret')
         self.client = self.app.test_client()
@@ -61,6 +63,7 @@ class IrrigationPredictionServiceTest(unittest.TestCase):
             db.drop_all()
         os.unlink(self.db_path)
         os.environ.pop('DATABASE_URL', None)
+        os.environ.pop('IRRIGATION_PREDICTION_TRAIN_CRON_ENABLED', None)
 
     def test_clamps_negative_and_too_large_predictions(self):
         self.assertEqual(irrigation_prediction_service.clamp_minutes(-5, 120), 0)
@@ -105,6 +108,43 @@ class IrrigationPredictionServiceTest(unittest.TestCase):
             self.assertFalse(second_prediction['trained_now'])
             self.assertLess(adapter.query_count - query_count_after_training, query_count_after_training)
 
+    def test_train_due_models_trains_due_locations(self):
+        now = datetime(2026, 6, 5, 12, tzinfo=timezone.utc)
+        soil_points = []
+        irrigation_points = []
+        for days_ago, soil, minutes in [(3, 45, 35), (2, 48, 25), (1, 52, 10)]:
+            day = (now - timedelta(days=days_ago)).replace(hour=6, minute=0, second=0, microsecond=0)
+            soil_points.append({'time': day.isoformat(), 'value': soil})
+            irrigation_points.extend([
+                {'time': day.replace(hour=7).isoformat(), 'value': 1},
+                {'time': (day.replace(hour=7) + timedelta(minutes=minutes)).isoformat(), 'value': 0},
+            ])
+        adapter = FakeAdapter({'soil': soil_points, 'irrigation': irrigation_points})
+
+        with self.app.app_context():
+            summary = irrigation_prediction_service.train_due_models(now=now, adapter=adapter)
+
+            self.assertEqual(summary['checked'], 1)
+            self.assertEqual(summary['trained'], 1)
+            self.assertEqual(summary['failed'], 0)
+            model = IrrigationPredictionModel.query.filter_by(location_id=self.location_id).one()
+            self.assertEqual(model.trained_at.replace(tzinfo=timezone.utc), now)
+
+    def test_train_due_models_skips_without_influx_config(self):
+        with self.app.app_context():
+            summary = irrigation_prediction_service.train_due_models()
+
+        self.assertTrue(summary['skipped'])
+        self.assertEqual(summary['reason'], 'InfluxDB ist nicht vollständig konfiguriert.')
+
+    def test_scheduler_uses_default_three_am_and_next_daily_run(self):
+        schedule_time = irrigation_prediction_scheduler.parse_daily_time('')
+        self.assertEqual((schedule_time.hour, schedule_time.minute), (3, 0))
+
+        before_three = datetime(2026, 6, 5, 2, 30, tzinfo=timezone.utc)
+        after_three = datetime(2026, 6, 5, 3, 30, tzinfo=timezone.utc)
+        self.assertEqual(irrigation_prediction_scheduler.seconds_until_next_run(schedule_time, before_three), 30 * 60)
+        self.assertEqual(irrigation_prediction_scheduler.seconds_until_next_run(schedule_time, after_three), 23.5 * 60 * 60)
 
     def test_config_route_persists_prediction_max_minutes(self):
         with self.client.session_transaction() as session:

@@ -83,6 +83,8 @@ docker compose up --build
 - `IRRIGATION_PREDICTION_MAX_MINUTES` – Obergrenze für ML-Bewässerungsprognosen in Minuten (Standard: `120`). Negative Modellwerte werden zu `0`, Werte oberhalb der Obergrenze werden auf diese Obergrenze beschränkt.
 - `IRRIGATION_PREDICTION_TRAIN_INTERVAL_DAYS` – Mindestabstand zwischen zwei Trainingsläufen je Beet in Tagen (Standard: `7`).
 - `IRRIGATION_PREDICTION_TRAINING_LOOKBACK_DAYS` – Historischer Sensorzeitraum für das Modelltraining in Tagen (Standard: `90`).
+- `IRRIGATION_PREDICTION_TRAIN_CRON_TIME` – tägliche Uhrzeit, zu der fällige Bewässerungs-Prognosemodelle automatisch geprüft und bei Bedarf neu trainiert werden (Format `HH:MM`, Standard: `03:00`).
+- `IRRIGATION_PREDICTION_TRAIN_CRON_ENABLED` – aktiviert (`true`) oder deaktiviert (`false`) den täglichen Trainings-Cronjob (Standard: `true`).
 
 ### OIDC (optional)
 
@@ -96,7 +98,7 @@ docker compose up --build
 
 ## Webservice für Bewässerungs-Prognosen
 
-GardenGlow stellt ML-basierte JSON-Endpunkte bereit, die aus den vorhandenen Sensor-Zeitreihen je Beet vorhersagen, wie viele Minuten die Bewässerung heute laufen sollte, um die Ziel-Bodenfeuchte zu erreichen. Das Training wird pro Beet beim Abruf automatisch ausgeführt, wenn noch kein Modell vorhanden ist oder das letzte Training mindestens eine Woche zurückliegt.
+GardenGlow stellt ML-basierte JSON-Endpunkte bereit, die aus den vorhandenen Sensor-Zeitreihen je Beet vorhersagen, wie viele Minuten die Bewässerung heute laufen sollte, um die Ziel-Bodenfeuchte zu erreichen. Ein täglicher Cronjob prüft standardmäßig um `03:00` Uhr, ob Modelle fällig sind, und trainiert sie bei Bedarf neu. Die Uhrzeit kann über `IRRIGATION_PREDICTION_TRAIN_CRON_TIME` im Format `HH:MM` geändert werden. Zusätzlich wird das Training pro Beet beim Abruf weiterhin automatisch ausgeführt, falls noch kein Modell vorhanden ist oder das letzte Training mindestens eine Woche zurückliegt.
 
 Endpunkte:
 

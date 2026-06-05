@@ -6,6 +6,7 @@ from .auth import DEFAULT_LOCAL_USER_NAME, DEFAULT_LOCAL_USER_SUB, DEFAULT_MAX_A
 from .views import main_bp
 from .map_data import parse_stored_points
 from .services import influx_service
+from .services.irrigation_prediction_scheduler import DEFAULT_IRRIGATION_PREDICTION_TRAIN_CRON_TIME, start_irrigation_prediction_train_cron
 import os
 
 
@@ -101,6 +102,8 @@ def create_app():
     app.config['IRRIGATION_PREDICTION_MAX_MINUTES'] = max(0.0, float(os.getenv('IRRIGATION_PREDICTION_MAX_MINUTES', '120')))
     app.config['IRRIGATION_PREDICTION_TRAIN_INTERVAL_DAYS'] = max(0.0, float(os.getenv('IRRIGATION_PREDICTION_TRAIN_INTERVAL_DAYS', '7')))
     app.config['IRRIGATION_PREDICTION_TRAINING_LOOKBACK_DAYS'] = max(1.0, float(os.getenv('IRRIGATION_PREDICTION_TRAINING_LOOKBACK_DAYS', '90')))
+    app.config['IRRIGATION_PREDICTION_TRAIN_CRON_TIME'] = os.getenv('IRRIGATION_PREDICTION_TRAIN_CRON_TIME', DEFAULT_IRRIGATION_PREDICTION_TRAIN_CRON_TIME).strip() or DEFAULT_IRRIGATION_PREDICTION_TRAIN_CRON_TIME
+    app.config['IRRIGATION_PREDICTION_TRAIN_CRON_ENABLED'] = (os.getenv('IRRIGATION_PREDICTION_TRAIN_CRON_ENABLED', 'true') or '').strip().lower() in {'1', 'true', 'yes', 'on', 'y'}
 
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_port=1, x_prefix=1)
 
@@ -123,6 +126,8 @@ def create_app():
         os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
         os.makedirs(app.config['AVATAR_FOLDER'], exist_ok=True)
         os.makedirs(app.config['MAP_FOLDER'], exist_ok=True)
+
+    start_irrigation_prediction_train_cron(app)
 
     return app
 

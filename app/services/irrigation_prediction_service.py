@@ -10,6 +10,7 @@ from typing import Any
 
 from app.models import (
     db,
+    InfluxIntegrationConfig,
     IrrigationPredictionModel,
     Location,
     Sensor,
@@ -49,6 +50,52 @@ def prediction_config_from_app(app_config: Any) -> PredictionConfig:
         train_interval=timedelta(days=_positive_float(app_config.get('IRRIGATION_PREDICTION_TRAIN_INTERVAL_DAYS'), 7.0)),
         training_lookback=timedelta(days=_positive_float(app_config.get('IRRIGATION_PREDICTION_TRAINING_LOOKBACK_DAYS'), 90.0)),
     )
+
+
+def train_due_models(
+    now: datetime | None = None,
+    adapter: influx_service.SensorTimeSeriesAdapter | None = None,
+) -> dict[str, Any]:
+    """Train all due irrigation prediction models once and return a summary."""
+    now = _as_utc(now or datetime.now(timezone.utc))
+    config = _effective_prediction_config()
+    adapter_config = _effective_influx_config()
+    if adapter is None and not adapter_config.enabled:
+        return {
+            'checked': 0,
+            'trained': 0,
+            'failed': 0,
+            'skipped': True,
+            'reason': 'InfluxDB ist nicht vollständig konfiguriert.',
+        }
+
+    adapter = adapter or influx_service.get_sensor_time_series_adapter(adapter_config)
+    stored_config = _first_influx_integration_config()
+    global_target = getattr(stored_config, 'target_soil_moisture_percent', None) if stored_config else None
+    locations = Location.query.filter(Location.name != 'Papierkorb').order_by(Location.name.asc(), Location.id.asc()).all()
+    summary = {'checked': len(locations), 'trained': 0, 'failed': 0, 'skipped': False, 'errors': []}
+    for location in locations:
+        model = _model_for_location(location)
+        if not _training_due(model, now, config.train_interval):
+            continue
+
+        target = getattr(location, 'target_soil_moisture_percent', None)
+        if target is None:
+            target = global_target
+        try:
+            train_model_for_location(
+                location,
+                target,
+                adapter,
+                now=now,
+                max_minutes=config.max_minutes,
+                training_lookback=config.training_lookback,
+            )
+            summary['trained'] += 1
+        except Exception as exc:  # pragma: no cover - concrete InfluxDB failures are integration-specific
+            summary['failed'] += 1
+            summary['errors'].append({'location_id': location.id, 'location_name': location.name, 'error': str(exc)})
+    return summary
 
 
 def predict_for_location(
@@ -154,6 +201,45 @@ def clamp_minutes(value: float | None, max_minutes: float) -> float | None:
     bounded = min(max(value, 0.0), max(0.0, max_minutes))
     return round(bounded, 1)
 
+
+def _first_influx_integration_config() -> InfluxIntegrationConfig | None:
+    return InfluxIntegrationConfig.query.order_by(InfluxIntegrationConfig.id.asc()).first()
+
+
+def _effective_prediction_config() -> PredictionConfig:
+    from flask import current_app
+
+    config = prediction_config_from_app(current_app.config)
+    stored_config = _first_influx_integration_config()
+    stored_max = getattr(stored_config, 'irrigation_prediction_max_minutes', None) if stored_config else None
+    if stored_max is None:
+        return config
+    return PredictionConfig(
+        max_minutes=max(0.0, float(stored_max)),
+        train_interval=config.train_interval,
+        training_lookback=config.training_lookback,
+    )
+
+
+def _effective_influx_config() -> influx_service.InfluxIntegrationConfig:
+    from flask import current_app
+
+    stored_config = _first_influx_integration_config()
+    if stored_config and any((
+        stored_config.influx_url,
+        stored_config.influx_token,
+        stored_config.influx_org,
+        stored_config.influx_bucket,
+    )):
+        return influx_service.InfluxIntegrationConfig(
+            url=(stored_config.influx_url or '').strip(),
+            token=(stored_config.influx_token or '').strip(),
+            org=(stored_config.influx_org or '').strip(),
+            bucket=(stored_config.influx_bucket or '').strip(),
+            timeout_seconds=stored_config.timeout_seconds or influx_service.DEFAULT_TIMEOUT_SECONDS,
+            verify_tls=stored_config.verify_tls,
+        )
+    return influx_service.InfluxIntegrationConfig.from_mapping(current_app.config)
 
 def _model_for_location(location: Location) -> IrrigationPredictionModel | None:
     if not location.id:
