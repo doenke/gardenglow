@@ -138,7 +138,24 @@ class AdminViewTest(unittest.TestCase):
         self.assertEqual(args[0].id, self.location_id)
         self.assertEqual(args[1], 62.5)
         self.assertEqual(kwargs['max_minutes'], 120.0)
-        self.assertIn('Modelltraining für 1 Beet(er) abgeschlossen.', response.get_data(as_text=True))
+        self.assertIn('Modelltraining für 1 Beet abgeschlossen.', response.get_data(as_text=True))
+
+    def test_irrigation_training_uses_correct_bed_plural_from_admin_page(self):
+        with self.app.app_context():
+            second_location = Location(name='Kraeuterbeet', target_soil_moisture_percent=48)
+            db.session.add(second_location)
+            db.session.commit()
+
+        with patch('app.views.influx_service.get_sensor_time_series_adapter', return_value=object()), \
+                patch('app.views.irrigation_prediction_service.train_model_for_location') as train_mock:
+            response = self.client.post(
+                '/admin/irrigation-prediction/train',
+                follow_redirects=True,
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(train_mock.call_count, 2)
+        self.assertIn('Modelltraining für 2 Beete abgeschlossen.', response.get_data(as_text=True))
 
     def test_irrigation_training_skips_trash_from_admin_page(self):
         with patch('app.views.influx_service.get_sensor_time_series_adapter') as adapter_mock, \
