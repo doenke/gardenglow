@@ -19,6 +19,8 @@
     <span class="soil-moisture-card-title">Bodenfeuchte</span>
     <strong id="soil-moisture-current-label">–</strong>
     <small id="soil-moisture-current-meta"></small>
+    <small class="soil-moisture-card-target hidden" id="soil-moisture-target-label"></small>
+    <small class="soil-moisture-card-irrigation hidden" id="soil-moisture-irrigation-label"></small>
   </aside>
   {% endif %}
 </div>
@@ -224,6 +226,8 @@
 .soil-moisture-card{display:grid;gap:.1rem;min-width:170px;padding:.65rem .8rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-soft)}
 .soil-moisture-card-title,.soil-moisture-card small{color:var(--muted);font-size:.82rem}
 .soil-moisture-card strong{font-size:1.35rem;line-height:1.1}
+.soil-moisture-card-target{font-size:.76rem!important}
+.soil-moisture-card-irrigation{color:var(--text)!important}
 .plant-create-dialog{width:min(92vw,440px);border:1px solid var(--border);border-radius:16px;background:var(--surface);color:var(--text);box-shadow:var(--shadow);padding:1rem}
 .plant-create-dialog::backdrop{background:rgba(0,0,0,.45);backdrop-filter:blur(2px)}
 .dialog-head{display:flex;align-items:center;justify-content:space-between;gap:1rem}
@@ -296,7 +300,19 @@
     }).join('');
   };
 
-  const updateSoilMoistureCurrent = (current) => {
+  const updateOptionalSoilMoistureCardLine = (id, text) => {
+    const node = document.getElementById(id);
+    if (!node) return;
+    if (text) {
+      node.textContent = text;
+      node.classList.remove('hidden');
+    } else {
+      node.textContent = '';
+      node.classList.add('hidden');
+    }
+  };
+
+  const updateSoilMoistureCurrent = (current, targetSoilMoisture = null, plannedIrrigation = null) => {
     const card = document.getElementById('soil-moisture-current-card');
     if (!card) return;
     const label = document.getElementById('soil-moisture-current-label');
@@ -307,9 +323,19 @@
         ? current.sensor_values.filter((item) => item.value !== null && item.value !== undefined).length
         : 0;
       if (meta) meta.textContent = sensorCount > 1 ? `${sensorCount} Sensoren · Durchschnitt` : '';
+      updateOptionalSoilMoistureCardLine(
+        'soil-moisture-target-label',
+        targetSoilMoisture ? `Ziel ${targetSoilMoisture.label || `${targetSoilMoisture.value} %`}` : ''
+      );
+      updateOptionalSoilMoistureCardLine(
+        'soil-moisture-irrigation-label',
+        plannedIrrigation ? `Bewässerung geplant: ${plannedIrrigation.label || `${plannedIrrigation.minutes} min`}` : ''
+      );
       card.classList.remove('hidden');
       return;
     }
+    updateOptionalSoilMoistureCardLine('soil-moisture-target-label', '');
+    updateOptionalSoilMoistureCardLine('soil-moisture-irrigation-label', '');
     card.classList.add('hidden');
   };
 
@@ -706,7 +732,7 @@
       if (weatherDataNode) weatherDataNode.textContent = JSON.stringify(payload.weather_series || {});
       const targetDataNode = document.getElementById('target-soil-moisture-data');
       if (targetDataNode) targetDataNode.textContent = JSON.stringify(payload.target_soil_moisture || null);
-      updateSoilMoistureCurrent(payload.current);
+      updateSoilMoistureCurrent(payload.current, payload.target_soil_moisture || null, payload.planned_irrigation || null);
       updateSoilMoistureLegend(payload.series || [], payload.weather_series || {});
       setSoilMoistureHints(payload.hints || []);
       drawSoilMoistureChart();
