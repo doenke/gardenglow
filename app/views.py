@@ -2122,7 +2122,7 @@ def location_detail(location_id):
     weather_sensors_by_kind = _location_weather_sensors(loc.id)
     weather_series = _empty_weather_sensor_series(weather_sensors_by_kind)
     target_soil_moisture = _target_soil_moisture_for_location(loc)
-    show_moisture_history = bool(soil_moisture_sensors) or any(item['configured'] for item in weather_series.values()) or bool(target_soil_moisture)
+    show_moisture_history = bool(soil_moisture_sensors) or any(item['configured'] for item in weather_series.values())
     soil_moisture_series = _empty_soil_moisture_series(soil_moisture_sensors)
     return render_template(
         'location.html',
