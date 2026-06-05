@@ -82,7 +82,7 @@ docker compose up --build
 - `DEBUG_MODE` – aktiviert mit `1`, `true`, `yes`, `on` oder `y` das vollständige Magic-/Taxonomie-Debugging. Ohne aktivierten Debug-Modus werden auf der Pflanzenseite keine Magic-Debug-Hinweise und kein Magic-Debuglog angezeigt. Bei aktivem Debug enthält die JSON-Antwort zusätzlich alle externen Webanfragen samt Headern, Status und vollständigem Antwortinhalt. Standard: `false`.
 - `IRRIGATION_PREDICTION_MAX_MINUTES` – Obergrenze für ML-Bewässerungsprognosen in Minuten (Standard: `120`). Negative Modellwerte werden zu `0`, Werte oberhalb der Obergrenze werden auf diese Obergrenze beschränkt.
 - `IRRIGATION_PREDICTION_TRAIN_INTERVAL_DAYS` – Mindestabstand zwischen zwei Trainingsläufen je Beet in Tagen (Standard: `7`).
-- `IRRIGATION_PREDICTION_TRAINING_LOOKBACK_DAYS` – Historischer Sensorzeitraum für das Modelltraining in Tagen (Standard: `90`).
+- `IRRIGATION_PREDICTION_TRAINING_LOOKBACK_DAYS` – Historischer Sensorzeitraum für das Modelltraining in Tagen (Standard und Maximum: `900`). Pro Beet beginnt das Training frühestens beim ersten verfügbaren Datenpunkt eines zugeordneten Feuchtesensors.
 - `IRRIGATION_PREDICTION_TRAIN_CRON_TIME` – tägliche Uhrzeit, zu der fällige Bewässerungs-Prognosemodelle automatisch geprüft und bei Bedarf neu trainiert werden (Format `HH:MM`, Standard: `03:00`).
 - `IRRIGATION_PREDICTION_TRAIN_CRON_ENABLED` – aktiviert (`true`) oder deaktiviert (`false`) den täglichen Trainings-Cronjob (Standard: `true`).
 
