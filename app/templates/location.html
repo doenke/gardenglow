@@ -133,7 +133,7 @@
   </div>
 
   <div class="soil-moisture-chart-wrap">
-    <canvas id="soil-moisture-chart" height="260" data-chart-height="260" data-chart-height-mobile="180" aria-label="Bodenfeuchte, Temperatur und Regenmenge für {{ location.name }}" role="img"></canvas>
+    <canvas id="soil-moisture-chart" height="260" data-chart-height="260" data-chart-height-mobile="180" aria-label="Bodenfeuchte, Temperatur, Regenmenge und Bewässerung für {{ location.name }}" role="img"></canvas>
   </div>
   <div id="soil-moisture-legend" class="soil-moisture-legend" aria-label="Sensor-Legende">
     {% for sensor_series in soil_moisture_series %}
@@ -248,6 +248,9 @@
 .soil-moisture-legend-swatch{width:.85rem;height:.85rem;border-radius:999px;background:var(--sensor-color,#2663eb);border:1px solid rgba(0,0,0,.12)}
 .weather-legend-item[data-weather-kind="temperature"]{--sensor-color:#dc2626}
 .weather-legend-item[data-weather-kind="rainfall"]{--sensor-color:#0f766e}
+.weather-legend-item[data-weather-kind="irrigation"]{--sensor-color:#f97316}
+.weather-legend-item[data-weather-kind="rainfall"] .soil-moisture-legend-swatch,
+.weather-legend-item[data-weather-kind="irrigation"] .soil-moisture-legend-swatch{border-radius:3px}
 .weather-legend-item[data-weather-kind="rainfall"] .soil-moisture-legend-swatch{border-radius:3px}
 .target-soil-moisture-legend-item{--sensor-color:#22c55e}
 .target-soil-moisture-legend-item .soil-moisture-legend-swatch{height:.18rem;border-radius:999px}
@@ -499,6 +502,7 @@
     const soilSeries = series.map((sensorSeries) => ({ ...sensorSeries, parsedPoints: parseSeriesPoints(sensorSeries.points) }));
     const temperature = weatherSeries.temperature || {};
     const rainfall = weatherSeries.rainfall || {};
+    const irrigation = weatherSeries.irrigation || {};
     const weatherSensorSeries = (weatherItem) => {
       const sensorSeries = Array.isArray(weatherItem.series) ? weatherItem.series : [];
       if (sensorSeries.length) {
@@ -508,6 +512,7 @@
     };
     const temperatureSeries = weatherSensorSeries(temperature);
     const rainfallSeries = weatherSensorSeries(rainfall);
+    const irrigationSeries = weatherSensorSeries(irrigation);
     const temperaturePoints = temperatureSeries.flatMap((sensorSeries) => sensorSeries.parsedPoints);
     const temperatureRanges = dailyTemperatureRange(temperaturePoints);
     const temperatureRangePoints = temperatureRanges.flatMap((range) => [
@@ -515,9 +520,10 @@
       { time: range.time, value: range.max },
     ]);
     const rainfallPoints = rainfallSeries.flatMap((sensorSeries) => sensorSeries.parsedPoints);
+    const irrigationPoints = irrigationSeries.flatMap((sensorSeries) => sensorSeries.parsedPoints);
     const soilPoints = soilSeries.flatMap((sensorSeries) => sensorSeries.parsedPoints);
+    const allPoints = [...soilPoints, ...temperaturePoints, ...rainfallPoints, ...irrigationPoints];
     const soilDomainPoints = hasTargetValue ? [...soilPoints, { time: 0, value: targetValue }] : soilPoints;
-    const allPoints = [...soilPoints, ...temperaturePoints, ...rainfallPoints];
 
     if (!allPoints.length) {
       context.fillStyle = '#6b7280';
@@ -527,7 +533,7 @@
       return;
     }
 
-    const padding = { top: 24, right: 98, bottom: 38, left: 52 };
+    const padding = { top: 24, right: 132, bottom: 38, left: 52 };
     const plotWidth = cssWidth - padding.left - padding.right;
     const plotHeight = cssHeight - padding.top - padding.bottom;
     const minTime = Math.min(...allPoints.map((point) => point.time));
@@ -549,9 +555,11 @@
     const soilDomain = valueDomain(soilDomainPoints, { minFloor: 0, maxCeil: 100, padding: 5 });
     const temperatureDomain = valueDomain(temperatureRangePoints, { padding: 2 });
     const rainfallDomain = valueDomain(rainfallPoints, { minFloor: 0, padding: 1 });
+    const irrigationDomain = valueDomain(irrigationPoints, { minFloor: 0, padding: 5 });
     const soilYFor = soilDomain ? yFactory(soilDomain) : null;
     const temperatureYFor = temperatureDomain ? yFactory(temperatureDomain) : null;
     const rainfallYFor = rainfallDomain ? yFactory(rainfallDomain) : null;
+    const irrigationYFor = irrigationDomain ? yFactory(irrigationDomain) : null;
 
     if (soilDomain && soilYFor) {
       drawAxis(context, {
@@ -584,12 +592,25 @@
         minValue: rainfallDomain.minValue,
         maxValue: rainfallDomain.maxValue,
         yFor: rainfallYFor,
-        x: cssWidth - 36,
+        x: cssWidth - 76,
         align: 'left',
         color: '#0f766e',
         labelForTick: (value) => `${Math.round(value)} mm`,
         title: 'Regen',
-        titleOffset: 54,
+        titleOffset: 42,
+      });
+    }
+    if (irrigationDomain && irrigationYFor) {
+      drawAxis(context, {
+        minValue: irrigationDomain.minValue,
+        maxValue: irrigationDomain.maxValue,
+        yFor: irrigationYFor,
+        x: cssWidth - 22,
+        align: 'left',
+        color: '#f97316',
+        labelForTick: (value) => `${Math.round(value)} min`,
+        title: 'Bewässerung',
+        titleOffset: 64,
       });
     }
 
@@ -602,20 +623,36 @@
     context.fillText(startLabel, padding.left, cssHeight - padding.bottom + 14);
     context.fillText(endLabel, cssWidth - padding.right, cssHeight - padding.bottom + 14);
 
-    if (rainfallYFor && rainfallPoints.length) {
-      const baseline = rainfallYFor(Math.max(0, rainfallDomain.minValue));
-      const barWidth = Math.max(3, Math.min(18, plotWidth / Math.max(8, rainfallPoints.length) * 0.7));
-      context.fillStyle = 'rgba(15, 118, 110, .45)';
-      context.strokeStyle = '#0f766e';
-      rainfallSeries.forEach((sensorSeries) => {
+    const barCount = Math.max(rainfallPoints.length, irrigationPoints.length, 1);
+    const barWidth = Math.max(3, Math.min(14, plotWidth / Math.max(8, barCount) * 0.32));
+    const drawDailyBars = (sensorSeriesList, { yFor, domain, fill, stroke, xOffset = 0 }) => {
+      if (!yFor || !domain) return;
+      const baseline = yFor(Math.max(0, domain.minValue));
+      context.fillStyle = fill;
+      context.strokeStyle = stroke;
+      sensorSeriesList.forEach((sensorSeries) => {
         sensorSeries.parsedPoints.forEach((point) => {
-          const x = xFor(point.time) - barWidth / 2;
-          const y = rainfallYFor(point.value);
+          const x = xFor(point.time) - barWidth / 2 + xOffset;
+          const y = yFor(point.value);
           context.fillRect(x, Math.min(y, baseline), barWidth, Math.max(1, Math.abs(baseline - y)));
           context.strokeRect(x, Math.min(y, baseline), barWidth, Math.max(1, Math.abs(baseline - y)));
         });
       });
-    }
+    };
+    drawDailyBars(rainfallSeries, {
+      yFor: rainfallYFor,
+      domain: rainfallDomain,
+      fill: 'rgba(15, 118, 110, .45)',
+      stroke: '#0f766e',
+      xOffset: irrigationPoints.length ? -(barWidth * 0.65) : 0,
+    });
+    drawDailyBars(irrigationSeries, {
+      yFor: irrigationYFor,
+      domain: irrigationDomain,
+      fill: 'rgba(249, 115, 22, .38)',
+      stroke: '#f97316',
+      xOffset: rainfallPoints.length ? (barWidth * 0.65) : 0,
+    });
 
     soilSeries.forEach((sensorSeries, index) => {
       if (!soilYFor) return;

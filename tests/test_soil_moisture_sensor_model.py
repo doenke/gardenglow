@@ -526,6 +526,66 @@ class SensorModelTest(unittest.TestCase):
         self.assertEqual(payload['weather_series']['rainfall']['points'][0]['value'], 4.2)
         self.assertTrue(payload['has_series_data'])
 
+    def test_daily_weather_payload_aggregates_rainfall_and_irrigation(self):
+        class FakeAdapter:
+            def query_sensor(self, source, start, stop):
+                if source.key == 'rainfall':
+                    return [
+                        {'time': '2026-06-01T08:00:00+00:00', 'value': 1.5},
+                        {'time': '2026-06-01T20:00:00+00:00', 'value': 2.5},
+                        {'time': '2026-06-02T08:00:00+00:00', 'value': 3},
+                    ]
+                if source.key == 'irrigation':
+                    return [
+                        {'time': '2026-06-01T08:00:00+00:00', 'value': 1},
+                        {'time': '2026-06-01T08:30:00+00:00', 'value': 0},
+                        {'time': '2026-06-02T23:45:00+00:00', 'value': 1},
+                        {'time': '2026-06-03T00:15:00+00:00', 'value': 0},
+                    ]
+                return [{'time': '2026-06-01T12:00:00+00:00', 'value': 35.2}]
+
+        with self.app.app_context():
+            db.session.add(InfluxIntegrationConfig(
+                influx_url='https://influx.local',
+                influx_org='Garten',
+                influx_bucket='soil',
+                influx_token='token',
+            ))
+            db.session.add(Sensor(
+                name='Regenmenge',
+                key='rainfall',
+                sensor_type=SENSOR_TYPE_RAINFALL,
+                creator_id=self.user_id,
+                is_active=True,
+            ))
+            db.session.add(Sensor(
+                name='Bewässerung',
+                key='irrigation',
+                sensor_type=SENSOR_TYPE_IRRIGATION,
+                creator_id=self.user_id,
+                is_active=True,
+            ))
+            db.session.commit()
+
+        with patch('app.views.influx_service.get_sensor_time_series_adapter', return_value=FakeAdapter()), \
+                patch('app.views.latest_sensor_value', return_value={'time': '2026-06-03T08:00:00Z', 'value': 35.2}):
+            response = self.client.get(f'/locations/{self.location_id}/soil-moisture?moisture_range=7d')
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertEqual(payload['weather_series']['rainfall']['points'], [
+            {'time': '2026-06-01T12:00:00+00:00', 'value': 4.0},
+            {'time': '2026-06-02T12:00:00+00:00', 'value': 3.0},
+        ])
+        self.assertEqual(payload['weather_series']['irrigation']['label'], 'Bewässerung')
+        self.assertEqual(payload['weather_series']['irrigation']['unit'], 'min')
+        self.assertEqual(payload['weather_series']['irrigation']['points'], [
+            {'time': '2026-06-01T12:00:00+00:00', 'value': 30.0},
+            {'time': '2026-06-02T12:00:00+00:00', 'value': 15.0},
+            {'time': '2026-06-03T12:00:00+00:00', 'value': 15.0},
+        ])
+
+
 
     def test_weather_sensors_scope_unassigned_fallback_skips_beds_with_explicit_type(self):
         class FakeAdapter:
