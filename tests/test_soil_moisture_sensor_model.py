@@ -243,6 +243,10 @@ class SensorModelTest(unittest.TestCase):
         self.assertIn('Bodenfeuchte-Daten werden im Hintergrund geladen.', location_html)
         self.assertIn('.soil-moisture-chart-wrap{min-height:180px}', location_html)
         self.assertIn("window.matchMedia('(max-width: 700px)').matches ? mobileHeight : desktopHeight", location_html)
+        self.assertIn('const drawDateAxis =', location_html)
+        self.assertIn("toLocaleDateString('de-DE'", location_html)
+        self.assertIn('selectDateTicks(minTime, maxTime, plotWidth)', location_html)
+        self.assertNotIn("toLocaleString('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })", location_html)
         self.assertNotIn('InfluxDB ist nicht vollständig konfiguriert', location_html)
 
 

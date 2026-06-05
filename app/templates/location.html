@@ -487,6 +487,70 @@
     context.restore();
   };
 
+
+  const formatDateTick = (time) => new Date(time).toLocaleDateString('de-DE', {
+    day: '2-digit',
+    month: '2-digit',
+  });
+
+  const chartDateKey = (time) => {
+    const date = new Date(time);
+    return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+  };
+
+  const dateTickCandidates = (minTime, maxTime) => {
+    const ticks = [{ time: minTime, key: chartDateKey(minTime) }];
+    const cursor = new Date(minTime);
+    cursor.setHours(0, 0, 0, 0);
+    cursor.setDate(cursor.getDate() + 1);
+    while (cursor.getTime() < maxTime) {
+      ticks.push({ time: cursor.getTime(), key: chartDateKey(cursor.getTime()) });
+      cursor.setDate(cursor.getDate() + 1);
+    }
+    const maxKey = chartDateKey(maxTime);
+    if (!ticks.some((tick) => tick.key === maxKey)) {
+      ticks.push({ time: maxTime, key: maxKey });
+    }
+    return ticks;
+  };
+
+  const selectDateTicks = (minTime, maxTime, plotWidth) => {
+    const candidates = dateTickCandidates(minTime, maxTime);
+    const maxLabels = Math.max(3, Math.min(8, Math.floor(plotWidth / 64)));
+    if (candidates.length <= maxLabels) return candidates;
+    const selected = [];
+    const usedKeys = new Set();
+    const lastIndex = candidates.length - 1;
+    for (let index = 0; index < maxLabels; index += 1) {
+      const candidate = candidates[Math.round((lastIndex * index) / (maxLabels - 1))];
+      if (!usedKeys.has(candidate.key)) {
+        selected.push(candidate);
+        usedKeys.add(candidate.key);
+      }
+    }
+    return selected;
+  };
+
+  const drawDateAxis = (context, { minTime, maxTime, xFor, padding, cssHeight, plotWidth }) => {
+    const ticks = selectDateTicks(minTime, maxTime, plotWidth);
+    context.save();
+    context.strokeStyle = '#d1d5db';
+    context.fillStyle = '#6b7280';
+    context.font = '12px system-ui, sans-serif';
+    context.textAlign = 'center';
+    context.textBaseline = 'top';
+    ticks.forEach((tick) => {
+      const x = xFor(tick.time);
+      const y = cssHeight - padding.bottom;
+      context.beginPath();
+      context.moveTo(x, y);
+      context.lineTo(x, y + 5);
+      context.stroke();
+      context.fillText(formatDateTick(tick.time), x, y + 10);
+    });
+    context.restore();
+  };
+
   const drawSoilMoistureChart = () => {
     const canvas = document.getElementById('soil-moisture-chart');
     const dataNode = document.getElementById('soil-moisture-series-data');
@@ -652,14 +716,14 @@
       });
     }
 
-    context.textAlign = 'center';
-    context.textBaseline = 'top';
-    context.fillStyle = '#6b7280';
-    context.font = '12px system-ui, sans-serif';
-    const startLabel = new Date(minTime).toLocaleString('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
-    const endLabel = new Date(maxTime).toLocaleString('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
-    context.fillText(startLabel, padding.left, cssHeight - padding.bottom + 14);
-    context.fillText(endLabel, cssWidth - padding.right, cssHeight - padding.bottom + 14);
+    drawDateAxis(context, {
+      minTime,
+      maxTime,
+      xFor,
+      padding,
+      cssHeight,
+      plotWidth,
+    });
 
     const barCount = Math.max(rainfallPoints.length, irrigationPoints.length, 1);
     const barWidth = Math.max(3, Math.min(14, plotWidth / Math.max(8, barCount) * 0.32));
