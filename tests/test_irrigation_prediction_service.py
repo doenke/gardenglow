@@ -48,9 +48,11 @@ class IrrigationPredictionServiceTest(unittest.TestCase):
         with self.app.app_context():
             user = User(sub='ml-user', name='ML User')
             location = Location(name='Beet 1', target_soil_moisture_percent=55)
-            db.session.add_all([user, location])
+            trash = Location(name='Papierkorb')
+            db.session.add_all([user, location, trash])
             db.session.flush()
             self.location_id = location.id
+            self.trash_location_id = trash.id
             db.session.add_all([
                 Sensor(name='Feuchte', key='soil', sensor_type=SENSOR_TYPE_SOIL_MOISTURE, creator_id=user.id, is_active=True, locations=[location]),
                 Sensor(name='Bewässerung', key='irrigation', sensor_type=SENSOR_TYPE_IRRIGATION, creator_id=user.id, is_active=True, locations=[location]),
@@ -129,6 +131,31 @@ class IrrigationPredictionServiceTest(unittest.TestCase):
             self.assertEqual(summary['failed'], 0)
             model = IrrigationPredictionModel.query.filter_by(location_id=self.location_id).one()
             self.assertEqual(model.trained_at.replace(tzinfo=timezone.utc), now)
+            self.assertIsNone(IrrigationPredictionModel.query.filter_by(location_id=self.trash_location_id).one_or_none())
+
+    def test_trash_location_gets_no_prediction_or_model(self):
+        now = datetime(2026, 6, 5, 12, tzinfo=timezone.utc)
+        adapter = FakeAdapter({'soil': [{'time': now.isoformat(), 'value': 40}], 'irrigation': []})
+
+        with self.app.app_context():
+            trash = db.session.get(Location, self.trash_location_id)
+            prediction = irrigation_prediction_service.predict_for_location(
+                trash,
+                55,
+                max_minutes=120,
+                adapter=adapter,
+                now=now,
+            )
+
+            self.assertIsNone(prediction['predicted_minutes'])
+            self.assertIsNone(prediction['model'])
+            self.assertFalse(prediction['trained_now'])
+            self.assertEqual(prediction['source'], 'unavailable')
+            self.assertEqual(adapter.query_count, 0)
+            self.assertIsNone(IrrigationPredictionModel.query.filter_by(location_id=self.trash_location_id).one_or_none())
+            with self.assertRaises(ValueError):
+                irrigation_prediction_service.train_model_for_location(trash, 55, adapter, now=now)
+            self.assertIsNone(IrrigationPredictionModel.query.filter_by(location_id=self.trash_location_id).one_or_none())
 
     def test_train_due_models_skips_without_influx_config(self):
         with self.app.app_context():

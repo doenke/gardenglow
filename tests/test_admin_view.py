@@ -47,7 +47,8 @@ class AdminViewTest(unittest.TestCase):
         with self.app.app_context():
             self.user = User(sub='test-user', name='Test User', avatar_filename='avatar.png')
             self.location = Location(name='Tomatenbeet', target_soil_moisture_percent=62.5)
-            db.session.add_all([self.user, self.location])
+            self.trash_location = Location(name='Papierkorb')
+            db.session.add_all([self.user, self.location, self.trash_location])
             db.session.flush()
             db.session.add(TimelineEntry(scope_type='plant', scope_id=1, attachment_filename='referenced.jpg', attachment_kind='image', creator_id=self.user.id))
             db.session.add(GardenMap(filename='map.png', calibration_points='[]', boundary_points='[]'))
@@ -61,9 +62,19 @@ class AdminViewTest(unittest.TestCase):
                 feature_names_json='[]',
                 metrics_json='{"rmse":3.456}',
             ))
+            db.session.add(IrrigationPredictionModel(
+                location_id=self.trash_location.id,
+                trained_at=datetime(2026, 6, 2, 12, 30, tzinfo=timezone.utc),
+                sample_count=9,
+                intercept=0.0,
+                coefficients_json='[]',
+                feature_names_json='[]',
+                metrics_json='{"rmse":1.234}',
+            ))
             db.session.commit()
             self.user_id = self.user.id
             self.location_id = self.location.id
+            self.trash_location_id = self.trash_location.id
 
         shutil.copy2(self.db_path, os.path.join(self.backup_folder, 'backup.sqlite'))
 
@@ -103,6 +114,8 @@ class AdminViewTest(unittest.TestCase):
         self.assertIn('admin-breakable admin-filename-cell', html)
         self.assertIn('Bewässerungs-Prognose: Modelltraining', html)
         self.assertIn('Tomatenbeet', html)
+        self.assertNotIn('Papierkorb</strong>', html)
+        self.assertNotIn('2026-06-02 12:30:00', html)
         self.assertIn('2026-06-01 12:30:00', html)
         self.assertIn('7</td>', html)
         self.assertIn('3.46', html)
@@ -126,6 +139,22 @@ class AdminViewTest(unittest.TestCase):
         self.assertEqual(args[1], 62.5)
         self.assertEqual(kwargs['max_minutes'], 120.0)
         self.assertIn('Modelltraining für 1 Beet(er) abgeschlossen.', response.get_data(as_text=True))
+
+    def test_irrigation_training_skips_trash_from_admin_page(self):
+        with patch('app.views.influx_service.get_sensor_time_series_adapter') as adapter_mock, \
+                patch('app.views.irrigation_prediction_service.train_model_for_location') as train_mock:
+            response = self.client.post(
+                '/admin/irrigation-prediction/train',
+                data={'location_id': str(self.trash_location_id)},
+                follow_redirects=True,
+            )
+
+        self.assertEqual(response.status_code, 200)
+        adapter_mock.assert_not_called()
+        train_mock.assert_not_called()
+        html = response.get_data(as_text=True)
+        self.assertIn('Der Papierkorb erhält kein Prognosemodell.', html)
+        self.assertNotIn('Papierkorb</strong>', html)
 
     def test_backup_can_be_created_from_admin_page(self):
         response = self.client.post('/admin/backup/create', follow_redirects=True)
