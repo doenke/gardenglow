@@ -1,6 +1,7 @@
 import os
 import time
 import re
+from types import SimpleNamespace
 import shutil
 import json
 import math
@@ -1631,6 +1632,50 @@ def _serialize_soil_moisture_current_value(value, label, sensor_values):
     }
 
 
+def _format_irrigation_minutes(value):
+    if value is None:
+        return None
+    return f"{_format_sensor_number(value)} min"
+
+
+def _planned_irrigation_for_location(location, target_soil_moisture):
+    if not target_soil_moisture:
+        return None
+
+    adapter_config = _sensor_influx_config()
+    if not adapter_config.enabled:
+        return None
+
+    config = _irrigation_prediction_config()
+    try:
+        prediction = irrigation_prediction_service.predict_for_location(
+            location,
+            target_soil_moisture['value'],
+            max_minutes=config.max_minutes,
+            adapter=influx_service.get_sensor_time_series_adapter(adapter_config),
+            train_if_due=False,
+            train_interval=config.train_interval,
+            training_lookback=config.training_lookback,
+        )
+    except Exception as exc:  # pragma: no cover - depends on external InfluxDB availability
+        current_app.logger.info(
+            'Bewässerungsvorhersage für Beet %s konnte nicht geladen werden: %s',
+            location.id,
+            exc,
+        )
+        return None
+
+    minutes = prediction.get('predicted_minutes')
+    if minutes is None:
+        return None
+    return {
+        'minutes': minutes,
+        'label': _format_irrigation_minutes(minutes),
+        'source': prediction.get('source'),
+        'max_minutes': prediction.get('max_minutes'),
+    }
+
+
 def _empty_sensor_current_value(label='Kein aktueller Messwert'):
     return {
         'value': None,
@@ -1682,30 +1727,35 @@ def _load_sensor_current_values(sensors):
 
 
 def _load_sensor_current_extremes():
-    sensors = (
-        Sensor.query
-        .filter(Sensor.is_active.is_(True))
-        .filter(Sensor.sensor_type == SENSOR_TYPE_SOIL_MOISTURE)
-        .order_by(Sensor.name.asc(), Sensor.id.asc())
+    locations = (
+        Location.query
+        .filter(Location.name != TRASH_LOCATION_NAME)
+        .order_by(*location_sort_criteria())
         .all()
     )
-    sensor_current_values = _load_sensor_current_values(sensors)
-    valid_values = [
-        {
-            'sensor': sensor,
-            **sensor_current_values[sensor.id],
-        }
-        for sensor in sensors
-        if sensor_current_values[sensor.id]['has_value']
-    ]
-    if not valid_values:
+    location_values = []
+    for location in locations:
+        value, label, sensor_values = _soil_moisture_current_for_location(location)
+        if value is None:
+            continue
+        location_values.append({
+            'location': location,
+            'value': value,
+            'label': label,
+            'sensor_count': len([item for item in sensor_values if item['value'] is not None]),
+        })
+
+    if not location_values:
         return []
-    if len(valid_values) == 1:
-        return [{'kind': 'Aktuell', **valid_values[0]}]
-    return [
-        {'kind': 'Maximum', **max(valid_values, key=lambda item: (item['value'], item['sensor'].name, item['sensor'].id))},
-        {'kind': 'Minimum', **min(valid_values, key=lambda item: (item['value'], item['sensor'].name, item['sensor'].id))},
-    ]
+
+    average_value = sum(item['value'] for item in location_values) / len(location_values)
+    return [{
+        'kind': 'Mittelwert',
+        'value': average_value,
+        'label': _format_soil_moisture_percent(average_value),
+        'sensor': SimpleNamespace(name=f"{len(location_values)} Beet{'e' if len(location_values) != 1 else ''}"),
+        'location_values': location_values,
+    }]
 
 
 def _soil_moisture_current_for_location(location):
@@ -2259,6 +2309,7 @@ def location_soil_moisture_data(location_id):
     weather_series, weather_hints = _load_location_weather_sensor_series(loc.id, soil_moisture_lookback)
     soil_moisture_hints.extend(weather_hints)
     soil_moisture_current, soil_moisture_current_label, soil_moisture_sensor_values = _soil_moisture_current_for_location(loc)
+    target_soil_moisture = _target_soil_moisture_for_location(loc)
 
     return jsonify({
         'range_key': soil_moisture_range_key,
@@ -2277,7 +2328,8 @@ def location_soil_moisture_data(location_id):
             soil_moisture_current_label,
             soil_moisture_sensor_values,
         ),
-        'target_soil_moisture': _target_soil_moisture_for_location(loc),
+        'target_soil_moisture': target_soil_moisture,
+        'planned_irrigation': _planned_irrigation_for_location(loc, target_soil_moisture),
     })
 
 

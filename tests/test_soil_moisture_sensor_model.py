@@ -784,6 +784,44 @@ class SensorModelTest(unittest.TestCase):
         self.assertEqual(len([item for item in payload['current']['sensor_values'] if item['value'] is not None]), 2)
         self.assertNotIn('Inaktiver Bodenfeuchte Sensor', response.get_data(as_text=True))
 
+
+    def test_location_soil_moisture_payload_includes_target_and_planned_irrigation(self):
+        class FakeAdapter:
+            def query_sensor(self, sensor, start, stop):
+                return [{'time': '2026-06-01T12:00:00+00:00', 'value': 35.2}]
+
+        with self.app.app_context():
+            location = db.session.get(Location, self.location_id)
+            location.target_soil_moisture_percent = 55
+            db.session.add(InfluxIntegrationConfig(
+                influx_url='http://influxdb:8086',
+                influx_org='garden',
+                influx_bucket='soil',
+                influx_token='token',
+            ))
+            db.session.commit()
+
+        with patch('app.views.influx_service.get_sensor_time_series_adapter', return_value=FakeAdapter()), \
+                patch('app.views.latest_sensor_value', return_value={'time': '2026-06-03T08:00:00Z', 'value': 35}), \
+                patch('app.views.irrigation_prediction_service.predict_for_location', return_value={
+                    'predicted_minutes': 17.5,
+                    'source': 'heuristic',
+                    'max_minutes': 120,
+                }) as predict_for_location:
+            page_response = self.client.get(f'/locations/{self.location_id}')
+            response = self.client.get(f'/locations/{self.location_id}/soil-moisture')
+
+        self.assertEqual(page_response.status_code, 200)
+        page_html = page_response.get_data(as_text=True)
+        self.assertIn('id="soil-moisture-target-label"', page_html)
+        self.assertIn('id="soil-moisture-irrigation-label"', page_html)
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertEqual(payload['target_soil_moisture']['label'], '55 %')
+        self.assertEqual(payload['target_soil_moisture']['source'], 'location')
+        self.assertEqual(payload['planned_irrigation']['label'], '17,5 min')
+        predict_for_location.assert_called_once()
+
     def test_location_markers_do_not_include_soil_moisture_sensors(self):
         response = self.client.get(f'/locations/{self.location_id}')
 

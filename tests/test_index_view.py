@@ -73,20 +73,24 @@ class IndexViewTest(unittest.TestCase):
         self.assertIn('title="Sonnig &amp; windgeschützt"', html)
         self.assertIn('data-search-text="Sonnenbeet Sonnig &amp; windgeschützt"', html)
 
-    def test_index_links_current_sensor_minimum_and_maximum(self):
+    def test_index_links_current_sensor_average_for_all_beds(self):
         with self.app.app_context():
             first_sensor = Sensor(
                 name='Trockener Sensor',
                 key='dry-sensor',
                 creator_id=self.user_id,
             )
+            second_location = Location(name='Schattenbeet')
             second_sensor = Sensor(
                 name='Feuchter Sensor',
                 key='wet-sensor',
                 creator_id=self.user_id,
             )
+            first_sensor.locations.append(self.location)
+            second_sensor.locations.append(second_location)
             db.session.add_all([
                 first_sensor,
+                second_location,
                 second_sensor,
                 InfluxIntegrationConfig(
                     influx_url='https://influx.local',
@@ -98,7 +102,7 @@ class IndexViewTest(unittest.TestCase):
             db.session.commit()
 
         def fake_latest_sensor_value(sensor, adapter=None):
-            return {'time': '2026-06-03T08:00:00Z', 'value': 18 if sensor.key == 'dry-sensor' else 46.5}
+            return {'time': '2026-06-03T08:00:00Z', 'value': 18 if sensor.key == 'dry-sensor' else 46}
 
         with patch('app.views.latest_sensor_value', side_effect=fake_latest_sensor_value):
             response = self.client.get('/')
@@ -106,12 +110,11 @@ class IndexViewTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         html = response.get_data(as_text=True)
         self.assertIn('href="/sensors" aria-label="Aktuelle Sensorwerte in der Sensorliste anzeigen"', html)
-        self.assertIn('Minimum', html)
-        self.assertIn('18 %', html)
-        self.assertIn('Trockener Sensor', html)
-        self.assertIn('Maximum', html)
-        self.assertIn('46,5 %', html)
-        self.assertIn('Feuchter Sensor', html)
+        self.assertIn('Mittelwert', html)
+        self.assertIn('32 %', html)
+        self.assertIn('2 Beete', html)
+        self.assertNotIn('Minimum', html)
+        self.assertNotIn('Maximum', html)
 
     def test_index_shows_one_current_sensor_value_for_one_sensor(self):
         with self.app.app_context():
@@ -135,8 +138,9 @@ class IndexViewTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         html = response.get_data(as_text=True)
-        self.assertIn('Aktuell', html)
+        self.assertIn('Mittelwert', html)
         self.assertIn('33,3 %', html)
+        self.assertIn('1 Beet', html)
         self.assertNotIn('Minimum', html)
         self.assertNotIn('Maximum', html)
 
