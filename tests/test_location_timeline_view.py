@@ -169,8 +169,10 @@ class LocationTimelineViewTest(unittest.TestCase):
         response = self.client.get(f'/locations/{self.location_id}')
         html = response.get_data(as_text=True)
         self.assertIn('Aktive Ziellinie: 50 % · Globale Vorgabe', html)
-        self.assertIn('id="target-soil-moisture-data"', html)
-        self.assertIn('Ziel-Bodenfeuchte', html)
+        self.assertNotIn('id="target-soil-moisture-data"', html)
+        self.assertNotIn('id="soil-moisture-chart"', html)
+        self.assertNotIn('Sensor-Verlauf', html)
+        self.assertNotIn('Wetterdaten-Verlauf', html)
 
         response = self.client.post(
             f'/locations/{self.location_id}/target-soil-moisture',
