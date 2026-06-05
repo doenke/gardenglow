@@ -17,7 +17,7 @@ from flask import Blueprint, abort, current_app, g, render_template, request, re
 from .models import db, utc_now, User, Location, Plant, PlantPhoto, PlantNote, GardenMap, TimelineEntry, LightNeed, SoilProperty, Sensor, PlantDatabaseIdentifier, InfluxIntegrationConfig, plant_soil_property, SENSOR_TYPE_LABELS, SENSOR_TYPE_SOIL_MOISTURE, SENSOR_TYPE_TEMPERATURE, SENSOR_TYPE_RAINFALL, SENSOR_TYPE_IRRIGATION, SENSOR_TYPES
 from .map_data import MapPointValidationError, parse_stored_points, validate_calibration_points, validate_polygon_points
 from .services.timeline_service import save_uploaded_attachment, set_single_title_entry, delete_timeline_entry, build_unique_upload_name
-from .services import influx_service
+from .services import influx_service, irrigation_prediction_service
 from .services.influx_service import FluxInfluxQueryAdapter, InfluxIntegrationConfig as InfluxServiceConfig, latest_sensor_value
 from .auth import get_or_create_default_user, oidc_enabled
 from .taxonomy import service as taxonomy_service
@@ -113,6 +113,9 @@ ENVIRONMENT_VARIABLES = [
     {'name': 'INFLUX_ORG', 'config_key': 'INFLUX_ORG', 'default': ''},
     {'name': 'INFLUX_BUCKET', 'config_key': 'INFLUX_BUCKET', 'default': ''},
     {'name': 'INFLUX_TIMEOUT_SECONDS', 'config_key': 'INFLUX_TIMEOUT_SECONDS', 'default': '5'},
+    {'name': 'IRRIGATION_PREDICTION_MAX_MINUTES', 'config_key': 'IRRIGATION_PREDICTION_MAX_MINUTES', 'default': '120'},
+    {'name': 'IRRIGATION_PREDICTION_TRAIN_INTERVAL_DAYS', 'config_key': 'IRRIGATION_PREDICTION_TRAIN_INTERVAL_DAYS', 'default': '7'},
+    {'name': 'IRRIGATION_PREDICTION_TRAINING_LOOKBACK_DAYS', 'config_key': 'IRRIGATION_PREDICTION_TRAINING_LOOKBACK_DAYS', 'default': '90'},
     {'name': 'OIDC_SERVER_METADATA_URL', 'config_key': None, 'default': ''},
     {'name': 'OIDC_CLIENT_ID', 'config_key': None, 'default': ''},
     {'name': 'OIDC_CLIENT_SECRET', 'config_key': None, 'default': '', 'sensitive': True},
@@ -1184,6 +1187,54 @@ def api_stats():
         'database_size_bytes': database_size,
     }), 200
 
+
+
+@main_bp.route('/api/irrigation-predictions', methods=['GET'])
+@widget_api_key_required
+def api_irrigation_predictions():
+    config = _irrigation_prediction_config()
+    adapter_config = _sensor_influx_config()
+    if not adapter_config.enabled:
+        return jsonify({'error': 'InfluxDB ist nicht vollständig konfiguriert.'}), 503
+
+    adapter = influx_service.get_sensor_time_series_adapter(adapter_config)
+    predictions = []
+    for location in Location.query.filter(Location.name != TRASH_LOCATION_NAME).order_by(*location_sort_criteria()).all():
+        target = _target_soil_moisture_for_location(location)
+        predictions.append(irrigation_prediction_service.predict_for_location(
+            location,
+            target['value'] if target else None,
+            max_minutes=config.max_minutes,
+            adapter=adapter,
+            train_interval=config.train_interval,
+            training_lookback=config.training_lookback,
+        ))
+    return jsonify({'predictions': predictions, 'max_minutes': config.max_minutes}), 200
+
+
+@main_bp.route('/api/locations/<int:location_id>/irrigation-prediction', methods=['GET'])
+@widget_api_key_required
+def api_location_irrigation_prediction(location_id):
+    location = session_get_or_404(Location, location_id)
+    if location.name == TRASH_LOCATION_NAME:
+        return jsonify({'error': 'Für den Papierkorb wird keine Bewässerung vorhergesagt.'}), 400
+
+    config = _irrigation_prediction_config()
+    adapter_config = _sensor_influx_config()
+    if not adapter_config.enabled:
+        return jsonify({'error': 'InfluxDB ist nicht vollständig konfiguriert.'}), 503
+
+    adapter = influx_service.get_sensor_time_series_adapter(adapter_config)
+    target = _target_soil_moisture_for_location(location)
+    return jsonify(irrigation_prediction_service.predict_for_location(
+        location,
+        target['value'] if target else None,
+        max_minutes=config.max_minutes,
+        adapter=adapter,
+        train_interval=config.train_interval,
+        training_lookback=config.training_lookback,
+    )), 200
+
 @main_bp.route('/manifest.webmanifest')
 def manifest():
     return send_from_directory(current_app.static_folder, 'manifest.webmanifest', mimetype='application/manifest+json')
@@ -1737,6 +1788,19 @@ def _form_int(name, default, minimum=None, maximum=None):
     return value
 
 
+def _irrigation_prediction_config():
+    config = irrigation_prediction_service.prediction_config_from_app(current_app.config)
+    influx_config = _first_influx_integration_config()
+    stored_max = getattr(influx_config, 'irrigation_prediction_max_minutes', None) if influx_config else None
+    if stored_max is None:
+        return config
+    return irrigation_prediction_service.PredictionConfig(
+        max_minutes=max(0.0, float(stored_max)),
+        train_interval=config.train_interval,
+        training_lookback=config.training_lookback,
+    )
+
+
 def _first_influx_config_or_empty():
     return _first_influx_integration_config() or InfluxIntegrationConfig()
 
@@ -1799,6 +1863,25 @@ def save_global_soil_moisture_target():
     db.session.commit()
     flash('Globale Ziel-Bodenfeuchte wurde gespeichert.', 'success')
     return redirect(url_for('main.config', _anchor='soil-moisture-target'))
+
+
+
+@main_bp.route('/config/irrigation-prediction', methods=['POST'])
+@login_required
+def save_irrigation_prediction_config():
+    try:
+        max_minutes = _form_float('max_minutes', default=120, minimum=0, maximum=1440)
+    except ValueError as error:
+        flash(str(error), 'error')
+        return redirect(url_for('main.config', _anchor='irrigation-prediction'))
+
+    influx_config = _ensure_influx_integration_config()
+    influx_config.irrigation_prediction_max_minutes = max_minutes
+    influx_config.updated_at = utc_now()
+    db.session.commit()
+    current_app.config['IRRIGATION_PREDICTION_MAX_MINUTES'] = max_minutes
+    flash('Bewässerungs-Prognose-Konfiguration wurde gespeichert.', 'success')
+    return redirect(url_for('main.config', _anchor='irrigation-prediction'))
 
 @main_bp.route('/config/influx', methods=['POST'])
 @login_required

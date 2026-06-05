@@ -9,6 +9,7 @@
       <a href="#homeassistant-config">Homeassistant</a>
       <a href="#connection-options">Verbindungsoptionen</a>
       <a href="#soil-moisture-target">Ziel-Bodenfeuchte</a>
+      <a href="#irrigation-prediction">Bewässerungs-Prognose</a>
       <a href="#map-upload">Luftbild</a>
       {% if garden_map and garden_map.filename %}
         <a href="#map-calibration">Kalibrierung</a>
@@ -109,6 +110,23 @@
     </label>
     <button type="submit">Ziel-Bodenfeuchte speichern</button>
   </form>
+</section>
+
+
+<section id="irrigation-prediction" class="card config-section">
+  <div class="config-section-head">
+    <p class="page-eyebrow">Machine Learning</p>
+    <h3 class="m-0">Bewässerungs-Prognose</h3>
+    <p class="text-muted mt-0 mb-0">Das Modell wird beim Abruf höchstens einmal pro Woche je Beet aus den vorhandenen Sensor-Zeitreihen neu trainiert. Negative Vorhersagen werden zu 0 Minuten.</p>
+  </div>
+  <form method="post" action="/config/irrigation-prediction" class="grid mb-1">
+    <label for="irrigation-prediction-max-minutes">Maximale vorhergesagte Bewässerungsdauer (Minuten)
+      <input id="irrigation-prediction-max-minutes" type="number" name="max_minutes" min="0" max="1440" step="1" inputmode="numeric" value="{{ influx_config.irrigation_prediction_max_minutes if influx_config and influx_config.irrigation_prediction_max_minutes is not none else config.get('IRRIGATION_PREDICTION_MAX_MINUTES', 120) }}">
+      <small class="text-muted">Standard: 120 Minuten. Höhere Modellwerte werden auf diese Obergrenze beschränkt.</small>
+    </label>
+    <button type="submit">Prognose-Konfiguration speichern</button>
+  </form>
+  <small class="text-muted">Webservice: <code>GET /api/irrigation-predictions</code> oder <code>GET /api/locations/&lt;id&gt;/irrigation-prediction</code> mit dem konfigurierten Widget-API-Key.</small>
 </section>
 
 <section id="map-upload" class="card config-section">

@@ -1,7 +1,7 @@
 from flask import Flask
 from sqlalchemy import inspect
 from werkzeug.middleware.proxy_fix import ProxyFix
-from .models import db, LightNeed, InfluxIntegrationConfig, Location, Sensor, User, SENSOR_TYPE_SOIL_MOISTURE, SENSOR_TYPE_TEMPERATURE, SENSOR_TYPE_RAINFALL
+from .models import db, LightNeed, InfluxIntegrationConfig, IrrigationPredictionModel, Location, Sensor, User, SENSOR_TYPE_SOIL_MOISTURE, SENSOR_TYPE_TEMPERATURE, SENSOR_TYPE_RAINFALL
 from .auth import DEFAULT_LOCAL_USER_NAME, DEFAULT_LOCAL_USER_SUB, DEFAULT_MAX_AVATAR_SIZE_BYTES, OIDC_ENV_VARS, auth_bp, oauth, oidc_configured_from_env
 from .views import main_bp
 from .map_data import parse_stored_points
@@ -98,6 +98,9 @@ def create_app():
     app.config['INFLUX_ORG'] = os.getenv('INFLUX_ORG', '').strip()
     app.config['INFLUX_BUCKET'] = os.getenv('INFLUX_BUCKET', '').strip()
     app.config['INFLUX_TIMEOUT_SECONDS'] = max(0.1, float(os.getenv('INFLUX_TIMEOUT_SECONDS', '5')))
+    app.config['IRRIGATION_PREDICTION_MAX_MINUTES'] = max(0.0, float(os.getenv('IRRIGATION_PREDICTION_MAX_MINUTES', '120')))
+    app.config['IRRIGATION_PREDICTION_TRAIN_INTERVAL_DAYS'] = max(0.0, float(os.getenv('IRRIGATION_PREDICTION_TRAIN_INTERVAL_DAYS', '7')))
+    app.config['IRRIGATION_PREDICTION_TRAINING_LOOKBACK_DAYS'] = max(1.0, float(os.getenv('IRRIGATION_PREDICTION_TRAINING_LOOKBACK_DAYS', '90')))
 
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_port=1, x_prefix=1)
 
@@ -113,6 +116,7 @@ def create_app():
         db.create_all()
         _ensure_sensor_schema()
         _ensure_soil_moisture_target_schema()
+        _ensure_irrigation_prediction_schema()
         _migrate_legacy_weather_config_to_sensors()
         _seed_light_needs()
 
@@ -162,6 +166,7 @@ def _ensure_soil_moisture_target_schema():
     inspector = inspect(db.engine)
     table_names = set(inspector.get_table_names())
     target_column = 'target_soil_moisture_percent'
+    prediction_max_column = 'irrigation_prediction_max_minutes'
 
     table_models = (
         (Location.__tablename__, 'FLOAT'),
@@ -175,6 +180,10 @@ def _ensure_soil_moisture_target_schema():
             if target_column not in existing_columns:
                 connection.exec_driver_sql(
                     f'ALTER TABLE {table_name} ADD COLUMN {target_column} {column_type}'
+                )
+            if table_name == InfluxIntegrationConfig.__tablename__ and prediction_max_column not in existing_columns:
+                connection.exec_driver_sql(
+                    f'ALTER TABLE {table_name} ADD COLUMN {prediction_max_column} FLOAT'
                 )
 
 def _seed_light_needs():
@@ -291,3 +300,28 @@ def _migrate_legacy_weather_config_to_sensors():
 
     if migrated:
         db.session.commit()
+
+
+def _ensure_irrigation_prediction_schema():
+    """Keep the persisted irrigation ML model schema compatible with existing databases."""
+    inspector = inspect(db.engine)
+    table_names = set(inspector.get_table_names())
+    if IrrigationPredictionModel.__tablename__ not in table_names:
+        return
+
+    existing_columns = {column['name'] for column in inspector.get_columns(IrrigationPredictionModel.__tablename__)}
+    column_definitions = {
+        'location_id': 'INTEGER',
+        'trained_at': 'DATETIME',
+        'sample_count': 'INTEGER NOT NULL DEFAULT 0',
+        'intercept': 'FLOAT NOT NULL DEFAULT 0',
+        'coefficients_json': "TEXT NOT NULL DEFAULT '[]'",
+        'feature_names_json': "TEXT NOT NULL DEFAULT '[]'",
+        'metrics_json': "TEXT NOT NULL DEFAULT '{}'",
+    }
+    with db.engine.begin() as connection:
+        for column_name, column_type in column_definitions.items():
+            if column_name not in existing_columns:
+                connection.exec_driver_sql(
+                    f'ALTER TABLE {IrrigationPredictionModel.__tablename__} ADD COLUMN {column_name} {column_type}'
+                )
