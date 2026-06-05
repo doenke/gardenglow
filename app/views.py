@@ -1705,6 +1705,23 @@ def _form_bool(name):
     return (request.form.get(name) or '').strip().lower() in {'1', 'true', 'yes', 'on', 'y'}
 
 
+def _form_float(name, default=None, minimum=None, maximum=None):
+    raw_value = (request.form.get(name) or '').strip().replace(',', '.')
+    if not raw_value:
+        return default
+    try:
+        value = float(raw_value)
+    except ValueError:
+        raise ValueError(f'{name} muss eine Zahl sein.')
+    if not math.isfinite(value):
+        raise ValueError(f'{name} muss eine gültige Zahl sein.')
+    if minimum is not None and value < minimum:
+        raise ValueError(f'{name} muss mindestens {minimum} sein.')
+    if maximum is not None and value > maximum:
+        raise ValueError(f'{name} darf höchstens {maximum} sein.')
+    return value
+
+
 def _form_int(name, default, minimum=None, maximum=None):
     raw_value = (request.form.get(name) or '').strip()
     if not raw_value:
@@ -1720,13 +1737,39 @@ def _form_int(name, default, minimum=None, maximum=None):
     return value
 
 
+def _first_influx_config_or_empty():
+    return _first_influx_integration_config() or InfluxIntegrationConfig()
+
+
+def _target_soil_moisture_for_location(location):
+    location_target = getattr(location, 'target_soil_moisture_percent', None)
+    if location_target is not None:
+        return {
+            'value': location_target,
+            'label': _format_soil_moisture_percent(location_target),
+            'source': 'location',
+            'source_label': 'Beet-spezifisch',
+        }
+
+    influx_config = _first_influx_integration_config()
+    global_target = getattr(influx_config, 'target_soil_moisture_percent', None) if influx_config else None
+    if global_target is None:
+        return None
+    return {
+        'value': global_target,
+        'label': _format_soil_moisture_percent(global_target),
+        'source': 'global',
+        'source_label': 'Globale Vorgabe',
+    }
+
+
 @main_bp.route('/config')
 @login_required
 def config():
     user = current_user()
     garden_map = GardenMap.query.order_by(GardenMap.id.asc()).first()
     locations = Location.query.order_by(*location_sort_criteria()).all()
-    influx_config = _first_influx_integration_config()
+    influx_config = _first_influx_config_or_empty()
     return render_template(
         'config.html',
         user=user,
@@ -1735,6 +1778,27 @@ def config():
         influx_config=influx_config,
     )
 
+
+
+@main_bp.route('/config/soil-moisture-target', methods=['POST'])
+@login_required
+def save_global_soil_moisture_target():
+    influx_config = _ensure_influx_integration_config()
+    try:
+        influx_config.target_soil_moisture_percent = _form_float(
+            'target_soil_moisture_percent',
+            default=None,
+            minimum=0,
+            maximum=100,
+        )
+    except ValueError as error:
+        flash(str(error), 'error')
+        return redirect(url_for('main.config', _anchor='soil-moisture-target'))
+
+    influx_config.updated_at = utc_now()
+    db.session.commit()
+    flash('Globale Ziel-Bodenfeuchte wurde gespeichert.', 'success')
+    return redirect(url_for('main.config', _anchor='soil-moisture-target'))
 
 @main_bp.route('/config/influx', methods=['POST'])
 @login_required
@@ -2057,7 +2121,8 @@ def location_detail(location_id):
     soil_moisture_sensors = _location_soil_moisture_sensors(loc.id)
     weather_sensors_by_kind = _location_weather_sensors(loc.id)
     weather_series = _empty_weather_sensor_series(weather_sensors_by_kind)
-    show_moisture_history = bool(soil_moisture_sensors) or any(item['configured'] for item in weather_series.values())
+    target_soil_moisture = _target_soil_moisture_for_location(loc)
+    show_moisture_history = bool(soil_moisture_sensors) or any(item['configured'] for item in weather_series.values()) or bool(target_soil_moisture)
     soil_moisture_series = _empty_soil_moisture_series(soil_moisture_sensors)
     return render_template(
         'location.html',
@@ -2084,6 +2149,7 @@ def location_detail(location_id):
         soil_moisture_current=None,
         soil_moisture_current_label=None,
         soil_moisture_sensor_values=[],
+        target_soil_moisture=target_soil_moisture,
         other_location_polygons=[
             {
                 'id': other_loc.id,
@@ -2126,6 +2192,7 @@ def location_soil_moisture_data(location_id):
             soil_moisture_current_label,
             soil_moisture_sensor_values,
         ),
+        'target_soil_moisture': _target_soil_moisture_for_location(loc),
     })
 
 
@@ -2497,6 +2564,26 @@ def save_boundary():
     db.session.commit()
     return redirect(request.referrer or url_for('main.config'))
 
+
+
+@main_bp.route('/locations/<int:location_id>/target-soil-moisture', methods=['POST'])
+@login_required
+def save_location_soil_moisture_target(location_id):
+    loc = session_get_or_404(Location, location_id)
+    try:
+        loc.target_soil_moisture_percent = _form_float(
+            'target_soil_moisture_percent',
+            default=None,
+            minimum=0,
+            maximum=100,
+        )
+    except ValueError as error:
+        flash(str(error), 'error')
+        return redirect(url_for('main.location_detail', location_id=location_id, _anchor='soil-moisture-target-form'))
+
+    db.session.commit()
+    flash('Ziel-Bodenfeuchte für das Beet wurde gespeichert.', 'success')
+    return redirect(url_for('main.location_detail', location_id=location_id, _anchor='soil-moisture-target-form'))
 
 @main_bp.route('/locations/<int:location_id>/map', methods=['POST'])
 @login_required

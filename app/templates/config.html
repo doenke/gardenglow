@@ -8,6 +8,7 @@
       <a href="#influxdb-config">InfluxDB</a>
       <a href="#homeassistant-config">Homeassistant</a>
       <a href="#connection-options">Verbindungsoptionen</a>
+      <a href="#soil-moisture-target">Ziel-Bodenfeuchte</a>
       <a href="#map-upload">Luftbild</a>
       {% if garden_map and garden_map.filename %}
         <a href="#map-calibration">Kalibrierung</a>
@@ -91,6 +92,22 @@
       <small class="text-muted">Erstellt: {{ influx_config.created_at.strftime('%Y-%m-%d %H:%M') if influx_config.created_at else 'unbekannt' }} · Aktualisiert: {{ influx_config.updated_at.strftime('%Y-%m-%d %H:%M') if influx_config.updated_at else 'unbekannt' }}</small>
     {% endif %}
     <button type="submit">Verbindungsoptionen speichern</button>
+  </form>
+</section>
+
+
+<section id="soil-moisture-target" class="card config-section">
+  <div class="config-section-head">
+    <p class="page-eyebrow">Bewässerung</p>
+    <h3 class="m-0">Globale Ziel-Bodenfeuchte</h3>
+    <p class="text-muted mt-0 mb-0">Diese Vorgabe gilt für alle Beete, solange dort keine eigene Ziel-Bodenfeuchte gesetzt ist.</p>
+  </div>
+  <form method="post" action="/config/soil-moisture-target" class="grid mb-1">
+    <label for="global-target-soil-moisture">Ziel-Bodenfeuchte (%)
+      <input id="global-target-soil-moisture" type="number" name="target_soil_moisture_percent" min="0" max="100" step="0.1" inputmode="decimal" value="{{ influx_config.target_soil_moisture_percent if influx_config and influx_config.target_soil_moisture_percent is not none else '' }}" placeholder="z. B. 55">
+      <small class="text-muted">Leer lassen, um keine globale Ziellinie anzuzeigen.</small>
+    </label>
+    <button type="submit">Ziel-Bodenfeuchte speichern</button>
   </form>
 </section>
 

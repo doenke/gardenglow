@@ -55,6 +55,23 @@
   </div>
 </form>
 
+
+<section id="soil-moisture-target-form" class="soil-moisture-target-form card-inner">
+  <h3 class="m-0">Ziel-Bodenfeuchte</h3>
+  <p class="text-muted m-0">Optionaler Beet-Wert. Wenn leer, wird die globale Vorgabe aus der Konfiguration verwendet.</p>
+  <form method="post" action="/locations/{{ location.id }}/target-soil-moisture" class="target-soil-moisture-grid">
+    <label for="location-target-soil-moisture">Ziel-Bodenfeuchte (%)
+      <input id="location-target-soil-moisture" type="number" name="target_soil_moisture_percent" min="0" max="100" step="0.1" inputmode="decimal" value="{{ location.target_soil_moisture_percent if location.target_soil_moisture_percent is not none else '' }}" placeholder="Globale Vorgabe verwenden">
+    </label>
+    <button type="submit">Ziel speichern</button>
+  </form>
+  {% if target_soil_moisture %}
+  <small class="text-muted">Aktive Ziellinie: {{ target_soil_moisture.label }} · {{ target_soil_moisture.source_label }}</small>
+  {% else %}
+  <small class="text-muted">Aktuell ist keine Ziel-Bodenfeuchte gesetzt.</small>
+  {% endif %}
+</section>
+
 <h3>Pflanzen</h3>
 <div class="table-search">
   <label class="sr-only" for="location-plants-search">Pflanzen durchsuchen</label>
@@ -107,6 +124,7 @@
 
   <script type="application/json" id="soil-moisture-series-data">{{ soil_moisture_series|tojson }}</script>
   <script type="application/json" id="weather-series-data">{{ weather_series|tojson }}</script>
+  <script type="application/json" id="target-soil-moisture-data">{{ target_soil_moisture|tojson }}</script>
 
   <div class="soil-moisture-hints" id="soil-moisture-hints" role="status" aria-live="polite">
     {% for hint in soil_moisture_hints %}
@@ -125,6 +143,13 @@
       <small>(lädt …)</small>
     </span>
     {% endfor %}
+    {% if target_soil_moisture %}
+    <span class="soil-moisture-legend-item target-soil-moisture-legend-item" data-target-soil-moisture>
+      <span class="soil-moisture-legend-swatch" aria-hidden="true"></span>
+      <span class="soil-moisture-legend-name">Ziel-Bodenfeuchte</span>
+      <small>{{ target_soil_moisture.label }} · {{ target_soil_moisture.source_label }}</small>
+    </span>
+    {% endif %}
     {% for kind, weather_item in weather_series.items() if weather_item.configured %}
     <span class="soil-moisture-legend-item weather-legend-item" data-weather-kind="{{ kind }}">
       <span class="soil-moisture-legend-swatch" aria-hidden="true"></span>
@@ -209,6 +234,8 @@
 .field-pair{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:.6rem}
 .polygon-point-list{display:grid;gap:.5rem}
 .polygon-point-row{display:grid;grid-template-columns:auto repeat(2,minmax(140px,1fr));gap:.5rem;align-items:end}
+.soil-moisture-target-form{display:grid;gap:.55rem;margin:1rem 0;padding:.85rem;border:1px solid var(--border);border-radius:14px;background:var(--surface-soft)}
+.target-soil-moisture-grid{display:grid;grid-template-columns:minmax(180px,260px) auto;gap:.65rem;align-items:end}
 .soil-moisture-history{display:grid;gap:.85rem;margin:1.5rem 0;padding:1rem;border:1px solid var(--border);border-radius:16px;background:var(--surface-soft)}
 .soil-moisture-history-head{display:flex;align-items:end;justify-content:space-between;gap:1rem;flex-wrap:wrap}
 .soil-moisture-range-form{display:flex;align-items:center;gap:.5rem}
@@ -224,6 +251,9 @@
 .weather-legend-item[data-weather-kind="irrigation"]{--sensor-color:#f97316}
 .weather-legend-item[data-weather-kind="rainfall"] .soil-moisture-legend-swatch,
 .weather-legend-item[data-weather-kind="irrigation"] .soil-moisture-legend-swatch{border-radius:3px}
+.weather-legend-item[data-weather-kind="rainfall"] .soil-moisture-legend-swatch{border-radius:3px}
+.target-soil-moisture-legend-item{--sensor-color:#22c55e}
+.target-soil-moisture-legend-item .soil-moisture-legend-swatch{height:.18rem;border-radius:999px}
 .soil-moisture-legend small{color:var(--muted)}
 @media (max-width:700px){
   .soil-moisture-chart-wrap{min-height:180px}
@@ -425,10 +455,12 @@
     const canvas = document.getElementById('soil-moisture-chart');
     const dataNode = document.getElementById('soil-moisture-series-data');
     const weatherDataNode = document.getElementById('weather-series-data');
+    const targetDataNode = document.getElementById('target-soil-moisture-data');
     if (!canvas || !dataNode) return;
 
     let series = [];
     let weatherSeries = {};
+    let targetSoilMoisture = null;
     try {
       series = JSON.parse(dataNode.textContent || '[]');
     } catch (error) {
@@ -439,6 +471,13 @@
     } catch (error) {
       weatherSeries = {};
     }
+    try {
+      targetSoilMoisture = JSON.parse(targetDataNode?.textContent || 'null');
+    } catch (error) {
+      targetSoilMoisture = null;
+    }
+    const targetValue = Number(targetSoilMoisture?.value);
+    const hasTargetValue = Number.isFinite(targetValue);
 
     const context = canvas.getContext('2d');
     if (!context) return;
@@ -484,6 +523,7 @@
     const irrigationPoints = irrigationSeries.flatMap((sensorSeries) => sensorSeries.parsedPoints);
     const soilPoints = soilSeries.flatMap((sensorSeries) => sensorSeries.parsedPoints);
     const allPoints = [...soilPoints, ...temperaturePoints, ...rainfallPoints, ...irrigationPoints];
+    const soilDomainPoints = hasTargetValue ? [...soilPoints, { time: 0, value: targetValue }] : soilPoints;
 
     if (!allPoints.length) {
       context.fillStyle = '#6b7280';
@@ -512,7 +552,7 @@
       context.stroke();
     }
 
-    const soilDomain = valueDomain(soilPoints, { minFloor: 0, maxCeil: 100, padding: 5 });
+    const soilDomain = valueDomain(soilDomainPoints, { minFloor: 0, maxCeil: 100, padding: 5 });
     const temperatureDomain = valueDomain(temperatureRangePoints, { padding: 2 });
     const rainfallDomain = valueDomain(rainfallPoints, { minFloor: 0, padding: 1 });
     const irrigationDomain = valueDomain(irrigationPoints, { minFloor: 0, padding: 5 });
@@ -628,6 +668,25 @@
         yFor: temperatureYFor,
       });
     }
+    if (hasTargetValue && soilYFor) {
+      const y = soilYFor(targetValue);
+      context.save();
+      context.strokeStyle = '#22c55e';
+      context.lineWidth = 2;
+      context.setLineDash([8, 6]);
+      context.beginPath();
+      context.moveTo(padding.left, y);
+      context.lineTo(cssWidth - padding.right, y);
+      context.stroke();
+      context.setLineDash([]);
+      context.fillStyle = '#15803d';
+      context.font = '12px system-ui, sans-serif';
+      context.textAlign = 'right';
+      context.textBaseline = 'bottom';
+      context.fillText(`Ziel ${targetSoilMoisture.label || `${targetValue}%`}`, cssWidth - padding.right - 4, y - 4);
+      context.restore();
+    }
+
   };
   const loadSoilMoistureData = async () => {
     const dataNode = document.getElementById('soil-moisture-series-data');
@@ -643,6 +702,8 @@
       const payload = await response.json();
       dataNode.textContent = JSON.stringify(payload.series || []);
       if (weatherDataNode) weatherDataNode.textContent = JSON.stringify(payload.weather_series || {});
+      const targetDataNode = document.getElementById('target-soil-moisture-data');
+      if (targetDataNode) targetDataNode.textContent = JSON.stringify(payload.target_soil_moisture || null);
       updateSoilMoistureCurrent(payload.current);
       updateSoilMoistureLegend(payload.series || [], payload.weather_series || {});
       setSoilMoistureHints(payload.hints || []);
