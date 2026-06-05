@@ -69,6 +69,7 @@ class Location(db.Model):
     description = db.Column(db.Text)
     color = db.Column(db.String(7), default='#2f6d40')
     polygon_points = db.Column(db.Text)
+    target_soil_moisture_percent = db.Column(db.Float)
 
 
 class Sensor(db.Model):
@@ -115,6 +116,7 @@ class InfluxIntegrationConfig(db.Model):
     homeassistant_token = db.Column(db.Text)
     verify_tls = db.Column(db.Boolean, nullable=False, default=True)
     timeout_seconds = db.Column(db.Integer, nullable=False, default=10)
+    target_soil_moisture_percent = db.Column(db.Float)
     created_at = db.Column(db.DateTime(timezone=True), default=utc_now, nullable=False)
     updated_at = db.Column(db.DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False)
 
