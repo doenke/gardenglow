@@ -117,6 +117,7 @@ class InfluxIntegrationConfig(db.Model):
     verify_tls = db.Column(db.Boolean, nullable=False, default=True)
     timeout_seconds = db.Column(db.Integer, nullable=False, default=10)
     target_soil_moisture_percent = db.Column(db.Float)
+    irrigation_prediction_max_minutes = db.Column(db.Float)
     created_at = db.Column(db.DateTime(timezone=True), default=utc_now, nullable=False)
     updated_at = db.Column(db.DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False)
 
@@ -127,6 +128,41 @@ class InfluxIntegrationConfig(db.Model):
     @property
     def has_homeassistant_token(self):
         return bool((self.homeassistant_token or '').strip())
+
+
+class IrrigationPredictionModel(db.Model):
+    __tablename__ = 'irrigation_prediction_model'
+    __table_args__ = (
+        db.Index('ix_irrigation_prediction_model_location_id', 'location_id'),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    location_id = db.Column(db.Integer, db.ForeignKey('location.id'), nullable=False, unique=True)
+    trained_at = db.Column(db.DateTime(timezone=True))
+    sample_count = db.Column(db.Integer, nullable=False, default=0)
+    intercept = db.Column(db.Float, nullable=False, default=0.0)
+    coefficients_json = db.Column(db.Text, nullable=False, default='[]')
+    feature_names_json = db.Column(db.Text, nullable=False, default='[]')
+    metrics_json = db.Column(db.Text, nullable=False, default='{}')
+    location = db.relationship('Location')
+
+    @property
+    def coefficients_list(self):
+        import json
+        try:
+            values = json.loads(self.coefficients_json or '[]')
+        except (TypeError, ValueError):
+            return []
+        return [float(value) for value in values if isinstance(value, (int, float))]
+
+    @property
+    def metrics_dict(self):
+        import json
+        try:
+            values = json.loads(self.metrics_json or '{}')
+        except (TypeError, ValueError):
+            return {}
+        return values if isinstance(values, dict) else {}
 
 
 class Plant(db.Model):

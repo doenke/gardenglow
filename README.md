@@ -80,6 +80,9 @@ docker compose up --build
 - `WIDGET_API_KEY` – API-Key für den Statistik-Webservice `/api/stats`
 - `HEADER_LOGO_URL` – URL eines optionalen Header-Logos (wenn leer oder nicht gesetzt, wird kein Logo angezeigt)
 - `DEBUG_MODE` – aktiviert mit `1`, `true`, `yes`, `on` oder `y` das vollständige Magic-/Taxonomie-Debugging. Ohne aktivierten Debug-Modus werden auf der Pflanzenseite keine Magic-Debug-Hinweise und kein Magic-Debuglog angezeigt. Bei aktivem Debug enthält die JSON-Antwort zusätzlich alle externen Webanfragen samt Headern, Status und vollständigem Antwortinhalt. Standard: `false`.
+- `IRRIGATION_PREDICTION_MAX_MINUTES` – Obergrenze für ML-Bewässerungsprognosen in Minuten (Standard: `120`). Negative Modellwerte werden zu `0`, Werte oberhalb der Obergrenze werden auf diese Obergrenze beschränkt.
+- `IRRIGATION_PREDICTION_TRAIN_INTERVAL_DAYS` – Mindestabstand zwischen zwei Trainingsläufen je Beet in Tagen (Standard: `7`).
+- `IRRIGATION_PREDICTION_TRAINING_LOOKBACK_DAYS` – Historischer Sensorzeitraum für das Modelltraining in Tagen (Standard: `90`).
 
 ### OIDC (optional)
 
@@ -89,6 +92,23 @@ docker compose up --build
 - `OIDC_LOGOUT_URL` *(optional)* – Externe Logout-URL des Identity-Providers
 
 > Hinweis: Wenn keine der OIDC-Variablen gesetzt ist, startet GardenGlow ohne externen Login und meldet automatisch den Standardbenutzer **„Gärtner“** an. Sobald mindestens eine OIDC-Variable gesetzt ist, müssen `OIDC_SERVER_METADATA_URL`, `OIDC_CLIENT_ID` und `OIDC_CLIENT_SECRET` vollständig vorhanden sein.
+
+
+## Webservice für Bewässerungs-Prognosen
+
+GardenGlow stellt ML-basierte JSON-Endpunkte bereit, die aus den vorhandenen Sensor-Zeitreihen je Beet vorhersagen, wie viele Minuten die Bewässerung heute laufen sollte, um die Ziel-Bodenfeuchte zu erreichen. Das Training wird pro Beet beim Abruf automatisch ausgeführt, wenn noch kein Modell vorhanden ist oder das letzte Training mindestens eine Woche zurückliegt.
+
+Endpunkte:
+
+- `GET /api/irrigation-predictions` – Prognosen für alle produktiven Beete
+- `GET /api/locations/<id>/irrigation-prediction` – Prognose für ein einzelnes Beet
+
+Authentifizierung entspricht `/api/stats`:
+
+- Header `X-API-Key: <WIDGET_API_KEY>`
+- alternativ `Authorization: Bearer <WIDGET_API_KEY>`
+
+Die Antwort enthält unter anderem `predicted_minutes`, `raw_predicted_minutes`, `target_soil_moisture_percent`, Modell-Metadaten und die für die aktuelle Prognose verwendeten Features. Negative Vorhersagen werden auf `0` Minuten gesetzt; die Obergrenze wird auf der Konfigurationsseite oder über `IRRIGATION_PREDICTION_MAX_MINUTES` konfiguriert und beträgt standardmäßig `120` Minuten.
 
 ## Webservice für Pflanzen-/Beet-Zahlen
 
