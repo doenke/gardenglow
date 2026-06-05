@@ -366,25 +366,34 @@
     });
   };
 
-  const drawAxis = (context, { minValue, maxValue, yFor, x, align, color, labelForTick, title, titleOffset = 0 }) => {
+  const drawAxis = (context, { minValue, maxValue, yFor, x, align, color, labelForTick, title, titleOffset = null, titleGap = 16, maxTitleX = null }) => {
     const valueRange = Math.max(1, maxValue - minValue);
+    context.font = '12px system-ui, sans-serif';
+    const ticks = Array.from({ length: 5 }, (_, tick) => minValue + (valueRange * tick) / 4);
+    const tickLabels = ticks.map((value) => labelForTick(value));
+    const tickLabelGap = 8;
+    const maxTickLabelWidth = tickLabels.reduce((width, label) => Math.max(width, context.measureText(label).width), 0);
+    const calculatedTitleOffset = align === 'right'
+      ? -(tickLabelGap + maxTickLabelWidth + titleGap)
+      : tickLabelGap + maxTickLabelWidth + titleGap;
+    const resolvedTitleOffset = titleOffset === null ? calculatedTitleOffset : titleOffset;
+    const titleX = maxTitleX === null ? x + resolvedTitleOffset : Math.min(x + resolvedTitleOffset, maxTitleX);
+
     context.strokeStyle = color;
     context.fillStyle = color;
     context.lineWidth = 1;
-    context.font = '12px system-ui, sans-serif';
     context.textAlign = align;
     context.textBaseline = 'middle';
-    for (let tick = 0; tick <= 4; tick += 1) {
-      const value = minValue + (valueRange * tick) / 4;
+    ticks.forEach((value, index) => {
       const y = yFor(value);
       context.beginPath();
       context.moveTo(x, y);
       context.lineTo(x + (align === 'right' ? 5 : -5), y);
       context.stroke();
-      context.fillText(labelForTick(value), x + (align === 'right' ? -8 : 8), y);
-    }
+      context.fillText(tickLabels[index], x + (align === 'right' ? -tickLabelGap : tickLabelGap), y);
+    });
     context.save();
-    context.translate(x + titleOffset, 18);
+    context.translate(titleX, 18);
     context.rotate(-Math.PI / 2);
     context.textAlign = 'right';
     context.fillText(title, 0, 0);
@@ -560,8 +569,10 @@
       return;
     }
 
-    const padding = { top: 24, right: 188, bottom: 38, left: 52 };
-    const rightAxisGap = 64;
+    const isCompactChart = cssWidth < 560;
+    const padding = { top: 24, right: isCompactChart ? 168 : 228, bottom: 38, left: 52 };
+    const rightAxisGap = isCompactChart ? 54 : 72;
+    const rightAxisTitleMaxX = cssWidth - 8;
     const plotWidth = cssWidth - padding.left - padding.right;
     const plotHeight = cssHeight - padding.top - padding.bottom;
     const minTime = Math.min(...allPoints.map((point) => point.time));
@@ -599,7 +610,6 @@
         color: '#2563eb',
         labelForTick: (value) => `${Math.round(value)}%`,
         title: 'Bodenfeuchte',
-        titleOffset: -36,
       });
     }
     if (temperatureDomain && temperatureYFor) {
@@ -612,7 +622,7 @@
         color: '#dc2626',
         labelForTick: (value) => `${Math.round(value)}°C`,
         title: 'Temperatur',
-        titleOffset: 44,
+        maxTitleX: rightAxisTitleMaxX,
       });
     }
     if (rainfallDomain && rainfallYFor) {
@@ -625,7 +635,7 @@
         color: '#0f766e',
         labelForTick: (value) => `${Math.round(value)} mm`,
         title: 'Regen',
-        titleOffset: 42,
+        maxTitleX: rightAxisTitleMaxX,
       });
     }
     if (irrigationDomain && irrigationYFor) {
@@ -638,7 +648,7 @@
         color: '#f97316',
         labelForTick: (value) => `${Math.round(value)} min`,
         title: 'Bewässerung',
-        titleOffset: 46,
+        maxTitleX: rightAxisTitleMaxX,
       });
     }
 
