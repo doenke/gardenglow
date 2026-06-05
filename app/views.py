@@ -14,7 +14,7 @@ import requests
 from functools import wraps
 from datetime import datetime, timezone, timedelta
 from flask import Blueprint, abort, current_app, g, render_template, request, redirect, url_for, session, jsonify, send_from_directory, flash, send_file
-from .models import db, utc_now, User, Location, Plant, PlantPhoto, PlantNote, GardenMap, TimelineEntry, LightNeed, SoilProperty, Sensor, PlantDatabaseIdentifier, InfluxIntegrationConfig, plant_soil_property, SENSOR_TYPE_LABELS, SENSOR_TYPE_SOIL_MOISTURE, SENSOR_TYPE_TEMPERATURE, SENSOR_TYPE_RAINFALL, SENSOR_TYPE_IRRIGATION, SENSOR_TYPES
+from .models import db, utc_now, User, Location, Plant, PlantPhoto, PlantNote, GardenMap, TimelineEntry, LightNeed, SoilProperty, Sensor, PlantDatabaseIdentifier, InfluxIntegrationConfig, IrrigationPredictionModel, plant_soil_property, SENSOR_TYPE_LABELS, SENSOR_TYPE_SOIL_MOISTURE, SENSOR_TYPE_TEMPERATURE, SENSOR_TYPE_RAINFALL, SENSOR_TYPE_IRRIGATION, SENSOR_TYPES
 from .map_data import MapPointValidationError, parse_stored_points, validate_calibration_points, validate_polygon_points
 from .services.timeline_service import save_uploaded_attachment, set_single_title_entry, delete_timeline_entry, build_unique_upload_name
 from .services import influx_service, irrigation_prediction_service
@@ -2000,6 +2000,55 @@ def test_homeassistant_connection():
     return redirect(url_for('main.config'))
 
 
+def _irrigation_training_report():
+    now = datetime.now(timezone.utc)
+    config = _irrigation_prediction_config()
+    models_by_location_id = {
+        model.location_id: model
+        for model in IrrigationPredictionModel.query.all()
+    }
+    rows = []
+    trained_models = 0
+    due_models = 0
+    for location in Location.query.order_by(Location.name).all():
+        model = models_by_location_id.get(location.id)
+        trained_at = _as_utc_datetime(model.trained_at) if model and model.trained_at else None
+        is_due = irrigation_prediction_service._training_due(model, now, config.train_interval)
+        if model and model.trained_at:
+            trained_models += 1
+        if is_due:
+            due_models += 1
+        metrics = model.metrics_dict if model else {}
+        rmse = metrics.get('rmse') if isinstance(metrics, dict) else None
+        rows.append({
+            'location': location,
+            'trained_at': trained_at,
+            'next_training_at': trained_at + config.train_interval if trained_at else None,
+            'sample_count': model.sample_count if model else 0,
+            'rmse': round(float(rmse), 2) if isinstance(rmse, (int, float)) and math.isfinite(rmse) else None,
+            'status': 'fällig' if is_due else 'aktuell',
+            'status_class': 'is-due' if is_due else 'is-current',
+            'target': _target_soil_moisture_for_location(location),
+        })
+    return {
+        'rows': rows,
+        'location_count': len(rows),
+        'trained_models': trained_models,
+        'due_models': due_models,
+        'train_interval_days': round(config.train_interval.total_seconds() / 86400, 1),
+        'training_lookback_days': round(config.training_lookback.total_seconds() / 86400, 1),
+        'max_minutes': config.max_minutes,
+    }
+
+
+def _as_utc_datetime(value):
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
 @main_bp.route('/admin')
 @login_required
 def admin():
@@ -2011,7 +2060,53 @@ def admin():
         backups=_backup_report(),
         version_info=_app_version_info(),
         environment_variables=_environment_variable_report(),
+        irrigation_training=_irrigation_training_report(),
     )
+
+
+@main_bp.route('/admin/irrigation-prediction/train', methods=['POST'])
+@login_required
+def train_irrigation_prediction_models():
+    location_id = (request.form.get('location_id') or '').strip()
+    query = Location.query.order_by(Location.name)
+    if location_id:
+        try:
+            query = query.filter(Location.id == int(location_id))
+        except ValueError:
+            flash('Training konnte nicht gestartet werden: ungültiges Beet.', 'error')
+            return redirect(url_for('main.admin'))
+
+    locations = query.all()
+    if not locations:
+        flash('Keine Beete für das Modelltraining gefunden.', 'warning')
+        return redirect(url_for('main.admin'))
+
+    config = _irrigation_prediction_config()
+    adapter = influx_service.get_sensor_time_series_adapter()
+    now = datetime.now(timezone.utc)
+    trained_count = 0
+    failed = []
+    for location in locations:
+        target = _target_soil_moisture_for_location(location)
+        try:
+            irrigation_prediction_service.train_model_for_location(
+                location,
+                target['value'] if target else None,
+                adapter,
+                now=now,
+                max_minutes=config.max_minutes,
+                training_lookback=config.training_lookback,
+            )
+        except Exception as exc:  # pragma: no cover - concrete InfluxDB failures are integration-specific
+            failed.append(f'{location.name}: {exc}')
+        else:
+            trained_count += 1
+
+    if trained_count:
+        flash(f'Modelltraining für {trained_count} Beet(er) abgeschlossen.', 'success')
+    if failed:
+        flash('Modelltraining fehlgeschlagen: ' + '; '.join(failed), 'error')
+    return redirect(url_for('main.admin'))
 
 
 @main_bp.route('/admin/backup/create', methods=['POST'])

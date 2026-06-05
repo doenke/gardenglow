@@ -30,6 +30,73 @@
   </div>
 </section>
 
+
+<section class="card">
+  <div class="admin-section-header">
+    <div>
+      <h2>Bewässerungs-Prognose: Modelltraining</h2>
+      <p class="text-muted mt-0 mb-0">Trainingszustand der ML-Modelle je Beet. Das manuelle Training nutzt die vorhandenen Sensor-Zeitreihen und überschreibt den bisherigen Modellstand.</p>
+    </div>
+    <form method="post" action="{{ url_for('main.train_irrigation_prediction_models') }}" onsubmit="return confirm('Training für alle Beete jetzt starten?');">
+      <button type="submit" class="btn">Alle Modelle trainieren</button>
+    </form>
+  </div>
+
+  <div class="admin-summary-grid">
+    <div class="admin-summary-card">
+      <span class="admin-summary-label">Beete</span>
+      <strong>{{ irrigation_training.location_count }}</strong>
+      <small>{{ irrigation_training.trained_models }} mit gespeichertem Modell</small>
+    </div>
+    <div class="admin-summary-card">
+      <span class="admin-summary-label">Training fällig</span>
+      <strong>{{ irrigation_training.due_models }}</strong>
+      <small>Intervall: {{ irrigation_training.train_interval_days }} Tage</small>
+    </div>
+    <div class="admin-summary-card">
+      <span class="admin-summary-label">Trainingsdaten</span>
+      <strong>{{ irrigation_training.training_lookback_days }} Tage</strong>
+      <small>Max. Prognose: {{ irrigation_training.max_minutes|round(1) }} Minuten</small>
+    </div>
+  </div>
+
+  {% if irrigation_training.rows %}
+  <table class="admin-training-table">
+    <thead>
+      <tr>
+        <th>Beet</th>
+        <th>Status</th>
+        <th>Zuletzt trainiert (UTC)</th>
+        <th>Nächstes Training</th>
+        <th>Samples</th>
+        <th>RMSE</th>
+        <th>Aktion</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in irrigation_training.rows %}
+      <tr>
+        <td data-label="Beet"><strong>{{ row.location.name }}</strong>{% if row.target %}<br><small class="text-muted">Ziel: {{ row.target.label }} · {{ row.target.source_label }}</small>{% endif %}</td>
+        <td data-label="Status"><span class="admin-training-status {{ row.status_class }}">{{ row.status }}</span></td>
+        <td data-label="Zuletzt trainiert (UTC)">{% if row.trained_at %}{{ row.trained_at.strftime('%Y-%m-%d %H:%M:%S') }}{% else %}Noch nie{% endif %}</td>
+        <td data-label="Nächstes Training">{% if row.next_training_at %}{{ row.next_training_at.strftime('%Y-%m-%d %H:%M:%S') }}{% else %}Sofort fällig{% endif %}</td>
+        <td data-label="Samples">{{ row.sample_count }}</td>
+        <td data-label="RMSE">{{ row.rmse if row.rmse is not none else '—' }}</td>
+        <td data-label="Aktion">
+          <form method="post" action="{{ url_for('main.train_irrigation_prediction_models') }}" onsubmit="return confirm('Training für „{{ row.location.name }}“ jetzt starten?');">
+            <input type="hidden" name="location_id" value="{{ row.location.id }}">
+            <button type="submit" class="btn secondary">Training starten</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+    <p>Noch keine Beete vorhanden. Sobald ein Beet angelegt ist, kann hier ein Prognosemodell trainiert werden.</p>
+  {% endif %}
+</section>
+
 <section class="card">
   <h2>Umgebungsvariablen</h2>
   <p class="text-muted mt-0">Effektive Konfiguration der Anwendung. Sensible Werte werden maskiert angezeigt.</p>
@@ -180,10 +247,15 @@
 .admin-backup-actions form{margin:0}
 .admin-breakable{overflow-wrap:anywhere;word-break:break-word;min-width:0}
 .admin-filename-cell{max-width:clamp(180px,42vw,520px)}
-.admin-orphan-table,.admin-env-table{table-layout:fixed}
+.admin-orphan-table,.admin-env-table,.admin-training-table{table-layout:fixed}
 .admin-source-badge{display:inline-flex;align-items:center;border:1px solid var(--border);border-radius:999px;padding:.18rem .55rem;background:var(--surface);font-size:.82rem;font-weight:700;color:var(--muted);white-space:nowrap}
 .admin-source-badge.is-set{background:color-mix(in srgb,var(--primary) 14%, var(--surface));color:var(--text);border-color:color-mix(in srgb,var(--primary) 40%, var(--border))}
+.admin-training-status{display:inline-flex;align-items:center;border:1px solid var(--border);border-radius:999px;padding:.18rem .55rem;background:var(--surface);font-size:.82rem;font-weight:700;white-space:nowrap}
+.admin-training-status.is-current{background:color-mix(in srgb,#66b27a 16%, var(--surface));border-color:color-mix(in srgb,#66b27a 45%, var(--border))}
+.admin-training-status.is-due{background:color-mix(in srgb,#e0b54a 18%, var(--surface));border-color:color-mix(in srgb,#e0b54a 45%, var(--border))}
+.admin-training-table form{margin:0}
 .admin-env-table th:nth-child(1){width:28%}.admin-env-table th:nth-child(3){width:7.5rem}
+.admin-training-table th:nth-child(1){width:24%}.admin-training-table th:nth-child(2){width:7rem}.admin-training-table th:nth-child(5),.admin-training-table th:nth-child(6){width:5.5rem}.admin-training-table th:nth-child(7){width:10rem}
 .admin-orphan-table th:nth-child(1){width:52%}.admin-orphan-table th:nth-child(2){width:8rem}.admin-orphan-table th:nth-child(3){width:11rem}.admin-orphan-table th:nth-child(4){width:8rem}
 </style>
 {% endblock %}

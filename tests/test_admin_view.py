@@ -4,12 +4,14 @@ import sqlite3
 import tempfile
 import unittest
 import zipfile
+from datetime import datetime, timezone
 from io import BytesIO
+from unittest.mock import patch
 
 os.environ.setdefault('SECRET_KEY', 'x' * 40)
 
 from app import create_app
-from app.models import GardenMap, TimelineEntry, User, db
+from app.models import GardenMap, IrrigationPredictionModel, Location, TimelineEntry, User, db
 
 
 class AdminViewTest(unittest.TestCase):
@@ -44,12 +46,24 @@ class AdminViewTest(unittest.TestCase):
 
         with self.app.app_context():
             self.user = User(sub='test-user', name='Test User', avatar_filename='avatar.png')
-            db.session.add(self.user)
+            self.location = Location(name='Tomatenbeet', target_soil_moisture_percent=62.5)
+            db.session.add_all([self.user, self.location])
             db.session.flush()
             db.session.add(TimelineEntry(scope_type='plant', scope_id=1, attachment_filename='referenced.jpg', attachment_kind='image', creator_id=self.user.id))
             db.session.add(GardenMap(filename='map.png', calibration_points='[]', boundary_points='[]'))
             db.session.commit()
+            db.session.add(IrrigationPredictionModel(
+                location_id=self.location.id,
+                trained_at=datetime(2026, 6, 1, 12, 30, tzinfo=timezone.utc),
+                sample_count=7,
+                intercept=0.0,
+                coefficients_json='[]',
+                feature_names_json='[]',
+                metrics_json='{"rmse":3.456}',
+            ))
+            db.session.commit()
             self.user_id = self.user.id
+            self.location_id = self.location.id
 
         shutil.copy2(self.db_path, os.path.join(self.backup_folder, 'backup.sqlite'))
 
@@ -87,6 +101,31 @@ class AdminViewTest(unittest.TestCase):
         self.assertIn('/admin/backup/delete', html)
         self.assertIn('Wiederherstellen', html)
         self.assertIn('admin-breakable admin-filename-cell', html)
+        self.assertIn('Bewässerungs-Prognose: Modelltraining', html)
+        self.assertIn('Tomatenbeet', html)
+        self.assertIn('2026-06-01 12:30:00', html)
+        self.assertIn('7</td>', html)
+        self.assertIn('3.46', html)
+        self.assertIn('/admin/irrigation-prediction/train', html)
+        self.assertIn('Training starten', html)
+
+    def test_irrigation_training_can_be_started_from_admin_page(self):
+        with patch('app.views.influx_service.get_sensor_time_series_adapter', return_value=object()) as adapter_mock, \
+                patch('app.views.irrigation_prediction_service.train_model_for_location') as train_mock:
+            response = self.client.post(
+                '/admin/irrigation-prediction/train',
+                data={'location_id': str(self.location_id)},
+                follow_redirects=True,
+            )
+
+        self.assertEqual(response.status_code, 200)
+        adapter_mock.assert_called_once()
+        train_mock.assert_called_once()
+        args, kwargs = train_mock.call_args
+        self.assertEqual(args[0].id, self.location_id)
+        self.assertEqual(args[1], 62.5)
+        self.assertEqual(kwargs['max_minutes'], 120.0)
+        self.assertIn('Modelltraining für 1 Beet(er) abgeschlossen.', response.get_data(as_text=True))
 
     def test_backup_can_be_created_from_admin_page(self):
         response = self.client.post('/admin/backup/create', follow_redirects=True)
