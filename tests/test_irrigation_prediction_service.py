@@ -36,6 +36,22 @@ class FakeAdapter:
         return points[-1] if points else None
 
 
+class FilteringRecordingAdapter(FakeAdapter):
+    def __init__(self, points_by_key):
+        super().__init__(points_by_key)
+        self.queries = []
+
+    def query_sensor(self, sensor, start, stop=None):
+        self.query_count += 1
+        self.queries.append((sensor.key, start, stop))
+        filtered = []
+        for point in self.points_by_key.get(sensor.key, []):
+            point_time = datetime.fromisoformat(str(point['time']).replace('Z', '+00:00'))
+            if start <= point_time <= (stop or point_time):
+                filtered.append(point)
+        return filtered
+
+
 class IrrigationPredictionServiceTest(unittest.TestCase):
     def setUp(self):
         self.db_fd, self.db_path = tempfile.mkstemp(suffix='.sqlite')
@@ -129,6 +145,79 @@ class IrrigationPredictionServiceTest(unittest.TestCase):
             self.assertEqual(summary['failed'], 0)
             model = IrrigationPredictionModel.query.filter_by(location_id=self.location_id).one()
             self.assertEqual(model.trained_at.replace(tzinfo=timezone.utc), now)
+
+    def test_training_lookback_is_capped_at_900_days_and_starts_at_first_soil_point(self):
+        now = datetime(2026, 6, 5, 12, tzinfo=timezone.utc)
+        too_old = (now - timedelta(days=950)).replace(hour=6, minute=0, second=0, microsecond=0)
+        first_soil = (now - timedelta(days=800)).replace(hour=6, minute=0, second=0, microsecond=0)
+        second_soil = (now - timedelta(days=799)).replace(hour=6, minute=0, second=0, microsecond=0)
+        adapter = FilteringRecordingAdapter({
+            'soil': [
+                {'time': too_old.isoformat(), 'value': 41},
+                {'time': first_soil.isoformat(), 'value': 45},
+                {'time': second_soil.isoformat(), 'value': 48},
+            ],
+            'irrigation': [
+                {'time': first_soil.replace(hour=7).isoformat(), 'value': 1},
+                {'time': (first_soil.replace(hour=7) + timedelta(minutes=20)).isoformat(), 'value': 0},
+                {'time': second_soil.replace(hour=7).isoformat(), 'value': 1},
+                {'time': (second_soil.replace(hour=7) + timedelta(minutes=10)).isoformat(), 'value': 0},
+            ],
+        })
+
+        with self.app.app_context():
+            location = db.session.get(Location, self.location_id)
+            irrigation_prediction_service.train_model_for_location(
+                location,
+                55,
+                adapter,
+                now=now,
+                training_lookback=timedelta(days=1200),
+            )
+
+            model = IrrigationPredictionModel.query.filter_by(location_id=self.location_id).one()
+            self.assertEqual(model.sample_count, 2)
+
+        soil_query = next(query for query in adapter.queries if query[0] == 'soil')
+        irrigation_query = next(query for query in adapter.queries if query[0] == 'irrigation')
+        self.assertEqual(soil_query[1], now - timedelta(days=900))
+        self.assertEqual(irrigation_query[1], first_soil)
+
+    def test_training_uses_no_days_before_first_available_soil_sensor_data(self):
+        now = datetime(2026, 6, 5, 12, tzinfo=timezone.utc)
+        old_day = (now - timedelta(days=20)).replace(hour=6, minute=0, second=0, microsecond=0)
+        first_soil = (now - timedelta(days=4)).replace(hour=6, minute=0, second=0, microsecond=0)
+        second_soil = (now - timedelta(days=3)).replace(hour=6, minute=0, second=0, microsecond=0)
+        adapter = FilteringRecordingAdapter({
+            'soil': [
+                {'time': first_soil.isoformat(), 'value': 45},
+                {'time': second_soil.isoformat(), 'value': 48},
+            ],
+            'irrigation': [
+                {'time': old_day.replace(hour=7).isoformat(), 'value': 1},
+                {'time': (old_day.replace(hour=7) + timedelta(minutes=60)).isoformat(), 'value': 0},
+                {'time': first_soil.replace(hour=7).isoformat(), 'value': 1},
+                {'time': (first_soil.replace(hour=7) + timedelta(minutes=20)).isoformat(), 'value': 0},
+                {'time': second_soil.replace(hour=7).isoformat(), 'value': 1},
+                {'time': (second_soil.replace(hour=7) + timedelta(minutes=10)).isoformat(), 'value': 0},
+            ],
+        })
+
+        with self.app.app_context():
+            location = db.session.get(Location, self.location_id)
+            irrigation_prediction_service.train_model_for_location(
+                location,
+                55,
+                adapter,
+                now=now,
+                training_lookback=timedelta(days=900),
+            )
+
+            model = IrrigationPredictionModel.query.filter_by(location_id=self.location_id).one()
+            self.assertEqual(model.sample_count, 2)
+
+        irrigation_query = next(query for query in adapter.queries if query[0] == 'irrigation')
+        self.assertEqual(irrigation_query[1], first_soil)
 
     def test_train_due_models_skips_without_influx_config(self):
         with self.app.app_context():

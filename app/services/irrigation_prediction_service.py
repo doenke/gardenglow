@@ -22,7 +22,8 @@ from app.models import (
 from app.services import influx_service
 
 TRAINING_INTERVAL = timedelta(days=7)
-TRAINING_LOOKBACK = timedelta(days=90)
+MAX_TRAINING_LOOKBACK = timedelta(days=900)
+TRAINING_LOOKBACK = MAX_TRAINING_LOOKBACK
 LATEST_LOOKBACK = timedelta(hours=24)
 DEFAULT_TARGET_SOIL_MOISTURE_PERCENT = 55.0
 MIN_TRAINING_SAMPLES = 2
@@ -48,7 +49,7 @@ def prediction_config_from_app(app_config: Any) -> PredictionConfig:
     return PredictionConfig(
         max_minutes=_positive_float(app_config.get('IRRIGATION_PREDICTION_MAX_MINUTES'), 120.0),
         train_interval=timedelta(days=_positive_float(app_config.get('IRRIGATION_PREDICTION_TRAIN_INTERVAL_DAYS'), 7.0)),
-        training_lookback=timedelta(days=_positive_float(app_config.get('IRRIGATION_PREDICTION_TRAINING_LOOKBACK_DAYS'), 90.0)),
+        training_lookback=_training_lookback_from_days(app_config.get('IRRIGATION_PREDICTION_TRAINING_LOOKBACK_DAYS')),
     )
 
 
@@ -165,8 +166,14 @@ def train_model_for_location(
 ) -> IrrigationPredictionModel:
     now = _as_utc(now or datetime.now(timezone.utc))
     target = _target_or_default(target_soil_moisture_percent)
-    start = now - training_lookback
-    datasets = _load_training_datasets(location, adapter, start, now)
+    start = now - _bounded_training_lookback(training_lookback)
+    soil_points = _query_points(location, SENSOR_TYPE_SOIL_MOISTURE, adapter, start, now)
+    first_soil_at = _first_point_time(soil_points)
+    if first_soil_at is None:
+        datasets = {SENSOR_TYPE_SOIL_MOISTURE: []}
+    else:
+        start = max(start, first_soil_at)
+        datasets = _load_training_datasets(location, adapter, start, now, soil_points=soil_points)
     samples = _training_samples(datasets, target, max_minutes)
 
     if len(samples) >= MIN_TRAINING_SAMPLES:
@@ -267,9 +274,17 @@ def _current_features(location: Location, target: float, adapter: influx_service
     return features, dict(zip(FEATURE_NAMES, features))
 
 
-def _load_training_datasets(location: Location, adapter: influx_service.SensorTimeSeriesAdapter, start: datetime, stop: datetime):
+def _load_training_datasets(
+    location: Location,
+    adapter: influx_service.SensorTimeSeriesAdapter,
+    start: datetime,
+    stop: datetime,
+    soil_points: list[dict[str, Any]] | None = None,
+):
     return {
-        SENSOR_TYPE_SOIL_MOISTURE: _query_points(location, SENSOR_TYPE_SOIL_MOISTURE, adapter, start, stop),
+        SENSOR_TYPE_SOIL_MOISTURE: _points_from_start(soil_points, start)
+        if soil_points is not None
+        else _query_points(location, SENSOR_TYPE_SOIL_MOISTURE, adapter, start, stop),
         SENSOR_TYPE_TEMPERATURE: _query_points(location, SENSOR_TYPE_TEMPERATURE, adapter, start, stop),
         SENSOR_TYPE_RAINFALL: _query_points(location, SENSOR_TYPE_RAINFALL, adapter, start, stop),
         SENSOR_TYPE_IRRIGATION: _query_points(location, SENSOR_TYPE_IRRIGATION, adapter, start, stop),
@@ -377,6 +392,17 @@ def _latest_value(points: list[dict[str, Any]]) -> float | None:
     return normalized[-1][1] if normalized else None
 
 
+def _first_point_time(points: list[dict[str, Any]]) -> datetime | None:
+    normalized = _normalized_points(points)
+    return normalized[0][0] if normalized else None
+
+
+def _points_from_start(points: list[dict[str, Any]] | None, start: datetime) -> list[dict[str, Any]]:
+    if not points:
+        return []
+    return [point for point in points if (point_time := _parse_time(point.get('time'))) is not None and point_time >= start]
+
+
 def _average(points: list[dict[str, Any]], default: float):
     values = [value for _, value in _normalized_points(points)]
     return sum(values) / len(values) if values else default
@@ -466,6 +492,16 @@ def _as_utc(value: datetime) -> datetime:
 def _target_or_default(value: float | None) -> float:
     parsed = _number(value)
     return parsed if parsed is not None else DEFAULT_TARGET_SOIL_MOISTURE_PERCENT
+
+
+def _bounded_training_lookback(value: timedelta) -> timedelta:
+    if value.total_seconds() <= 0:
+        return TRAINING_LOOKBACK
+    return min(value, MAX_TRAINING_LOOKBACK)
+
+
+def _training_lookback_from_days(value: Any) -> timedelta:
+    return _bounded_training_lookback(timedelta(days=_positive_float(value, MAX_TRAINING_LOOKBACK.total_seconds() / 86400)))
 
 
 def _positive_float(value: Any, default: float) -> float:
