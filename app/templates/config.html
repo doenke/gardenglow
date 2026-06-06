@@ -54,12 +54,12 @@
   <div class="config-section-head">
     <p class="page-eyebrow">Integration</p>
     <h3 class="m-0">Homeassistant</h3>
-    <p class="text-muted mt-0 mb-0">Konfiguriert den optionalen Zugriff auf die Homeassistant-API separat von InfluxDB und stellt ein Home-Assistant-Template für die Beet-Bewässerung bereit.</p>
+    <p class="text-muted mt-0 mb-0">Konfiguriert den optionalen Zugriff auf die Homeassistant-API separat von InfluxDB und stellt einen Home-Assistant-Blueprint für die Beet-Bewässerung bereit.</p>
   </div>
   <form method="post" action="/config/homeassistant" class="grid mb-1">
     <label for="gardenglow-external-url">Externe GardenGlow-URL
       <input id="gardenglow-external-url" type="url" name="gardenglow_external_url" value="{{ gardenglow_external_url }}" placeholder="https://gardenglow.example.local">
-      <small class="text-muted">Diese URL verwendet Home Assistant, um GardenGlow von außen aufzurufen. Wenn leer, wird die aktuelle Anfrage-URL als Vorschlag im Template verwendet.</small>
+      <small class="text-muted">Diese URL verwendet Home Assistant, um GardenGlow von außen aufzurufen. Wenn leer, wird die aktuelle Anfrage-URL als Vorschlag im Blueprint verwendet.</small>
     </label>
     <label for="homeassistant-url">Homeassistant-URL
       <input id="homeassistant-url" type="url" name="homeassistant_url" value="{{ influx_config.homeassistant_url if influx_config else '' }}" placeholder="https://homeassistant.example.local:8123">
@@ -72,12 +72,17 @@
       <button type="submit">Homeassistant-Konfiguration speichern</button>
     </div>
   </form>
-  <div class="homeassistant-template-info card-inner mt-1">
-    <h4 class="m-0">GardenGlow Bewässerungs-Template</h4>
-    <p class="text-muted mb-0">Lade das Home-Assistant-Package ohne Login herunter, trage darin Switch oder Valve, optionalen Minuten-Helfer, Beet-ID und Token ein. Das Script ruft über die oben konfigurierte GardenGlow-URL die Bewässerungsminuten ab, schreibt sie optional in den numerischen Helfer und schaltet danach die Bewässerung für genau diese Dauer ein.</p>
-    <p class="mb-0"><a class="btn secondary" href="{{ homeassistant_template_url }}">Home-Assistant-Template herunterladen</a></p>
+  <div class="homeassistant-blueprint-info card-inner mt-1">
+    <h4 class="m-0">GardenGlow Bewässerungs-Blueprint</h4>
+    <p class="text-muted mb-0">Lade den Home-Assistant-Blueprint ohne Login herunter und importiere ihn in Home Assistant. Wähle beim Erstellen des Scripts Switch oder Valve, optionalen Minuten-Helfer, Beet-ID und Token aus. Der Blueprint ruft über die oben konfigurierte GardenGlow-URL die Bewässerungsminuten ab, schreibt sie optional in den numerischen Helfer und schaltet danach die Bewässerung für genau diese Dauer ein.</p>
+    <label for="homeassistant-blueprint-url" class="mb-0">Blueprint-URL</label>
+    <div class="copy-field-row mb-75">
+      <input id="homeassistant-blueprint-url" type="url" value="{{ homeassistant_blueprint_url }}" readonly>
+      <button type="button" class="btn secondary" data-copy-target="homeassistant-blueprint-url" aria-label="Blueprint-URL kopieren">Kopieren</button>
+    </div>
+    <p class="mb-0"><a class="btn secondary" href="{{ homeassistant_blueprint_url }}">Home-Assistant-Blueprint herunterladen</a></p>
     <p class="mb-0"><strong>GardenGlow API Token:</strong> {% if gardenglow_widget_api_key %}<code>{{ gardenglow_widget_api_key }}</code>{% else %}<span class="text-muted">Nicht konfiguriert (Umgebungsvariable <code>WIDGET_API_KEY</code> setzen).</span>{% endif %}</p>
-    <small class="text-muted">Aktuelle GardenGlow-Base-URL für das Template: <code>{{ gardenglow_public_base_url }}</code></small>
+    <small class="text-muted">Aktuelle GardenGlow-Base-URL für den Blueprint: <code>{{ gardenglow_public_base_url }}</code></small>
   </div>
   <form method="post" action="/config/homeassistant/test" class="mt-1">
     <button type="submit" class="btn secondary">Homeassistant-Verbindung testen</button>
@@ -249,6 +254,24 @@
 </style>
 
 <script>
+  document.querySelectorAll('[data-copy-target]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      const target = document.getElementById(button.dataset.copyTarget);
+      if (!target) return;
+      const value = target.value || target.textContent || '';
+      try {
+        await navigator.clipboard.writeText(value);
+      } catch (error) {
+        target.focus();
+        target.select?.();
+        document.execCommand?.('copy');
+      }
+      const originalText = button.textContent;
+      button.textContent = 'Kopiert';
+      window.setTimeout(() => { button.textContent = originalText; }, 1600);
+    });
+  });
+
   const allLocations = [
     {% for l in locations %}
       {id: {{ l.id }}, color: {{ (l.color or '#2f6d40') | tojson }}, polygon: {{ (l.polygon_points | stored_points) | tojson }} },

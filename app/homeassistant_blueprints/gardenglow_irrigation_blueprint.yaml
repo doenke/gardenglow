@@ -1,0 +1,111 @@
+blueprint:
+  name: GardenGlow Bewässerungs-Blueprint
+  description: >-
+    Bewässert ein GardenGlow-Beet anhand der vorhergesagten Bewässerungsdauer.
+    Voraussetzung: In Home Assistant muss der RESTful Command
+    rest_command.gardenglow_get_irrigation_minutes konfiguriert sein. Er ruft
+    {{ gardenglow_base_url }}/api/locations/{{ bed_id }}/irrigation-prediction
+    mit dem GardenGlow API Token auf und liefert die Antwort per response_variable
+    zurück.
+  domain: script
+  input:
+    gardenglow_base_url:
+      name: GardenGlow Base-URL
+      description: Externe URL deiner GardenGlow-Instanz ohne abschließenden Slash.
+      default: "__GARDENGLOW_BASE_URL__"
+      selector:
+        text:
+    api_token:
+      name: GardenGlow API Token
+      description: Widget-API-Key aus GardenGlow.
+      selector:
+        text:
+          type: password
+    bed_id:
+      name: Beet-ID
+      description: ID des GardenGlow-Beets, für das die Bewässerungsdauer vorhergesagt wird.
+      default: 1
+      selector:
+        number:
+          min: 1
+          mode: box
+          step: 1
+    watering_entity:
+      name: Bewässerungs-Entität
+      description: Switch oder Valve, das für die vorhergesagte Dauer eingeschaltet bzw. geöffnet wird.
+      selector:
+        entity:
+          domain:
+            - switch
+            - valve
+    minutes_helper_entity:
+      name: Minuten-Helfer (optional)
+      description: Optionaler input_number-Helfer, in den die vorhergesagte Dauer geschrieben wird.
+      default: ""
+      selector:
+        entity:
+          domain: input_number
+          multiple: false
+
+mode: single
+
+variables:
+  gardenglow_base_url: !input gardenglow_base_url
+  api_token: !input api_token
+  bed_id: !input bed_id
+  watering_entity: !input watering_entity
+  minutes_helper_entity: !input minutes_helper_entity
+
+sequence:
+  - action: rest_command.gardenglow_get_irrigation_minutes
+    data:
+      base_url: "{{ gardenglow_base_url }}"
+      api_token: "{{ api_token }}"
+      bed_id: "{{ bed_id }}"
+    response_variable: gardenglow_response
+
+  - variables:
+      gardenglow_payload: >-
+        {{ gardenglow_response.content | default('{}') | from_json }}
+      irrigation_minutes: >-
+        {{ gardenglow_payload.predicted_minutes | default(0) | float(0) }}
+      watering_domain: "{{ watering_entity.split('.')[0] }}"
+
+  - if:
+      - condition: template
+        value_template: "{{ minutes_helper_entity | default('') | length > 0 }}"
+    then:
+      - action: input_number.set_value
+        target:
+          entity_id: "{{ minutes_helper_entity }}"
+        data:
+          value: "{{ irrigation_minutes }}"
+
+  - choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ watering_domain == 'valve' }}"
+        sequence:
+          - action: valve.open_valve
+            target:
+              entity_id: "{{ watering_entity }}"
+          - delay:
+              minutes: "{{ irrigation_minutes }}"
+          - action: valve.close_valve
+            target:
+              entity_id: "{{ watering_entity }}"
+      - conditions:
+          - condition: template
+            value_template: "{{ watering_domain == 'switch' }}"
+        sequence:
+          - action: switch.turn_on
+            target:
+              entity_id: "{{ watering_entity }}"
+          - delay:
+              minutes: "{{ irrigation_minutes }}"
+          - action: switch.turn_off
+            target:
+              entity_id: "{{ watering_entity }}"
+    default:
+      - stop: watering_entity muss ein switch.* oder valve.* sein.
+        error: true

@@ -87,7 +87,9 @@ class InfluxConfigViewTest(unittest.TestCase):
         self.assertIn('id="homeassistant-config"', html)
         self.assertIn('role="menuitem">Sensoren</a>', html)
         self.assertNotIn('Bodenfeuchte-Sensoren', html)
-        self.assertIn('Home-Assistant-Template herunterladen', html)
+        self.assertIn('Home-Assistant-Blueprint herunterladen', html)
+        self.assertIn('id="homeassistant-blueprint-url"', html)
+        self.assertIn('data-copy-target="homeassistant-blueprint-url"', html)
         self.assertIn('plain-widget-token', html)
         self.assertIn('https://garden.example', html)
         self.assertNotIn('Inhaltsverzeichnis', html)
@@ -134,7 +136,7 @@ class InfluxConfigViewTest(unittest.TestCase):
             self.assertEqual(config.gardenglow_external_url, 'https://new-garden.example')
 
 
-    def test_homeassistant_template_is_public_and_uses_external_base_url(self):
+    def test_homeassistant_blueprint_is_public_and_uses_external_base_url(self):
         with self.app.app_context():
             db.session.add(InfluxIntegrationConfig(gardenglow_external_url='https://garden.example/root/'))
             db.session.commit()
@@ -142,18 +144,31 @@ class InfluxConfigViewTest(unittest.TestCase):
         with self.client.session_transaction() as session:
             session.clear()
 
-        response = self.client.get('/homeassistant/gardenglow-irrigation-template.yaml')
+        response = self.client.get('/homeassistant/gardenglow-irrigation-blueprint.yaml')
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.mimetype, 'application/x-yaml')
         yaml = response.get_data(as_text=True)
-        self.assertIn('base_url: "https://garden.example/root"', yaml)
-        self.assertIn('api_token: "GARDENGLOW_API_TOKEN_EINTRAGEN"', yaml)
-        self.assertIn('watering_entity: "switch.beet_bewaesserung"', yaml)
-        self.assertIn('minutes_helper_entity: ""', yaml)
+        self.assertIn('blueprint:', yaml)
+        self.assertIn('domain: script', yaml)
+        self.assertIn('default: "https://garden.example/root"', yaml)
+        self.assertIn('api_token: !input api_token', yaml)
+        self.assertIn('watering_entity: !input watering_entity', yaml)
+        self.assertIn('minutes_helper_entity: !input minutes_helper_entity', yaml)
+        self.assertIn('rest_command.gardenglow_get_irrigation_minutes', yaml)
+        self.assertIn('response_variable: gardenglow_response', yaml)
         self.assertIn('valve.open_valve', yaml)
         self.assertIn('switch.turn_on', yaml)
-        self.assertIn('/api/locations/{{ bed_id }}/irrigation-prediction', yaml)
+
+
+    def test_legacy_homeassistant_template_url_redirects_to_blueprint(self):
+        with self.client.session_transaction() as session:
+            session.clear()
+
+        response = self.client.get('/homeassistant/gardenglow-irrigation-template.yaml')
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('/homeassistant/gardenglow-irrigation-blueprint.yaml', response.headers['Location'])
 
     def test_config_form_shows_connection_test_buttons(self):
         response = self.client.get('/config')
