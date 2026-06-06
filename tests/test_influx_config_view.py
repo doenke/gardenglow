@@ -14,6 +14,7 @@ class InfluxConfigViewTest(unittest.TestCase):
         self.db_fd, self.db_path = tempfile.mkstemp(suffix='.sqlite')
         os.close(self.db_fd)
         os.environ['DATABASE_URL'] = f'sqlite:///{self.db_path}'
+        os.environ['WIDGET_API_KEY'] = 'plain-widget-token'
         self.app = create_app()
         self.app.config.update(TESTING=True)
         self.client = self.app.test_client()
@@ -33,6 +34,8 @@ class InfluxConfigViewTest(unittest.TestCase):
             db.drop_all()
         os.unlink(self.db_path)
         os.environ.pop('DATABASE_URL', None)
+        os.environ.pop('WIDGET_API_KEY', None)
+        os.environ.pop('GARDENGLOW_EXTERNAL_URL', None)
 
     def test_saves_influx_integration_config(self):
         response = self.client.post(
@@ -72,6 +75,7 @@ class InfluxConfigViewTest(unittest.TestCase):
                 influx_token='old-influx-token',
                 homeassistant_url='https://old-ha.local',
                 homeassistant_token='old-ha-token',
+                gardenglow_external_url='https://garden.example',
             ))
             db.session.commit()
 
@@ -83,7 +87,9 @@ class InfluxConfigViewTest(unittest.TestCase):
         self.assertIn('id="homeassistant-config"', html)
         self.assertIn('role="menuitem">Sensoren</a>', html)
         self.assertNotIn('Bodenfeuchte-Sensoren', html)
-        self.assertIn('Diese Konfiguration wird aktuell noch nirgendwo in der Anwendung verwendet.', html)
+        self.assertIn('Home-Assistant-Template herunterladen', html)
+        self.assertIn('plain-widget-token', html)
+        self.assertIn('https://garden.example', html)
         self.assertNotIn('Inhaltsverzeichnis', html)
         self.assertNotIn('Springe direkt zum passenden Kapitel', html)
         self.assertIn('https://old-influx.local', html)
@@ -108,8 +114,46 @@ class InfluxConfigViewTest(unittest.TestCase):
             self.assertEqual(config.influx_url, 'https://new-influx.local')
             self.assertEqual(config.influx_token, 'old-influx-token')
             self.assertEqual(config.homeassistant_token, 'old-ha-token')
+            self.assertEqual(config.gardenglow_external_url, 'https://garden.example')
             self.assertFalse(config.verify_tls)
             self.assertEqual(config.timeout_seconds, 15)
+
+        response = self.client.post(
+            '/config/homeassistant',
+            data={
+                'homeassistant_url': 'https://new-ha.local',
+                'gardenglow_external_url': ' https://new-garden.example/ ',
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        with self.app.app_context():
+            config = InfluxIntegrationConfig.query.one()
+            self.assertEqual(config.homeassistant_url, 'https://new-ha.local')
+            self.assertEqual(config.homeassistant_token, 'old-ha-token')
+            self.assertEqual(config.gardenglow_external_url, 'https://new-garden.example')
+
+
+    def test_homeassistant_template_is_public_and_uses_external_base_url(self):
+        with self.app.app_context():
+            db.session.add(InfluxIntegrationConfig(gardenglow_external_url='https://garden.example/root/'))
+            db.session.commit()
+
+        with self.client.session_transaction() as session:
+            session.clear()
+
+        response = self.client.get('/homeassistant/gardenglow-irrigation-template.yaml')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.mimetype, 'application/x-yaml')
+        yaml = response.get_data(as_text=True)
+        self.assertIn('base_url: "https://garden.example/root"', yaml)
+        self.assertIn('api_token: "GARDENGLOW_API_TOKEN_EINTRAGEN"', yaml)
+        self.assertIn('watering_entity: "switch.beet_bewaesserung"', yaml)
+        self.assertIn('minutes_helper_entity: ""', yaml)
+        self.assertIn('valve.open_valve', yaml)
+        self.assertIn('switch.turn_on', yaml)
+        self.assertIn('/api/locations/{{ bed_id }}/irrigation-prediction', yaml)
 
     def test_config_form_shows_connection_test_buttons(self):
         response = self.client.get('/config')

@@ -54,9 +54,13 @@
   <div class="config-section-head">
     <p class="page-eyebrow">Integration</p>
     <h3 class="m-0">Homeassistant</h3>
-    <p class="text-muted mt-0 mb-0">Konfiguriert den optionalen Zugriff auf die Homeassistant-API separat von InfluxDB. Hinweis: Diese Konfiguration wird aktuell noch nirgendwo in der Anwendung verwendet.</p>
+    <p class="text-muted mt-0 mb-0">Konfiguriert den optionalen Zugriff auf die Homeassistant-API separat von InfluxDB und stellt ein Home-Assistant-Template für die Beet-Bewässerung bereit.</p>
   </div>
   <form method="post" action="/config/homeassistant" class="grid mb-1">
+    <label for="gardenglow-external-url">Externe GardenGlow-URL
+      <input id="gardenglow-external-url" type="url" name="gardenglow_external_url" value="{{ gardenglow_external_url }}" placeholder="https://gardenglow.example.local">
+      <small class="text-muted">Diese URL verwendet Home Assistant, um GardenGlow von außen aufzurufen. Wenn leer, wird die aktuelle Anfrage-URL als Vorschlag im Template verwendet.</small>
+    </label>
     <label for="homeassistant-url">Homeassistant-URL
       <input id="homeassistant-url" type="url" name="homeassistant_url" value="{{ influx_config.homeassistant_url if influx_config else '' }}" placeholder="https://homeassistant.example.local:8123">
     </label>
@@ -68,7 +72,14 @@
       <button type="submit">Homeassistant-Konfiguration speichern</button>
     </div>
   </form>
-  <form method="post" action="/config/homeassistant/test">
+  <div class="homeassistant-template-info card-inner mt-1">
+    <h4 class="m-0">GardenGlow Bewässerungs-Template</h4>
+    <p class="text-muted mb-0">Lade das Home-Assistant-Package ohne Login herunter, trage darin Switch oder Valve, optionalen Minuten-Helfer, Beet-ID und Token ein. Das Script ruft über die oben konfigurierte GardenGlow-URL die Bewässerungsminuten ab, schreibt sie optional in den numerischen Helfer und schaltet danach die Bewässerung für genau diese Dauer ein.</p>
+    <p class="mb-0"><a class="btn secondary" href="{{ homeassistant_template_url }}">Home-Assistant-Template herunterladen</a></p>
+    <p class="mb-0"><strong>GardenGlow API Token:</strong> {% if gardenglow_widget_api_key %}<code>{{ gardenglow_widget_api_key }}</code>{% else %}<span class="text-muted">Nicht konfiguriert (Umgebungsvariable <code>WIDGET_API_KEY</code> setzen).</span>{% endif %}</p>
+    <small class="text-muted">Aktuelle GardenGlow-Base-URL für das Template: <code>{{ gardenglow_public_base_url }}</code></small>
+  </div>
+  <form method="post" action="/config/homeassistant/test" class="mt-1">
     <button type="submit" class="btn secondary">Homeassistant-Verbindung testen</button>
   </form>
 </section>
