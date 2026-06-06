@@ -83,6 +83,26 @@
     <p class="mb-0"><a class="btn secondary" href="{{ homeassistant_blueprint_url }}">Home-Assistant-Blueprint herunterladen</a></p>
     <p class="mb-0"><strong>GardenGlow API Token:</strong> {% if gardenglow_widget_api_key %}<code>{{ gardenglow_widget_api_key }}</code>{% else %}<span class="text-muted">Nicht konfiguriert (Umgebungsvariable <code>WIDGET_API_KEY</code> setzen).</span>{% endif %}</p>
     <small class="text-muted">Aktuelle GardenGlow-Base-URL für den Blueprint: <code>{{ gardenglow_public_base_url }}</code></small>
+
+    <div class="homeassistant-rest-command-help mt-1">
+      <h5 class="m-0">Einmalig benötigter RESTful Command in Home Assistant</h5>
+      <p class="text-muted mb-75">Der Blueprint kann den Webservice-Aufruf nicht selbst als neue Home-Assistant-Integration anlegen. Füge deshalb diesen Copy-&amp;-Paste-Block in die Home-Assistant-<code>configuration.yaml</code> ein und starte Home Assistant neu bzw. lade die YAML-Konfiguration neu. Danach kann der Blueprint <code>rest_command.gardenglow_get_irrigation_minutes</code> verwenden.</p>
+      <div class="copy-field-row mb-75">
+        <pre id="homeassistant-rest-command-yaml" class="config-code-block mb-0"><code>rest_command:
+  gardenglow_get_irrigation_minutes:
+    url: "{{ '{{' }} base_url {{ '}}' }}/api/locations/{{ '{{' }} bed_id {{ '}}' }}/irrigation-prediction"
+    method: GET
+    headers:
+      X-API-Key: "{{ '{{' }} api_token {{ '}}' }}"</code></pre>
+        <button type="button" class="btn secondary" data-copy-target="homeassistant-rest-command-yaml" aria-label="RESTful-Command-YAML kopieren">YAML kopieren</button>
+      </div>
+      <ol class="text-muted mt-0 mb-0">
+        <li><code>configuration.yaml</code> in Home Assistant öffnen.</li>
+        <li>Den YAML-Block oben einfügen. Falls bereits ein <code>rest_command:</code>-Abschnitt existiert, nur den eingerückten Eintrag <code>gardenglow_get_irrigation_minutes:</code> darunter ergänzen.</li>
+        <li>Home Assistant neu starten oder die YAML-Konfiguration neu laden.</li>
+        <li>Blueprint importieren, Automation anlegen und GardenGlow-Base-URL, API-Token, Beet-ID, Startzeit sowie Switch/Valve auswählen.</li>
+      </ol>
+    </div>
   </div>
   <form method="post" action="/config/homeassistant/test" class="mt-1">
     <button type="submit" class="btn secondary">Homeassistant-Verbindung testen</button>
@@ -250,6 +270,8 @@
 .check-row input{width:auto}
 .boundary-point-list{display:grid;gap:.5rem}
 .boundary-point-row{display:grid;grid-template-columns:auto repeat(2,minmax(140px,1fr));gap:.5rem;align-items:end}
+.config-code-block{overflow:auto;white-space:pre;background:var(--surface-soft);border:1px solid var(--border);border-radius:10px;padding:.75rem;color:var(--text);font-size:.9rem;line-height:1.45}
+.homeassistant-rest-command-help ol{padding-left:1.25rem}
 @media (max-width:700px){.boundary-point-row{grid-template-columns:1fr}}
 </style>
 
@@ -262,8 +284,16 @@
       try {
         await navigator.clipboard.writeText(value);
       } catch (error) {
-        target.focus();
-        target.select?.();
+        if (typeof target.select === 'function') {
+          target.focus();
+          target.select();
+        } else {
+          const range = document.createRange();
+          range.selectNodeContents(target);
+          const selection = window.getSelection();
+          selection.removeAllRanges();
+          selection.addRange(range);
+        }
         document.execCommand?.('copy');
       }
       const originalText = button.textContent;
