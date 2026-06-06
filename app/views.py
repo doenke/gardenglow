@@ -104,6 +104,7 @@ ENVIRONMENT_VARIABLES = [
     {'name': 'APP_VERSION', 'config_key': 'APP_VERSION', 'default': ''},
     {'name': 'GIT_COMMIT', 'config_key': 'GIT_COMMIT', 'default': ''},
     {'name': 'WIDGET_API_KEY', 'config_key': 'WIDGET_API_KEY', 'default': '', 'sensitive': True},
+    {'name': 'GARDENGLOW_EXTERNAL_URL', 'config_key': 'GARDENGLOW_EXTERNAL_URL', 'default': ''},
     {'name': 'STATS_UPLOAD_CACHE_TTL_SECONDS', 'config_key': 'STATS_UPLOAD_CACHE_TTL_SECONDS', 'default': '60'},
     {'name': 'HEADER_LOGO_URL', 'config_key': 'HEADER_LOGO_URL', 'default': ''},
     {'name': 'COMMON_NAME_LOOKUP_LANG', 'config_key': 'COMMON_NAME_LOOKUP_LANG', 'default': 'de'},
@@ -1237,6 +1238,20 @@ def api_location_irrigation_prediction(location_id):
         training_lookback=config.training_lookback,
     )), 200
 
+@main_bp.route('/homeassistant/gardenglow-irrigation-template.yaml')
+def homeassistant_irrigation_template():
+    influx_config = _first_influx_config_or_empty()
+    yaml = _homeassistant_irrigation_template_yaml(_gardenglow_public_base_url(influx_config))
+    return current_app.response_class(
+        yaml,
+        mimetype='application/x-yaml; charset=utf-8',
+        headers={
+            'Content-Disposition': 'attachment; filename=gardenglow-irrigation-template.yaml',
+            'Cache-Control': 'no-store',
+        },
+    )
+
+
 @main_bp.route('/manifest.webmanifest')
 def manifest():
     return send_from_directory(current_app.static_folder, 'manifest.webmanifest', mimetype='application/manifest+json')
@@ -1856,6 +1871,117 @@ def _first_influx_config_or_empty():
     return _first_influx_integration_config() or InfluxIntegrationConfig()
 
 
+def _normalize_external_url(value):
+    return (value or '').strip().rstrip('/')
+
+
+def _gardenglow_external_url(influx_config=None):
+    configured_url = ''
+    if influx_config is not None:
+        configured_url = getattr(influx_config, 'gardenglow_external_url', '') or ''
+    configured_url = _normalize_external_url(configured_url)
+    if configured_url:
+        return configured_url
+    return _normalize_external_url(current_app.config.get('GARDENGLOW_EXTERNAL_URL'))
+
+
+def _gardenglow_public_base_url(influx_config=None):
+    return _gardenglow_external_url(influx_config) or _normalize_external_url(request.url_root)
+
+
+def _homeassistant_irrigation_template_yaml(base_url):
+    return f"""# GardenGlow Home Assistant Template
+# Ohne Login heruntergeladen von GardenGlow.
+#
+# Verwendung:
+# 1. Passe im Abschnitt "GardenGlow Werte" base_url, api_token, bed_id,
+#    watering_entity und optional minutes_helper_entity an.
+# 2. Lege diese Datei z. B. als config/packages/gardenglow_irrigation.yaml ab
+#    und stelle sicher, dass Home Assistant Packages lädt.
+# 3. Starte Home Assistant neu und rufe script.gardenglow_beet_bewaessern auf.
+#
+# watering_entity darf ein switch.* oder valve.* sein.
+# minutes_helper_entity darf leer bleiben ("") oder auf ein input_number.* zeigen.
+
+rest_command:
+  gardenglow_get_irrigation_minutes:
+    url: "{{{{ base_url.rstrip('/') }}}}/api/locations/{{{{ bed_id }}}}/irrigation-prediction"
+    method: GET
+    headers:
+      Authorization: "Bearer {{{{ api_token }}}}"
+      Accept: "application/json"
+    timeout: 30
+
+script:
+  gardenglow_beet_bewaessern:
+    alias: GardenGlow Beet bewässern
+    mode: single
+    variables:
+      # GardenGlow Werte
+      base_url: "{base_url}"
+      api_token: "GARDENGLOW_API_TOKEN_EINTRAGEN"
+      bed_id: 1
+
+      # Home Assistant Entitäten
+      watering_entity: "switch.beet_bewaesserung"
+      # Optional: input_number.beet_bewaesserung_minuten oder leer lassen.
+      minutes_helper_entity: ""
+    sequence:
+      - action: rest_command.gardenglow_get_irrigation_minutes
+        data:
+          base_url: "{{{{ base_url }}}}"
+          api_token: "{{{{ api_token }}}}"
+          bed_id: "{{{{ bed_id }}}}"
+        response_variable: gardenglow_response
+
+      - variables:
+          gardenglow_payload: >-
+            {{{{ gardenglow_response.content | default('{{}}') | from_json }}}}
+          irrigation_minutes: >-
+            {{{{ gardenglow_payload.predicted_minutes | default(0) | float(0) }}}}
+          watering_domain: "{{{{ watering_entity.split('.')[0] }}}}"
+
+      - if:
+          - condition: template
+            value_template: "{{{{ minutes_helper_entity | default('') | length > 0 }}}}"
+        then:
+          - action: input_number.set_value
+            target:
+              entity_id: "{{{{ minutes_helper_entity }}}}"
+            data:
+              value: "{{{{ irrigation_minutes }}}}"
+
+      - choose:
+          - conditions:
+              - condition: template
+                value_template: "{{{{ watering_domain == 'valve' }}}}"
+            sequence:
+              - action: valve.open_valve
+                target:
+                  entity_id: "{{{{ watering_entity }}}}"
+              - delay:
+                  minutes: "{{{{ irrigation_minutes }}}}"
+              - action: valve.close_valve
+                target:
+                  entity_id: "{{{{ watering_entity }}}}"
+          - conditions:
+              - condition: template
+                value_template: "{{{{ watering_domain == 'switch' }}}}"
+            sequence:
+              - action: switch.turn_on
+                target:
+                  entity_id: "{{{{ watering_entity }}}}"
+              - delay:
+                  minutes: "{{{{ irrigation_minutes }}}}"
+              - action: switch.turn_off
+                target:
+                  entity_id: "{{{{ watering_entity }}}}"
+        default:
+          - stop: "watering_entity muss ein switch.* oder valve.* sein."
+            error: true
+"""
+
+
 def _target_soil_moisture_for_location(location):
     location_target = getattr(location, 'target_soil_moisture_percent', None)
     if location_target is not None:
@@ -1891,6 +2017,10 @@ def config():
         garden_map=garden_map,
         locations=locations,
         influx_config=influx_config,
+        gardenglow_external_url=_gardenglow_external_url(influx_config),
+        gardenglow_public_base_url=_gardenglow_public_base_url(influx_config),
+        gardenglow_widget_api_key=(current_app.config.get('WIDGET_API_KEY') or '').strip(),
+        homeassistant_template_url=url_for('main.homeassistant_irrigation_template', _external=True),
     )
 
 
@@ -1952,6 +2082,8 @@ def save_influx_config():
     influx_config.influx_bucket = (request.form.get('influx_bucket') or '').strip()
     if 'homeassistant_url' in request.form:
         influx_config.homeassistant_url = (request.form.get('homeassistant_url') or '').strip()
+    if 'gardenglow_external_url' in request.form:
+        influx_config.gardenglow_external_url = _normalize_external_url(request.form.get('gardenglow_external_url'))
     influx_config.updated_at = utc_now()
 
     influx_token = (request.form.get('influx_token') or '').strip()
@@ -1972,6 +2104,7 @@ def save_influx_config():
 def save_homeassistant_config():
     influx_config = _ensure_influx_integration_config()
     influx_config.homeassistant_url = (request.form.get('homeassistant_url') or '').strip()
+    influx_config.gardenglow_external_url = _normalize_external_url(request.form.get('gardenglow_external_url'))
     influx_config.updated_at = utc_now()
 
     homeassistant_token = (request.form.get('homeassistant_token') or '').strip()

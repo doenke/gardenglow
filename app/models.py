@@ -114,6 +114,7 @@ class InfluxIntegrationConfig(db.Model):
     influx_token = db.Column(db.Text)
     homeassistant_url = db.Column(db.String(1024), nullable=False, default='')
     homeassistant_token = db.Column(db.Text)
+    gardenglow_external_url = db.Column(db.String(1024), nullable=False, default='')
     verify_tls = db.Column(db.Boolean, nullable=False, default=True)
     timeout_seconds = db.Column(db.Integer, nullable=False, default=10)
     target_soil_moisture_percent = db.Column(db.Float)

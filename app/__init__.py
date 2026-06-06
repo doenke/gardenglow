@@ -90,6 +90,7 @@ def create_app():
     app.config['APP_VERSION'] = os.getenv('APP_VERSION', '').strip()
     app.config['GIT_COMMIT'] = os.getenv('GIT_COMMIT', '').strip()
     app.config['WIDGET_API_KEY'] = os.getenv('WIDGET_API_KEY', '').strip()
+    app.config['GARDENGLOW_EXTERNAL_URL'] = os.getenv('GARDENGLOW_EXTERNAL_URL', '').strip()
     app.config['STATS_UPLOAD_CACHE_TTL_SECONDS'] = max(0, int(os.getenv('STATS_UPLOAD_CACHE_TTL_SECONDS', '60')))
     app.config['HEADER_LOGO_URL'] = os.getenv('HEADER_LOGO_URL', '').strip()
     app.config['COMMON_NAME_LOOKUP_LANG'] = os.getenv('COMMON_NAME_LOOKUP_LANG', 'de').strip().lower() or 'de'
@@ -119,6 +120,7 @@ def create_app():
         db.create_all()
         _ensure_sensor_schema()
         _ensure_soil_moisture_target_schema()
+        _ensure_gardenglow_external_url_schema()
         _ensure_irrigation_prediction_schema()
         _migrate_legacy_weather_config_to_sensors()
         _seed_light_needs()
@@ -190,6 +192,23 @@ def _ensure_soil_moisture_target_schema():
                 connection.exec_driver_sql(
                     f'ALTER TABLE {table_name} ADD COLUMN {prediction_max_column} FLOAT'
                 )
+
+
+def _ensure_gardenglow_external_url_schema():
+    """Keep GardenGlow Homeassistant integration columns compatible with existing databases."""
+    inspector = inspect(db.engine)
+    table_names = set(inspector.get_table_names())
+    if InfluxIntegrationConfig.__tablename__ not in table_names:
+        return
+
+    existing_columns = {column['name'] for column in inspector.get_columns(InfluxIntegrationConfig.__tablename__)}
+    if 'gardenglow_external_url' in existing_columns:
+        return
+
+    with db.engine.begin() as connection:
+        connection.exec_driver_sql(
+            f"ALTER TABLE {InfluxIntegrationConfig.__tablename__} ADD COLUMN gardenglow_external_url VARCHAR(1024) NOT NULL DEFAULT ''"
+        )
 
 def _seed_light_needs():
     """Ensure the default light need catalog values exist."""
