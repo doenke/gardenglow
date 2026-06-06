@@ -2,7 +2,7 @@
 
 GardenGlow ist dein digitales Gartentagebuch: ein schöner Ort für Beete, Pflanzen, Fotos, Notizen und kleine Garten-Erfolge. Vergiss nie wieder, wie deine Pflanzen heißen, wann du sie gesetzt hast und welche Sorte im letzten Sommer so gut getragen hat. Du siehst, was wo wächst, hältst Entwicklungen fest und kannst auf Wunsch Sensorwerte sowie smarte Bewässerung einbinden.
 
-Kurz gesagt: weniger Zettelwirtschaft, mehr Überblick im Grünen – inklusive schneller Sprungmarken zu Pflanzenkatalogen wie Wikipedia, Mein schöner Garten oder NaturaDB.
+Kurz gesagt: weniger Zettelwirtschaft, mehr Überblick im Grünen und schnell bei der Hand, was eigentlich welche Pflanze ist.
 
 ## Was GardenGlow für dich macht
 
@@ -50,23 +50,13 @@ services:
       - gardenglow_data:/data
     ports:
       - "8000:8000"
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/healthz')"]
-      interval: 30s
-      timeout: 3s
-      retries: 3
 
 volumes:
   gardenglow_data:
 ```
 
-3. Starte GardenGlow:
 
-```bash
-docker compose up -d
-```
-
-Danach öffnest du `http://localhost:8000`. Ohne zusätzliche Login-Konfiguration begrüßt dich GardenGlow automatisch als **„Gärtner“**. Datenbank und Uploads bleiben im Docker-Volume `gardenglow_data` erhalten.
+Danach öffnest du `http://localhost:8000`. Ohne zusätzliche Login-Konfiguration begrüßt dich GardenGlow automatisch als **„Gärtner“**. 
 
 ## Ein erster Rundgang
 
