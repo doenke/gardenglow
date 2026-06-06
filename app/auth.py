@@ -60,6 +60,7 @@ def get_or_create_default_user():
         user.avatar_url = None
         updated = True
     if user.avatar_filename:
+        _remove_avatar_file(user.avatar_filename)
         user.avatar_filename = None
         updated = True
 
@@ -120,6 +121,24 @@ def _avatar_target_path(avatar_folder, filename):
     return target
 
 
+def _remove_avatar_file(filename):
+    if not filename:
+        return
+
+    try:
+        target = _avatar_target_path(current_app.config['AVATAR_FOLDER'], filename)
+    except (KeyError, ValueError):
+        current_app.logger.warning('Skipped removal of invalid avatar filename %s', filename)
+        return
+
+    try:
+        os.remove(target)
+    except FileNotFoundError:
+        return
+    except OSError:
+        current_app.logger.warning('Could not remove previous avatar file %s', filename)
+
+
 def _stream_avatar_to_file(response, target, max_size_bytes):
     bytes_written = 0
     with open(target, 'wb') as f:
@@ -139,6 +158,7 @@ def _download_avatar(user, avatar_url):
     avatar_folder = current_app.config['AVATAR_FOLDER']
     os.makedirs(avatar_folder, exist_ok=True)
 
+    previous_avatar_filename = user.avatar_filename
     ext = _avatar_extension_from_url(avatar_url)
     filename = f"avatar_{uuid4().hex}{ext}"
     target = _avatar_target_path(avatar_folder, filename)
@@ -167,6 +187,8 @@ def _download_avatar(user, avatar_url):
 
             _stream_avatar_to_file(res, target, max_size_bytes)
         user.avatar_filename = filename
+        if previous_avatar_filename and previous_avatar_filename != filename:
+            _remove_avatar_file(previous_avatar_filename)
     except AvatarDownloadTooLargeError:
         current_app.logger.warning(
             'Rejected avatar for %s because it exceeds %s bytes',
