@@ -6,7 +6,7 @@
   <nav class="config-toc" aria-label="Konfigurationsbereiche">
     <div class="config-toc-links">
       <a href="#influxdb-config">InfluxDB</a>
-      <a href="#homeassistant-config">Homeassistant</a>
+      <a href="#homeassistant-blueprint">Home Assistant Blueprint</a>
       <a href="#connection-options">Verbindungsoptionen</a>
       <a href="#soil-moisture-target">Ziel-Bodenfeuchte</a>
       <a href="#irrigation-prediction">Bewässerungs-Prognose</a>
@@ -50,24 +50,12 @@
   </form>
 </section>
 
-<section id="homeassistant-config" class="card config-section">
+<section id="homeassistant-blueprint" class="card config-section">
   <div class="config-section-head">
-    <p class="page-eyebrow">Integration</p>
-    <h3 class="m-0">Homeassistant</h3>
-    <p class="text-muted mt-0 mb-0">Konfiguriert den optionalen Zugriff auf die Homeassistant-API separat von InfluxDB und stellt einen Home-Assistant-Blueprint für die Beet-Bewässerung bereit.</p>
+    <p class="page-eyebrow">Automation</p>
+    <h3 class="m-0">Home Assistant Blueprint</h3>
+    <p class="text-muted mt-0 mb-0">Stellt den Home-Assistant-Blueprint für die Beet-Bewässerung bereit.</p>
   </div>
-  <form method="post" action="/config/homeassistant" class="grid mb-1">
-    <label for="homeassistant-url">Homeassistant-URL
-      <input id="homeassistant-url" type="url" name="homeassistant_url" value="{{ influx_config.homeassistant_url if influx_config else '' }}" placeholder="https://homeassistant.example.local:8123">
-    </label>
-    <label for="homeassistant-token">Homeassistant-Token (optional)
-      <input id="homeassistant-token" type="password" name="homeassistant_token" value="" placeholder="{% if influx_config and influx_config.has_homeassistant_token %}Gespeicherter Token bleibt erhalten{% else %}Optionaler Token{% endif %}" autocomplete="new-password">
-      <small class="text-muted">Nur ausfüllen, wenn ein neuer Homeassistant-Token gespeichert werden soll.</small>
-    </label>
-    <div class="actions-inline">
-      <button type="submit">Homeassistant-Konfiguration speichern</button>
-    </div>
-  </form>
   <div class="homeassistant-blueprint-info card-inner mt-1">
     <h4 class="m-0">GardenGlow Bewässerungs-Blueprint</h4>
     <p class="text-muted mb-0">Importiere den Blueprint in Home Assistant. Wähle beim Erstellen der Automation Startzeit, Switch oder Valve, optionalen Minuten-Helfer, Beet-ID und Token aus. Der Blueprint startet täglich zur ausgewählten Uhrzeit, ruft von GardenGlow die Bewässerungsminuten ab, schreibt sie optional in den numerischen Helfer und schaltet danach die Bewässerung für genau diese Dauer ein.</p>
@@ -107,9 +95,6 @@
       </ol>
     </div>
   </div>
-  <form method="post" action="/config/homeassistant/test" class="mt-1">
-    <button type="submit" class="btn secondary">Homeassistant-Verbindung testen</button>
-  </form>
 </section>
 
 <section id="connection-options" class="card config-section">
