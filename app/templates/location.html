@@ -1191,9 +1191,11 @@
     locationPlantsSearch.addEventListener('input', applyFilter);
   }
 </script>
-<footer class="location-footer-id text-muted" aria-label="Beet ID">Beet ID: <code>{{ location.id }}</code></footer>
-<form method="post" action="/locations/{{ location.id }}/delete" onsubmit="return confirm('Beet wirklich löschen? Alle enthaltenen Pflanzen werden in den Papierkorb verschoben.');" class="floating-trash">
-  <button type="submit" aria-label="Beet löschen" title="Beet löschen">🗑️</button>
-</form>
+<div class="location-footer-actions">
+  <footer class="location-footer-id text-muted" aria-label="Beet ID">Beet ID: <code>{{ location.id }}</code></footer>
+  <form method="post" action="/locations/{{ location.id }}/delete" onsubmit="return confirm('Beet wirklich löschen? Alle enthaltenen Pflanzen werden in den Papierkorb verschoben.');" class="floating-trash">
+    <button type="submit" aria-label="Beet löschen" title="Beet löschen">🗑️</button>
+  </form>
+</div>
 </section>
 {% endblock %}
