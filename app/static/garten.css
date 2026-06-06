@@ -48,6 +48,8 @@ p,li,label,small,summary{color:var(--text)}
 summary{cursor:pointer}
 form.grid{display:grid;gap:.65rem}
 .actions-inline{display:flex;flex-wrap:wrap;gap:.55rem;align-items:flex-start}
+.copy-field-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.55rem;align-items:center}
+@media (max-width:600px){.copy-field-row{grid-template-columns:1fr}.copy-field-row .btn{width:100%}}
 .m-0{margin:0}.mt-0{margin-top:0}.mb-0{margin-bottom:0}.mb-35{margin-bottom:.35rem}.mb-75{margin-bottom:.75rem}.mb-1{margin-bottom:1rem}.mt-75{margin-top:.75rem}.mt-1{margin-top:1rem}
 .rel-inline{position:relative;display:inline-block;max-width:100%}.line-0{line-height:0}.fit-content{width:fit-content}
 .map-image{display:block;max-width:100%;border-radius:10px}.map-overlay{position:absolute;left:0;top:0;width:100%;height:100%}.overlay-no-pointer{pointer-events:none}

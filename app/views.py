@@ -1,6 +1,7 @@
 import os
 import time
 import re
+from pathlib import Path
 from types import SimpleNamespace
 import shutil
 import json
@@ -27,6 +28,7 @@ from .taxonomy.resolvers.base import ExternalCall, normalize_scientific_name_for
 from .taxonomy.resolvers.http import execute_external_call, full_debug_enabled, get_full_debug_external_requests
 
 main_bp = Blueprint('main', __name__)
+HOMEASSISTANT_IRRIGATION_BLUEPRINT_PATH = Path(__file__).resolve().parent / 'homeassistant_blueprints' / 'gardenglow_irrigation_blueprint.yaml'
 ALLOWED = {'png', 'jpg', 'jpeg', 'webp', 'gif', 'pdf'}
 IMAGE_TYPES = {'png', 'jpg', 'jpeg', 'webp', 'gif'}
 MAP_IMAGE_ALLOWED = {'png', 'jpg', 'jpeg', 'webp', 'gif'}
@@ -1238,18 +1240,23 @@ def api_location_irrigation_prediction(location_id):
         training_lookback=config.training_lookback,
     )), 200
 
-@main_bp.route('/homeassistant/gardenglow-irrigation-template.yaml')
-def homeassistant_irrigation_template():
+@main_bp.route('/homeassistant/gardenglow-irrigation-blueprint.yaml')
+def homeassistant_irrigation_blueprint():
     influx_config = _first_influx_config_or_empty()
-    yaml = _homeassistant_irrigation_template_yaml(_gardenglow_public_base_url(influx_config))
+    yaml = _homeassistant_irrigation_blueprint_yaml(_gardenglow_public_base_url(influx_config))
     return current_app.response_class(
         yaml,
         mimetype='application/x-yaml; charset=utf-8',
         headers={
-            'Content-Disposition': 'attachment; filename=gardenglow-irrigation-template.yaml',
+            'Content-Disposition': 'attachment; filename=gardenglow-irrigation-blueprint.yaml',
             'Cache-Control': 'no-store',
         },
     )
+
+
+@main_bp.route('/homeassistant/gardenglow-irrigation-template.yaml')
+def homeassistant_irrigation_template_legacy():
+    return redirect(url_for('main.homeassistant_irrigation_blueprint'), code=302)
 
 
 @main_bp.route('/manifest.webmanifest')
@@ -1889,97 +1896,9 @@ def _gardenglow_public_base_url(influx_config=None):
     return _gardenglow_external_url(influx_config) or _normalize_external_url(request.url_root)
 
 
-def _homeassistant_irrigation_template_yaml(base_url):
-    return f"""# GardenGlow Home Assistant Template
-# Ohne Login heruntergeladen von GardenGlow.
-#
-# Verwendung:
-# 1. Passe im Abschnitt "GardenGlow Werte" base_url, api_token, bed_id,
-#    watering_entity und optional minutes_helper_entity an.
-# 2. Lege diese Datei z. B. als config/packages/gardenglow_irrigation.yaml ab
-#    und stelle sicher, dass Home Assistant Packages lädt.
-# 3. Starte Home Assistant neu und rufe script.gardenglow_beet_bewaessern auf.
-#
-# watering_entity darf ein switch.* oder valve.* sein.
-# minutes_helper_entity darf leer bleiben ("") oder auf ein input_number.* zeigen.
-
-rest_command:
-  gardenglow_get_irrigation_minutes:
-    url: "{{{{ base_url.rstrip('/') }}}}/api/locations/{{{{ bed_id }}}}/irrigation-prediction"
-    method: GET
-    headers:
-      Authorization: "Bearer {{{{ api_token }}}}"
-      Accept: "application/json"
-    timeout: 30
-
-script:
-  gardenglow_beet_bewaessern:
-    alias: GardenGlow Beet bewässern
-    mode: single
-    variables:
-      # GardenGlow Werte
-      base_url: "{base_url}"
-      api_token: "GARDENGLOW_API_TOKEN_EINTRAGEN"
-      bed_id: 1
-
-      # Home Assistant Entitäten
-      watering_entity: "switch.beet_bewaesserung"
-      # Optional: input_number.beet_bewaesserung_minuten oder leer lassen.
-      minutes_helper_entity: ""
-    sequence:
-      - action: rest_command.gardenglow_get_irrigation_minutes
-        data:
-          base_url: "{{{{ base_url }}}}"
-          api_token: "{{{{ api_token }}}}"
-          bed_id: "{{{{ bed_id }}}}"
-        response_variable: gardenglow_response
-
-      - variables:
-          gardenglow_payload: >-
-            {{{{ gardenglow_response.content | default('{{}}') | from_json }}}}
-          irrigation_minutes: >-
-            {{{{ gardenglow_payload.predicted_minutes | default(0) | float(0) }}}}
-          watering_domain: "{{{{ watering_entity.split('.')[0] }}}}"
-
-      - if:
-          - condition: template
-            value_template: "{{{{ minutes_helper_entity | default('') | length > 0 }}}}"
-        then:
-          - action: input_number.set_value
-            target:
-              entity_id: "{{{{ minutes_helper_entity }}}}"
-            data:
-              value: "{{{{ irrigation_minutes }}}}"
-
-      - choose:
-          - conditions:
-              - condition: template
-                value_template: "{{{{ watering_domain == 'valve' }}}}"
-            sequence:
-              - action: valve.open_valve
-                target:
-                  entity_id: "{{{{ watering_entity }}}}"
-              - delay:
-                  minutes: "{{{{ irrigation_minutes }}}}"
-              - action: valve.close_valve
-                target:
-                  entity_id: "{{{{ watering_entity }}}}"
-          - conditions:
-              - condition: template
-                value_template: "{{{{ watering_domain == 'switch' }}}}"
-            sequence:
-              - action: switch.turn_on
-                target:
-                  entity_id: "{{{{ watering_entity }}}}"
-              - delay:
-                  minutes: "{{{{ irrigation_minutes }}}}"
-              - action: switch.turn_off
-                target:
-                  entity_id: "{{{{ watering_entity }}}}"
-        default:
-          - stop: "watering_entity muss ein switch.* oder valve.* sein."
-            error: true
-"""
+def _homeassistant_irrigation_blueprint_yaml(base_url):
+    blueprint = HOMEASSISTANT_IRRIGATION_BLUEPRINT_PATH.read_text(encoding='utf-8')
+    return blueprint.replace('__GARDENGLOW_BASE_URL__', base_url)
 
 
 def _target_soil_moisture_for_location(location):
@@ -2020,7 +1939,7 @@ def config():
         gardenglow_external_url=_gardenglow_external_url(influx_config),
         gardenglow_public_base_url=_gardenglow_public_base_url(influx_config),
         gardenglow_widget_api_key=(current_app.config.get('WIDGET_API_KEY') or '').strip(),
-        homeassistant_template_url=url_for('main.homeassistant_irrigation_template', _external=True),
+        homeassistant_blueprint_url=url_for('main.homeassistant_irrigation_blueprint', _external=True),
     )
 
 
