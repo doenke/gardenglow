@@ -97,7 +97,7 @@
       <div class="copy-field-row mb-75">
         <pre id="homeassistant-rest-command-yaml" class="config-code-block mb-0"><code>rest_command:
   gardenglow_get_irrigation_minutes:
-    url: "{{ '{{' }} base_url {{ '}}' }}/api/locations/{{ '{{' }} bed_id {{ '}}' }}/irrigation-prediction"
+    url: "{{ gardenglow_public_base_url }}/api/locations/{{ '{{' }} bed_id {{ '}}' }}/irrigation-prediction"
     method: GET
     headers:
       X-API-Key: "{{ '{{' }} api_token {{ '}}' }}"</code></pre>
@@ -107,7 +107,7 @@
         <li><code>configuration.yaml</code> in Home Assistant öffnen.</li>
         <li>Den YAML-Block oben einfügen. Falls bereits ein <code>rest_command:</code>-Abschnitt existiert, nur den eingerückten Eintrag <code>gardenglow_get_irrigation_minutes:</code> darunter ergänzen.</li>
         <li>Home Assistant neu starten oder die YAML-Konfiguration neu laden.</li>
-        <li>Blueprint importieren, Automation anlegen und GardenGlow-Base-URL, API-Token, Beet-ID, Startzeit sowie Switch/Valve auswählen.</li>
+        <li>Blueprint importieren, Automation anlegen und API-Token, Beet-ID, Startzeit sowie Switch/Valve auswählen.</li>
       </ol>
     </div>
   </div>
