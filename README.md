@@ -1,13 +1,13 @@
 # GardenGlow 🌿✨
 
-GardenGlow ist dein digitales Gartentagebuch: ein schöner Ort für Beete, Pflanzen, Fotos, Notizen und kleine Garten-Erfolge. Du siehst, was wo wächst, hältst Entwicklungen fest und kannst auf Wunsch Sensorwerte sowie smarte Bewässerung einbinden.
+GardenGlow ist dein digitales Gartentagebuch: ein schöner Ort für Beete, Pflanzen, Fotos, Notizen und kleine Garten-Erfolge. Vergiss nie wieder, wie deine Pflanzen heißen, wann du sie gesetzt hast und welche Sorte im letzten Sommer so gut getragen hat. Du siehst, was wo wächst, hältst Entwicklungen fest und kannst auf Wunsch Sensorwerte sowie smarte Bewässerung einbinden.
 
-Kurz gesagt: weniger Zettelwirtschaft, mehr Überblick im Grünen.
+Kurz gesagt: weniger Zettelwirtschaft, mehr Überblick im Grünen – inklusive schneller Sprungmarken zu Pflanzenkatalogen wie Wikipedia, Mein schöner Garten oder NaturaDB.
 
 ## Was GardenGlow für dich macht
 
 - **Beete und Gartenbereiche organisieren** – vom Hochbeet bis zur wilden Ecke hinterm Schuppen.
-- **Pflanzen liebevoll dokumentieren** – mit Namen, Standort, Fotos, Kommentaren und Verlauf.
+- **Pflanzen liebevoll dokumentieren** – mit Namen, Standort, Fotos, Kommentaren, Verlauf und passenden Links in externe Pflanzenkataloge.
 - **Gartenmomente festhalten** – Blüte, Rückschnitt, Umtopfen, Ernte oder einfach: „Heute sieht sie fantastisch aus“.
 - **Sensorwerte sichtbar machen** – Bodenfeuchte, Temperatur, Regen und Bewässerung können direkt beim Beet landen.
 - **Bewässerung besser einschätzen** – GardenGlow kann aus vorhandenen Messwerten vorschlagen, wie lange ein Beet Wasser braucht.
@@ -50,6 +50,11 @@ services:
       - gardenglow_data:/data
     ports:
       - "8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/healthz')"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
 
 volumes:
   gardenglow_data:
@@ -80,6 +85,10 @@ Fotos und Notizen machen Veränderungen sichtbar. Gerade bei Aussaat, Stecklinge
 ### 4. Optional smarter werden
 
 Wenn du Sensoren nutzt, kann GardenGlow Bodenfeuchte, Temperatur, Regen und Bewässerung direkt mit deinen Beeten verknüpfen. Aus diesen Daten kann die App eine Bewässerungsdauer vorschlagen. Das ist besonders praktisch für automatische Bewässerung oder wenn du deine Pflanzen nicht nach Bauchgefühl ertränken möchtest.
+
+## Pflanzenkataloge und Nachschlagewerke
+
+Wenn du den wissenschaftlichen Namen einer Pflanze pflegst, kann GardenGlow passende externe Katalog-IDs vorschlagen und daraus direkte Links zu Nachschlagewerken bauen. Unterstützt werden unter anderem **Wikipedia**, **Mein schöner Garten**, **NaturaDB**, **FloraWeb**, **GBIF**, **World Flora Online** und **POWO/IPNI**. So springst du aus deinem Gartentagebuch schnell zu Steckbriefen, Taxonomie und weiterführenden Informationen.
 
 ## Smarte Bewässerung
 
@@ -139,7 +148,7 @@ Wenn du Dashboards, Widgets oder Home Assistant anbinden möchtest, gibt es schl
 | `GET /api/irrigation-predictions` | Bewässerungsprognosen für alle produktiven Beete. |
 | `GET /api/locations/<id>/irrigation-prediction` | Bewässerungsprognose für ein einzelnes Beet. |
 
-Beispiel für ein gethomepage-Widget:
+Beispiel für ein [gethomepage](https://gethomepage.dev/)-Widget:
 
 ```yaml
 - Garten:
@@ -168,7 +177,7 @@ Tipp: Speichere den Key als Umgebungsvariable und nicht direkt im Klartext in de
 
 ## Für Entwicklerinnen und Entwickler
 
-GardenGlow ist eine Container-App und speichert Daten persistent, wenn du ein Volume verwendest. Lokal kannst du den `SECRET_KEY` so setzen:
+GardenGlow ist eine Container-App und speichert Daten persistent, wenn du ein Volume verwendest. Die Pflanzen-Datenbanken bzw. Kataloge sind aktuell fest in der App definiert und brauchen keine eigene Verwaltung in Compose. Lokal kannst du den `SECRET_KEY` so setzen:
 
 ```bash
 export SECRET_KEY="$(python -c 'import secrets; print(secrets.token_urlsafe(48))')"
@@ -186,7 +195,7 @@ Dieser Abschnitt ist für alle gedacht, die GardenGlow dauerhaft betreiben, auto
 
 ### Vollständige `docker-compose.yml`
 
-Die folgende Compose-Datei enthält die üblichen Einstellungen für Datenbank, Uploads, optionale Sensorik, Widgets, Home Assistant und OIDC. Für den einfachen Privatbetrieb kannst du die optionalen Blöcke leer lassen oder entfernen.
+Die folgende Compose-Datei enthält die üblichen Einstellungen für Datenbank, Uploads, optionale Sensorik, Widgets, Home Assistant, OIDC und einen Container-Healthcheck. Für den einfachen Privatbetrieb kannst du die optionalen Blöcke leer lassen oder entfernen.
 
 ```yaml
 services:
@@ -244,6 +253,11 @@ services:
       - gardenglow_data:/data
     ports:
       - "8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/healthz')"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
 
 volumes:
   gardenglow_data:
