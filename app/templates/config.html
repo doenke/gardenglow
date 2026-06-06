@@ -80,7 +80,6 @@
       <input id="homeassistant-blueprint-url" type="url" value="{{ homeassistant_blueprint_url }}" readonly>
       <button type="button" class="btn secondary" data-copy-target="homeassistant-blueprint-url" aria-label="Blueprint-URL kopieren">Kopieren</button>
     </div>
-    <p class="mb-0"><a class="btn secondary" href="{{ homeassistant_blueprint_url }}">Home-Assistant-Blueprint herunterladen</a></p>
     <p class="mb-0"><strong>GardenGlow API Token:</strong> {% if gardenglow_widget_api_key %}<code>{{ gardenglow_widget_api_key }}</code>{% else %}<span class="text-muted">Nicht konfiguriert (Umgebungsvariable <code>WIDGET_API_KEY</code> setzen).</span>{% endif %}</p>
     <small class="text-muted">Aktuelle GardenGlow-Base-URL für den Blueprint: <code>{{ gardenglow_public_base_url }}</code></small>
   </div>

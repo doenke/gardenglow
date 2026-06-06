@@ -87,7 +87,7 @@ class InfluxConfigViewTest(unittest.TestCase):
         self.assertIn('id="homeassistant-config"', html)
         self.assertIn('role="menuitem">Sensoren</a>', html)
         self.assertNotIn('Bodenfeuchte-Sensoren', html)
-        self.assertIn('Home-Assistant-Blueprint herunterladen', html)
+        self.assertNotIn('Home-Assistant-Blueprint herunterladen', html)
         self.assertIn('id="homeassistant-blueprint-url"', html)
         self.assertIn('data-copy-target="homeassistant-blueprint-url"', html)
         self.assertIn('plain-widget-token', html)
