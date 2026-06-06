@@ -10,26 +10,20 @@ blueprint:
 
     rest_command:
       gardenglow_get_irrigation_minutes:
-        url: "{{ base_url }}/api/locations/{{ bed_id }}/irrigation-prediction"
+        url: "__GARDENGLOW_BASE_URL__/api/locations/{{ bed_id }}/irrigation-prediction"
         method: GET
         headers:
           X-API-Key: "{{ api_token }}"
 
     Danach kann diese Blueprint-Automation den Command
     rest_command.gardenglow_get_irrigation_minutes verwenden. Beim Ausführen
-    übergibt der Blueprint GardenGlow-Base-URL, Beet-ID und API-Token an den
-    RESTful Command. Die GardenGlow-Antwort wird per response_variable gelesen;
+    übergibt der Blueprint Beet-ID und API-Token an den RESTful Command. Die
+    GardenGlow-Antwort wird per response_variable gelesen;
     daraus wird predicted_minutes extrahiert, optional in einen input_number-
     Helfer geschrieben und anschließend die ausgewählte Switch- oder
     Valve-Entität genau für diese Dauer eingeschaltet bzw. geöffnet.
   domain: automation
   input:
-    gardenglow_base_url:
-      name: GardenGlow Base-URL
-      description: Externe URL deiner GardenGlow-Instanz ohne abschließenden Slash.
-      default: "__GARDENGLOW_BASE_URL__"
-      selector:
-        text:
     api_token:
       name: GardenGlow API Token
       description: Widget-API-Key aus GardenGlow.
@@ -71,7 +65,6 @@ blueprint:
 mode: single
 
 variables:
-  gardenglow_base_url: !input gardenglow_base_url
   api_token: !input api_token
   bed_id: !input bed_id
   irrigation_start_time: !input irrigation_start_time
@@ -85,7 +78,6 @@ trigger:
 action:
   - action: rest_command.gardenglow_get_irrigation_minutes
     data:
-      base_url: "{{ gardenglow_base_url }}"
       api_token: "{{ api_token }}"
       bed_id: "{{ bed_id }}"
     response_variable: gardenglow_response
