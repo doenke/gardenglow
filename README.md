@@ -62,35 +62,6 @@ volumes:
 
 Ohne OIDC-Variablen startet GardenGlow automatisch mit dem Standardbenutzer **„Gärtner“**. Datenbank und Uploads liegen persistent im Docker-Volume `gardenglow_data`. Nach dem Start mit `docker compose up -d` erreichst du die App unter `http://localhost:8000`.
 
-### Start mit Release-Image
-
-Konkreten Release-Tag nutzen:
-
-```bash
-GARDENGLOW_VERSION=1.2.3 docker compose up -d
-```
-
-Aktuelles `latest`-Image nutzen:
-
-```bash
-docker compose up -d
-```
-
-### Lokal aus dem ausgecheckten Repo bauen
-
-Für lokale Builds ergänzt `docker-compose.build.yml` den bestehenden Service um `build: .`:
-
-```bash
-docker compose -f docker-compose.yml -f docker-compose.build.yml up --build
-```
-
-### Optionaler Remote-Build aus dem GitHub-Repository
-
-Für den bisherigen Remote-Build-Komfort ergänzt `docker-compose.remote-build.yml` den bestehenden Service um den GitHub-Build-Kontext:
-
-```bash
-docker compose -f docker-compose.yml -f docker-compose.remote-build.yml up --build
-```
 
 ## Deployment mit OIDC
 
@@ -125,34 +96,62 @@ volumes:
   gardenglow_data:
 ```
 
-## Releases / Container Images
+## Deployment und Betrieb
 
-Die veröffentlichten Container-Images werden über Tags versioniert:
+### Container-Images
 
-- `latest` steht für den neuesten stabilen Release.
-- `1.2.3` steht exakt für diesen Release.
+Die veröffentlichten Container-Images liegen in der GitHub Container Registry und werden über Tags versioniert:
+
+- `1.2.3` steht exakt für diesen Release und ist der empfohlene Produktivpfad, weil Deployments damit kontrolliert und reproduzierbar bleiben.
 - `1.2` kann optional als Minor-Tag verwendet werden und steht dann für den neuesten Patch der Minor-Version.
-- `edge` oder `main` können optional als Entwicklungs-Tags verwendet werden und stehen dann für den aktuellen Entwicklungsstand.
+- `latest` steht für den neuesten stabilen Release. Verwende `latest` in Produktion nur bewusst, wenn automatische Wechsel auf neue Releases gewünscht sind.
+- `edge` oder `main` können optional als Entwicklungs-Tags verwendet werden und stehen für den aktuellen Entwicklungsstand. Diese Tags sind nicht für produktive Deployments empfohlen.
 
-Für produktive Deployments wird empfohlen, eine konkrete Version zu pinnen:
+### Version pinnen
+
+Für produktive Deployments sollte eine konkrete Version gepinnt werden. Setze dazu `GARDENGLOW_VERSION` auf einen Release-Tag und starte den Compose-Stack mit diesem Wert:
 
 ```bash
 GARDENGLOW_VERSION=1.2.3 docker compose up -d
 ```
 
-Produktive Systeme sollten nach Möglichkeit eine konkrete Version wie `1.2.3` statt `latest` verwenden, damit Updates kontrolliert und reproduzierbar erfolgen.
+### Update durchführen
 
-Update auf den neuesten stabilen Release:
+Wenn in `GARDENGLOW_VERSION` eine konkrete Version gesetzt ist, ändere sie zuerst auf den gewünschten Ziel-Release. Ziehe anschließend das Image und starte den Container neu:
 
 ```bash
 docker compose pull
 docker compose up -d
 ```
 
-Lokaler Build aus dem ausgecheckten Repository:
+### Lokal aus dem Repository bauen
+
+Für lokale Builds aus dem ausgecheckten Repository ergänzt `docker-compose.build.yml` den bestehenden Service um `build: .`:
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.build.yml up --build
+```
+
+### Remote-Build aus GitHub
+
+Für einen Remote-Build direkt aus dem GitHub-Repository ergänzt `docker-compose.remote-build.yml` den bestehenden Service um den GitHub-Build-Kontext:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.remote-build.yml up --build
+```
+
+### Healthcheck
+
+GardenGlow stellt den Healthcheck-Endpunkt `GET /healthz` bereit. Der Endpunkt eignet sich für Monitoring, Load Balancer und Container-Orchestrierung, damit Dienste den Zustand der Anwendung regelmäßig prüfen und fehlerhafte Container automatisch erkennen können.
+
+Beispiel für einen Docker-Compose-Healthcheck:
+
+```yaml
+healthcheck:
+  test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/healthz')"]
+  interval: 30s
+  timeout: 3s
+  retries: 3
 ```
 
 ## Konfiguration
