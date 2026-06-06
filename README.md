@@ -208,10 +208,8 @@ services:
       BACKUP_FOLDER: /data/backups
       STATS_UPLOAD_CACHE_TTL_SECONDS: "60"
 
-      # Optional: öffentliche URL, Versionsanzeige und eigenes Logo.
+      # Optional: öffentliche URL und eigenes Logo.
       GARDENGLOW_EXTERNAL_URL: https://gardenglow.example.com
-      APP_VERSION: ""
-      GIT_COMMIT: ""
       HEADER_LOGO_URL: ""
 
       # Optional: API-Key für Widgets und Bewässerungs-Endpunkte.
