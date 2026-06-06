@@ -10,7 +10,7 @@ import sqlite3
 import subprocess
 import zipfile
 from io import BytesIO
-from urllib.parse import quote, unquote, urljoin
+from urllib.parse import quote, unquote
 
 import requests
 from functools import wraps
@@ -1995,38 +1995,15 @@ def save_influx_config():
     influx_config.influx_url = (request.form.get('influx_url') or '').strip()
     influx_config.influx_org = (request.form.get('influx_org') or '').strip()
     influx_config.influx_bucket = (request.form.get('influx_bucket') or '').strip()
-    if 'homeassistant_url' in request.form:
-        influx_config.homeassistant_url = (request.form.get('homeassistant_url') or '').strip()
     influx_config.updated_at = utc_now()
 
     influx_token = (request.form.get('influx_token') or '').strip()
     if influx_token:
         influx_config.influx_token = influx_token
 
-    homeassistant_token = (request.form.get('homeassistant_token') or '').strip()
-    if homeassistant_token:
-        influx_config.homeassistant_token = homeassistant_token
-
     db.session.commit()
     flash('InfluxDB-Konfiguration wurde gespeichert.', 'success')
     return redirect(url_for('main.config', _anchor='influxdb-config'))
-
-
-@main_bp.route('/config/homeassistant', methods=['POST'])
-@login_required
-def save_homeassistant_config():
-    influx_config = _ensure_influx_integration_config()
-    influx_config.homeassistant_url = (request.form.get('homeassistant_url') or '').strip()
-    influx_config.updated_at = utc_now()
-
-    homeassistant_token = (request.form.get('homeassistant_token') or '').strip()
-    if homeassistant_token:
-        influx_config.homeassistant_token = homeassistant_token
-
-    db.session.commit()
-    flash('Homeassistant-Konfiguration wurde gespeichert.', 'success')
-    return redirect(url_for('main.config', _anchor='homeassistant-config'))
-
 
 
 @main_bp.route('/config/connection-options', methods=['POST'])
@@ -2065,35 +2042,6 @@ def test_influx_connection():
     )
     health = FluxInfluxQueryAdapter(service_config).health()
     flash(health['message'], 'success' if health.get('ok') else 'error')
-    return redirect(url_for('main.config'))
-
-
-@main_bp.route('/config/homeassistant/test', methods=['POST'])
-@login_required
-def test_homeassistant_connection():
-    influx_config = _first_influx_integration_config()
-    if influx_config is None or not (influx_config.homeassistant_url or '').strip():
-        flash('Homeassistant ist nicht konfiguriert.', 'error')
-        return redirect(url_for('main.config'))
-
-    headers = {}
-    homeassistant_token = (influx_config.homeassistant_token or '').strip()
-    if homeassistant_token:
-        headers['Authorization'] = f'Bearer {homeassistant_token}'
-
-    api_url = urljoin(influx_config.homeassistant_url.rstrip('/') + '/', 'api/')
-    try:
-        response = requests.get(
-            api_url,
-            headers=headers,
-            timeout=influx_config.timeout_seconds,
-            verify=influx_config.verify_tls,
-        )
-        response.raise_for_status()
-    except requests.RequestException as error:
-        flash(f'Homeassistant-Verbindung fehlgeschlagen: {error}', 'error')
-    else:
-        flash('Homeassistant ist erreichbar.', 'success')
     return redirect(url_for('main.config'))
 
 

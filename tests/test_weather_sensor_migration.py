@@ -33,8 +33,6 @@ class WeatherSensorMigrationTest(unittest.TestCase):
                     influx_org VARCHAR(255) NOT NULL DEFAULT '',
                     influx_bucket VARCHAR(255) NOT NULL DEFAULT '',
                     influx_token TEXT,
-                    homeassistant_url VARCHAR(1024) NOT NULL DEFAULT '',
-                    homeassistant_token TEXT,
                     temperature_homeassistant_entity_id VARCHAR(255),
                     temperature_influx_measurement VARCHAR(255),
                     temperature_influx_field VARCHAR(255),

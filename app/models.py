@@ -112,8 +112,6 @@ class InfluxIntegrationConfig(db.Model):
     influx_org = db.Column(db.String(255), nullable=False, default='')
     influx_bucket = db.Column(db.String(255), nullable=False, default='')
     influx_token = db.Column(db.Text)
-    homeassistant_url = db.Column(db.String(1024), nullable=False, default='')
-    homeassistant_token = db.Column(db.Text)
     gardenglow_external_url = db.Column(db.String(1024), nullable=False, default='')
     verify_tls = db.Column(db.Boolean, nullable=False, default=True)
     timeout_seconds = db.Column(db.Integer, nullable=False, default=10)
@@ -125,10 +123,6 @@ class InfluxIntegrationConfig(db.Model):
     @property
     def has_influx_token(self):
         return bool((self.influx_token or '').strip())
-
-    @property
-    def has_homeassistant_token(self):
-        return bool((self.homeassistant_token or '').strip())
 
 
 class IrrigationPredictionModel(db.Model):
