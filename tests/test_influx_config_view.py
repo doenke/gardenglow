@@ -161,14 +161,13 @@ class InfluxConfigViewTest(unittest.TestCase):
         self.assertIn('switch.turn_on', yaml)
 
 
-    def test_legacy_homeassistant_template_url_redirects_to_blueprint(self):
+    def test_legacy_homeassistant_template_url_is_removed(self):
         with self.client.session_transaction() as session:
             session.clear()
 
         response = self.client.get('/homeassistant/gardenglow-irrigation-template.yaml')
 
-        self.assertEqual(response.status_code, 302)
-        self.assertIn('/homeassistant/gardenglow-irrigation-blueprint.yaml', response.headers['Location'])
+        self.assertEqual(response.status_code, 404)
 
     def test_config_form_shows_connection_test_buttons(self):
         response = self.client.get('/config')

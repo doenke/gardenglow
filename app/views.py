@@ -1254,10 +1254,6 @@ def homeassistant_irrigation_blueprint():
     )
 
 
-@main_bp.route('/homeassistant/gardenglow-irrigation-template.yaml')
-def homeassistant_irrigation_template_legacy():
-    return redirect(url_for('main.homeassistant_irrigation_blueprint'), code=302)
-
 
 @main_bp.route('/manifest.webmanifest')
 def manifest():
