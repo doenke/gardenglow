@@ -134,7 +134,7 @@ class InfluxConfigViewTest(unittest.TestCase):
             '/config/homeassistant',
             data={
                 'homeassistant_url': 'https://new-ha.local',
-                'gardenglow_external_url': ' https://new-garden.example/ ',
+                'gardenglow_external_url': ' https://ignored-garden.example/ ',
             },
         )
 
@@ -143,6 +143,20 @@ class InfluxConfigViewTest(unittest.TestCase):
             config = InfluxIntegrationConfig.query.one()
             self.assertEqual(config.homeassistant_url, 'https://new-ha.local')
             self.assertEqual(config.homeassistant_token, 'old-ha-token')
+            self.assertEqual(config.gardenglow_external_url, 'https://garden.example')
+
+        response = self.client.post(
+            '/config/connection-options',
+            data={
+                'gardenglow_external_url': ' https://new-garden.example/ ',
+                'timeout_seconds': '15',
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('#connection-options', response.headers['Location'])
+        with self.app.app_context():
+            config = InfluxIntegrationConfig.query.one()
             self.assertEqual(config.gardenglow_external_url, 'https://new-garden.example')
 
 
@@ -197,6 +211,15 @@ class InfluxConfigViewTest(unittest.TestCase):
         self.assertIn('action="/config/homeassistant/test"', html)
         self.assertIn('Homeassistant-Verbindung testen', html)
         self.assertIn('action="/config/connection-options"', html)
+        self.assertIn('name="gardenglow_external_url"', html)
+        self.assertLess(
+            html.index('id="connection-options"'),
+            html.index('id="gardenglow-external-url"'),
+        )
+        self.assertLess(
+            html.index('id="gardenglow-external-url"'),
+            html.index('id="timeout-seconds"'),
+        )
         self.assertNotIn('action="/config/weather-sensors"', html)
         self.assertNotIn('Globale Homeassistant-Entities für Wetterdaten', html)
 
@@ -260,6 +283,7 @@ class InfluxConfigViewTest(unittest.TestCase):
         response = self.client.post(
             '/config/connection-options',
             data={
+                'gardenglow_external_url': ' https://garden.example/shared/ ',
                 'timeout_seconds': '23',
                 'verify_tls': '1',
             },
@@ -271,6 +295,7 @@ class InfluxConfigViewTest(unittest.TestCase):
             config = InfluxIntegrationConfig.query.one()
             self.assertEqual(config.timeout_seconds, 23)
             self.assertTrue(config.verify_tls)
+            self.assertEqual(config.gardenglow_external_url, 'https://garden.example/shared')
 
     def test_influx_connection_test_uses_saved_config(self):
         with self.app.app_context():

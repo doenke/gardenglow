@@ -57,10 +57,6 @@
     <p class="text-muted mt-0 mb-0">Konfiguriert den optionalen Zugriff auf die Homeassistant-API separat von InfluxDB und stellt einen Home-Assistant-Blueprint für die Beet-Bewässerung bereit.</p>
   </div>
   <form method="post" action="/config/homeassistant" class="grid mb-1">
-    <label for="gardenglow-external-url">Externe GardenGlow-URL
-      <input id="gardenglow-external-url" type="url" name="gardenglow_external_url" value="{{ gardenglow_external_url }}" placeholder="https://gardenglow.example.local">
-      <small class="text-muted">Diese URL verwendet Home Assistant, um GardenGlow von außen aufzurufen. Wenn leer, wird die aktuelle Anfrage-URL als Vorschlag im Blueprint verwendet.</small>
-    </label>
     <label for="homeassistant-url">Homeassistant-URL
       <input id="homeassistant-url" type="url" name="homeassistant_url" value="{{ influx_config.homeassistant_url if influx_config else '' }}" placeholder="https://homeassistant.example.local:8123">
     </label>
@@ -74,7 +70,7 @@
   </form>
   <div class="homeassistant-blueprint-info card-inner mt-1">
     <h4 class="m-0">GardenGlow Bewässerungs-Blueprint</h4>
-    <p class="text-muted mb-0">Lade den Home-Assistant-Blueprint ohne Login herunter und importiere ihn in Home Assistant. Wähle beim Erstellen der Automation Startzeit, Switch oder Valve, optionalen Minuten-Helfer, Beet-ID und Token aus. Der Blueprint startet täglich zur ausgewählten Uhrzeit, ruft über die oben konfigurierte GardenGlow-URL die Bewässerungsminuten ab, schreibt sie optional in den numerischen Helfer und schaltet danach die Bewässerung für genau diese Dauer ein.</p>
+    <p class="text-muted mb-0">Lade den Home-Assistant-Blueprint ohne Login herunter und importiere ihn in Home Assistant. Wähle beim Erstellen der Automation Startzeit, Switch oder Valve, optionalen Minuten-Helfer, Beet-ID und Token aus. Der Blueprint startet täglich zur ausgewählten Uhrzeit, ruft über die in den Verbindungsoptionen konfigurierte GardenGlow-URL die Bewässerungsminuten ab, schreibt sie optional in den numerischen Helfer und schaltet danach die Bewässerung für genau diese Dauer ein.</p>
     <label for="homeassistant-blueprint-url" class="mb-0">Blueprint-URL</label>
     <div class="copy-field-row mb-75">
       <input id="homeassistant-blueprint-url" type="url" value="{{ homeassistant_blueprint_url }}" readonly>
@@ -120,9 +116,13 @@
   <div class="config-section-head">
     <p class="page-eyebrow">Gemeinsam</p>
     <h3 class="m-0">Verbindungsoptionen</h3>
-    <p class="text-muted mt-0 mb-0">Diese Werte gelten für die Verbindungstests und API-Aufrufe von InfluxDB und Homeassistant.</p>
+    <p class="text-muted mt-0 mb-0">Diese Werte gelten für Verbindungstests, API-Aufrufe und die öffentliche GardenGlow-Adresse.</p>
   </div>
   <form method="post" action="/config/connection-options" class="grid mb-1">
+    <label for="gardenglow-external-url">Externe GardenGlow-URL
+      <input id="gardenglow-external-url" type="url" name="gardenglow_external_url" value="{{ gardenglow_external_url }}" placeholder="https://gardenglow.example.local">
+      <small class="text-muted">Diese URL verwendet Home Assistant, um GardenGlow von außen aufzurufen. Wenn leer, wird die aktuelle Anfrage-URL als Vorschlag im Blueprint verwendet.</small>
+    </label>
     <div class="grid grid-auto-200">
       <label for="timeout-seconds">Timeout (Sekunden)
         <input id="timeout-seconds" type="number" name="timeout_seconds" min="1" max="300" step="1" value="{{ influx_config.timeout_seconds if influx_config else 10 }}">
