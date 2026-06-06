@@ -99,6 +99,12 @@ action:
         data:
           value: "{{ irrigation_minutes }}"
 
+  - if:
+      - condition: template
+        value_template: "{{ irrigation_minutes <= 0 }}"
+    then:
+      - stop: Keine Bewässerung, da die vorhergesagten Minuten nicht größer als 0 sind.
+
   - choose:
       - conditions:
           - condition: template
