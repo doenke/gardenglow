@@ -3,6 +3,16 @@
 GardenGlow ist eine Progressive Web App (PWA) zur Verwaltung eines Gartenkatalogs.
 Die Anwendung verwaltet Pflanzorte, Pflanzen, Fotos und Kommentare – wahlweise mit OIDC (OpenID Connect) oder ohne OIDC automatisch mit dem Standardbenutzer **„Gärtner“**.
 
+## Inhalt
+
+- [Schnellstart](#schnellstart)
+- [Features](#features)
+- [Konfiguration](#konfiguration)
+- [Authentifizierung](#deployment-mit-oidc)
+- [Deployment und Betrieb](#setup--deployment)
+- [API-Endpunkte](#webservice-für-bewässerungs-prognosen)
+- [Entwicklung](#lokal-aus-dem-ausgecheckten-repo-bauen)
+
 ## Funktionsbeschreibung
 
 GardenGlow ist für den Betrieb in Containern ausgelegt und speichert alle Daten persistent in einem Volume.
