@@ -155,38 +155,76 @@ Lokaler Build aus dem ausgecheckten Repository:
 docker compose -f docker-compose.yml -f docker-compose.build.yml up --build
 ```
 
-## Wichtige Umgebungsvariablen
+## Konfiguration
+
+Die wichtigsten Einstellungen werden über Umgebungsvariablen gelesen. `SECRET_KEY` ist immer verpflichtend. Die OIDC-Variablen sind optional, müssen aber vollständig gesetzt sein, sobald mindestens eine der drei Kernvariablen (`OIDC_SERVER_METADATA_URL`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`) verwendet wird.
 
 ### Allgemein
 
-- `SECRET_KEY` – Flask Secret Key (Sessions/Signaturen)
-- `DATABASE_URL` – SQLAlchemy-Datenbankverbindung (z. B. SQLite in `/data`)
-- `UPLOAD_FOLDER` – Verzeichnis für hochgeladene Pflanzenfotos
-- `MAX_ATTACHMENT_SIZE_BYTES` – Maximalgröße pro Dateiupload (Standard: `15728640` = 15 MiB)
-- `AVATAR_FOLDER` – Verzeichnis für lokal gespeicherte Benutzer-Avatare
-- `MAX_AVATAR_SIZE_BYTES` – Maximalgröße für vom OIDC-Profil heruntergeladene Avatare (Standard: `5242880` = 5 MiB)
-- `MAP_FOLDER` – Verzeichnis für Karten-/Lageplan-Dateien
-- `BACKUP_FOLDER` – Verzeichnis, aus dem die Admin-/Wartungsseite die letzten Backups anzeigt (Standard: `/data/backups`)
-- `APP_VERSION` – optionale Versionsanzeige auf der Admin-/Wartungsseite
-- `GIT_COMMIT` – optionaler Git-Commit für die Admin-/Wartungsseite; wenn leer, wird der aktuelle Commit per `git rev-parse --short HEAD` ermittelt
-- `WIDGET_API_KEY` – API-Key für den Statistik-Webservice `/api/stats`
-- `HEADER_LOGO_URL` – URL eines optionalen Header-Logos (wenn leer oder nicht gesetzt, wird kein Logo angezeigt)
-- `DEBUG_MODE` – aktiviert mit `1`, `true`, `yes`, `on` oder `y` das vollständige Magic-/Taxonomie-Debugging. Ohne aktivierten Debug-Modus werden auf der Pflanzenseite keine Magic-Debug-Hinweise und kein Magic-Debuglog angezeigt. Bei aktivem Debug enthält die JSON-Antwort zusätzlich alle externen Webanfragen samt Headern, Status und vollständigem Antwortinhalt. Standard: `false`.
-- `IRRIGATION_PREDICTION_MAX_MINUTES` – Obergrenze für ML-Bewässerungsprognosen in Minuten (Standard: `120`). Negative Modellwerte werden zu `0`, Werte oberhalb der Obergrenze werden auf diese Obergrenze beschränkt.
-- `IRRIGATION_PREDICTION_TRAIN_INTERVAL_DAYS` – Mindestabstand zwischen zwei Trainingsläufen je Beet in Tagen (Standard: `7`).
-- `IRRIGATION_PREDICTION_TRAINING_LOOKBACK_DAYS` – Historischer Sensorzeitraum für das Modelltraining in Tagen (Standard und Maximum: `900`). Pro Beet beginnt das Training frühestens beim ersten verfügbaren Datenpunkt eines zugeordneten Feuchtesensors.
-- `IRRIGATION_PREDICTION_TRAIN_CRON_TIME` – tägliche Uhrzeit, zu der fällige Bewässerungs-Prognosemodelle automatisch geprüft und bei Bedarf neu trainiert werden (Format `HH:MM`, Standard: `03:00`).
-- `IRRIGATION_PREDICTION_TRAIN_CRON_ENABLED` – aktiviert (`true`) oder deaktiviert (`false`) den täglichen Trainings-Cronjob (Standard: `true`).
+| Variable | Pflicht | Standard | Beschreibung |
+| --- | --- | --- | --- |
+| `SECRET_KEY` | Ja | — | Flask Secret Key für Sessions und Signaturen. Muss gesetzt, nicht leer, kein offensichtlicher Placeholder und mindestens 32 Zeichen lang sein. |
+| `DATABASE_URL` | Nein | `sqlite:///garden.db` | SQLAlchemy-Datenbankverbindung, z. B. SQLite in `/data`. |
+| `APP_VERSION` | Nein | leer | Optionale Versionsanzeige auf der Admin-/Wartungsseite. |
+| `GIT_COMMIT` | Nein | leer | Optionaler Git-Commit für die Admin-/Wartungsseite; wenn leer, wird der aktuelle Commit per `git rev-parse --short HEAD` ermittelt. |
+| `GARDENGLOW_EXTERNAL_URL` | Nein | leer | Öffentliche Basis-URL der GardenGlow-Instanz, z. B. für Home-Assistant-/Widget-Links. |
+| `HEADER_LOGO_URL` | Nein | leer | URL eines optionalen Header-Logos; wenn leer oder nicht gesetzt, wird kein Logo angezeigt. |
 
-### OIDC (optional)
+### Uploads und Dateien
 
-- `OIDC_SERVER_METADATA_URL` – URL zur OIDC Discovery (`.well-known/openid-configuration`)
-- `OIDC_CLIENT_ID` – OIDC Client-ID
-- `OIDC_CLIENT_SECRET` – OIDC Client-Secret
-- `OIDC_LOGOUT_URL` *(optional)* – Externe Logout-URL des Identity-Providers
+| Variable | Pflicht | Standard | Beschreibung |
+| --- | --- | --- | --- |
+| `UPLOAD_FOLDER` | Nein | `/data/uploads` | Verzeichnis für hochgeladene Pflanzenfotos. |
+| `MAX_ATTACHMENT_SIZE_BYTES` | Nein | `15728640` | Maximalgröße pro Dateiupload in Byte (15 MiB). |
+| `AVATAR_FOLDER` | Nein | `/data/avatars` | Verzeichnis für lokal gespeicherte Benutzer-Avatare. |
+| `MAX_AVATAR_SIZE_BYTES` | Nein | `5242880` | Maximalgröße für vom OIDC-Profil heruntergeladene Avatare in Byte (5 MiB). |
+| `MAP_FOLDER` | Nein | `/data/maps` | Verzeichnis für Karten-/Lageplan-Dateien. |
+| `BACKUP_FOLDER` | Nein | `/data/backups` | Verzeichnis, aus dem die Admin-/Wartungsseite die letzten Backups anzeigt. |
+| `STATS_UPLOAD_CACHE_TTL_SECONDS` | Nein | `60` | Cache-Dauer in Sekunden für die Größenberechnung der Upload-Statistiken. |
 
-> Hinweis: Wenn keine der OIDC-Variablen gesetzt ist, startet GardenGlow ohne externen Login und meldet automatisch den Standardbenutzer **„Gärtner“** an. Sobald mindestens eine OIDC-Variable gesetzt ist, müssen `OIDC_SERVER_METADATA_URL`, `OIDC_CLIENT_ID` und `OIDC_CLIENT_SECRET` vollständig vorhanden sein.
+### OIDC
 
+| Variable | Pflicht | Standard | Beschreibung |
+| --- | --- | --- | --- |
+| `OIDC_SERVER_METADATA_URL` | Bedingt | leer | URL zur OIDC Discovery (`.well-known/openid-configuration`). Pflicht, sobald OIDC über eine der Kernvariablen aktiviert wird. |
+| `OIDC_CLIENT_ID` | Bedingt | leer | OIDC Client-ID. Pflicht, sobald OIDC über eine der Kernvariablen aktiviert wird. |
+| `OIDC_CLIENT_SECRET` | Bedingt | leer | OIDC Client-Secret. Pflicht, sobald OIDC über eine der Kernvariablen aktiviert wird. |
+| `OIDC_LOGOUT_URL` | Nein | leer | Externe Logout-URL des Identity-Providers. |
+
+> Hinweis: Wenn keine der OIDC-Kernvariablen gesetzt ist, startet GardenGlow ohne externen Login und meldet automatisch den Standardbenutzer **„Gärtner“** an.
+
+### APIs und Integrationen
+
+| Variable | Pflicht | Standard | Beschreibung |
+| --- | --- | --- | --- |
+| `WIDGET_API_KEY` | Nein | leer | API-Key für den Statistik-Webservice `/api/stats` und die Bewässerungsprognose-Endpunkte. Wenn leer, antwortet `/api/stats` mit `503`. |
+
+### Influx/Sensorik
+
+| Variable | Pflicht | Standard | Beschreibung |
+| --- | --- | --- | --- |
+| `INFLUX_URL` | Nein | leer | URL der InfluxDB-Instanz für Sensor-Zeitreihen. |
+| `INFLUX_TOKEN` | Nein | leer | InfluxDB API-Token. |
+| `INFLUX_ORG` | Nein | leer | InfluxDB Organisation. |
+| `INFLUX_BUCKET` | Nein | leer | InfluxDB Bucket mit den Sensor-Zeitreihen. |
+| `INFLUX_TIMEOUT_SECONDS` | Nein | `5` | Timeout für InfluxDB-Anfragen in Sekunden; Werte unter `0.1` werden auf `0.1` begrenzt. |
+
+### Bewässerungsprognosen
+
+| Variable | Pflicht | Standard | Beschreibung |
+| --- | --- | --- | --- |
+| `IRRIGATION_PREDICTION_MAX_MINUTES` | Nein | `120` | Obergrenze für ML-Bewässerungsprognosen in Minuten. Negative Modellwerte werden zu `0`, Werte oberhalb der Obergrenze werden auf diese Obergrenze beschränkt. |
+| `IRRIGATION_PREDICTION_TRAIN_INTERVAL_DAYS` | Nein | `7` | Mindestabstand zwischen zwei Trainingsläufen je Beet in Tagen. |
+| `IRRIGATION_PREDICTION_TRAINING_LOOKBACK_DAYS` | Nein | `900` | Historischer Sensorzeitraum für das Modelltraining in Tagen; maximal `900`, mindestens `1`. Pro Beet beginnt das Training frühestens beim ersten verfügbaren Datenpunkt eines zugeordneten Feuchtesensors. |
+| `IRRIGATION_PREDICTION_TRAIN_CRON_TIME` | Nein | `03:00` | Tägliche Uhrzeit, zu der fällige Bewässerungs-Prognosemodelle automatisch geprüft und bei Bedarf neu trainiert werden (Format `HH:MM`). |
+| `IRRIGATION_PREDICTION_TRAIN_CRON_ENABLED` | Nein | `true` | Aktiviert (`true`) oder deaktiviert (`false`) den täglichen Trainings-Cronjob. |
+
+### Debug/Taxonomie
+
+| Variable | Pflicht | Standard | Beschreibung |
+| --- | --- | --- | --- |
+| `COMMON_NAME_LOOKUP_LANG` | Nein | `de` | Sprache für die automatische Suche des „Bürgerlichen Namens“ über Wikipedia. |
+| `DEBUG_MODE` | Nein | `false` | Aktiviert mit `1`, `true`, `yes`, `on` oder `y` das vollständige Magic-/Taxonomie-Debugging. Ohne aktivierten Debug-Modus werden auf der Pflanzenseite keine Magic-Debug-Hinweise und kein Magic-Debuglog angezeigt; bei aktivem Debug enthält die JSON-Antwort zusätzlich externe Webanfragen samt Headern, Status und vollständigem Antwortinhalt. |
 
 ## Webservice für Bewässerungs-Prognosen
 
@@ -272,9 +310,3 @@ export SECRET_KEY="$(python -c 'import secrets; print(secrets.token_urlsafe(48))
 ```
 
 Wenn `SECRET_KEY` fehlt oder zu schwach ist, bricht die App mit einer klaren Konfigurations-Exception beim Start ab.
-
-
-## Umgebungsvariablen
-
-- `COMMON_NAME_LOOKUP_LANG` steuert die Sprache für die automatische Suche des „Bürgerlichen Namens“ über Wikipedia. Standard: `de` (Deutsch).
-- `DEBUG_MODE` schaltet das vollständige Magic-/Taxonomie-Debugging ein oder aus. Standardmäßig ist es aus; dann blendet die Pflanzenseite Magic-Debug-Hinweise und Magic-Debuglog vollständig aus. Bei aktivem Wert (`1`, `true`, `yes`, `on`, `y`) werden externe Webanfragen inklusive komplettem Response-Content im Debug-Block der JSON-Antwort ausgegeben.
