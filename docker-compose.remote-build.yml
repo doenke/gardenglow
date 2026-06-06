@@ -1,3 +1,0 @@
-services:
-  gardenglow:
-    build: https://github.com/doenke/gardenglow.git#main
