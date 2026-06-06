@@ -1,56 +1,40 @@
-# GardenGlow
+# GardenGlow 🌿✨
 
-GardenGlow ist eine Progressive Web App (PWA) zur Verwaltung der Beete und Pflanzen eines Gartens.
-Die Anwendung verwaltet Beete, Pflanzen, Fotos und Kommentare – ebenso wie Sensoren, Bodenfeuchte und Bewässerung inklusive Vorhersage der benötigten Bewässerungsdauer.
+GardenGlow ist dein digitales Gartentagebuch: ein schöner Ort für Beete, Pflanzen, Fotos, Notizen und kleine Garten-Erfolge. Du siehst, was wo wächst, hältst Entwicklungen fest und kannst auf Wunsch Sensorwerte sowie smarte Bewässerung einbinden.
 
-## Inhalt
+Kurz gesagt: weniger Zettelwirtschaft, mehr Überblick im Grünen.
 
-- [Schnellstart](#schnellstart)
-- [Features](#features)
-- [Konfiguration](#konfiguration)
-- [Sensorik, Bewässerungsprognose und Home Assistant](#sensorik-bewässerungsprognose-und-home-assistant)
-- [Authentifizierung](#deployment-mit-oidc)
-- [Deployment und Betrieb](#setup--deployment)
-- [API-Endpunkte](#webservice-für-bewässerungs-prognosen)
-- [Entwicklung](#lokal-aus-dem-ausgecheckten-repo-bauen)
+## Was GardenGlow für dich macht
 
-## Funktionsbeschreibung
+- **Beete und Gartenbereiche organisieren** – vom Hochbeet bis zur wilden Ecke hinterm Schuppen.
+- **Pflanzen liebevoll dokumentieren** – mit Namen, Standort, Fotos, Kommentaren und Verlauf.
+- **Gartenmomente festhalten** – Blüte, Rückschnitt, Umtopfen, Ernte oder einfach: „Heute sieht sie fantastisch aus“.
+- **Sensorwerte sichtbar machen** – Bodenfeuchte, Temperatur, Regen und Bewässerung können direkt beim Beet landen.
+- **Bewässerung besser einschätzen** – GardenGlow kann aus vorhandenen Messwerten vorschlagen, wie lange ein Beet Wasser braucht.
+- **Home Assistant anbinden** – wenn du willst, kann deine Automation die GardenGlow-Prognose nutzen.
+- **Hell oder dunkel genießen** – je nachdem, ob du gerade in der Sonne oder abends auf dem Sofa planst.
 
-GardenGlow ist für den Betrieb in Containern ausgelegt und speichert alle Daten persistent in einem Volume.
-Es können Gartenbereiche (Pflanzorte) angelegt und darin Pflanzen verwaltet werden.
-Zu Pflanzen lassen sich Fotos mit Datum und Kommentar sowie reine Textkommentare hinterlegen.
-Sensoren für Bodenfeuchte, Temperatur, Niederschlag und Bewässerung können Beeten zugeordnet werden. Über InfluxDB liest GardenGlow aktuelle Werte und historische Zeitreihen aus, zeigt sie in Beet-Ansichten an und nutzt sie für ML-basierte Prognosen der Bewässerungsdauer. Für Home Assistant stellt GardenGlow zusätzlich einen Bewässerungs-Blueprint bereit, der die prognostizierten Minuten abrufen und Switch- oder Valve-Entitäten passend schalten kann.
+## Für wen ist das?
 
+GardenGlow passt zu dir, wenn du ...
 
-## Features
+- wissen möchtest, welche Pflanze wo steht,
+- Fotos und Notizen nicht mehr in Chatverläufen verlieren willst,
+- gerne beobachtest, wie dein Garten sich verändert,
+- Sensoren oder Home Assistant nutzt – aber nicht musst,
+- deinen Garten ein bisschen smarter, schöner und entspannter verwalten möchtest.
 
-- OIDC-Login (OpenID Connect) bei gesetzter OIDC-Konfiguration
-- Automatischer Standardbenutzer **„Gärtner“**, wenn keine OIDC-Variablen gesetzt sind
-- Benutzerprofil mit Name, E-Mail und Avatar (Avatar-Download vom OIDC-Profilbild)
-- Verwaltung von Pflanzorten und zugeordneten Pflanzen
-- Sensorverwaltung für Bodenfeuchte, Temperatur, Niederschlag und Bewässerung mit Beet-Zuordnung
-- InfluxDB-Anbindung für aktuelle Sensorwerte und Messhistorien
-- ML-basierte Vorhersage der benötigten Bewässerungsdauer je Beet anhand vorhandener Sensor-Zeitreihen
-- Home-Assistant-Bewässerungs-Blueprint zum automatischen Abruf der Prognose und Schalten von Switch-/Valve-Entitäten
-- Foto-Uploads inkl. Datum und Beschreibung
-- Kommentare auch ohne Foto möglich
-- Installierbare PWA (inkl. Web App Manifest / Service Worker)
-- Hell-/Dunkelmodus
-- Reverse-Proxy-tauglich durch `ProxyFix`
-- Healthcheck unter `/healthz`
+## Schnellstart mit Docker
 
-## Schnellstart
+Wenn du GardenGlow einfach ausprobieren oder privat betreiben möchtest, reicht meist dieses Setup.
 
-`docker-compose.yml` nutzt standardmäßig das veröffentlichte Container-Image aus GitHub Container Registry.
-Über `GARDENGLOW_VERSION` kann ein konkreter Release-Tag gewählt werden; ohne Variable wird `latest` verwendet.
-
-Erzeuge zuerst einen sicheren `SECRET_KEY`:
+1. Erzeuge einen sicheren Schlüssel:
 
 ```bash
 python -c 'import secrets; print(secrets.token_urlsafe(48))'
 ```
 
-Minimales `docker-compose.yml` ohne OIDC-Variablen:
+2. Lege eine `docker-compose.yml` an:
 
 ```yaml
 services:
@@ -66,45 +50,143 @@ services:
       - gardenglow_data:/data
     ports:
       - "8000:8000"
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/healthz')"]
-      interval: 30s
-      timeout: 3s
-      retries: 3
+
 volumes:
   gardenglow_data:
 ```
 
-Ohne OIDC-Variablen startet GardenGlow automatisch mit dem Standardbenutzer **„Gärtner“**; weitere Details findest du unter [Betrieb ohne OIDC](#betrieb-ohne-oidc). Datenbank und Uploads liegen persistent im Docker-Volume `gardenglow_data`. Nach dem Start mit `docker compose up -d` erreichst du die App unter `http://localhost:8000`.
+3. Starte GardenGlow:
 
+```bash
+docker compose up -d
+```
 
-## Authentifizierung
+Danach öffnest du `http://localhost:8000`. Ohne zusätzliche Login-Konfiguration begrüßt dich GardenGlow automatisch als **„Gärtner“**. Datenbank und Uploads bleiben im Docker-Volume `gardenglow_data` erhalten.
 
-GardenGlow kann entweder ohne externen Identity-Provider oder mit OIDC betrieben werden. Welche Variante aktiv ist, hängt ausschließlich von den gesetzten OIDC-Umgebungsvariablen ab.
+## Ein erster Rundgang
 
-### Betrieb ohne OIDC
+### 1. Beete anlegen
 
-Setze für diesen Betriebsmodus keine OIDC-Variablen. Wenn keine OIDC-Variablen vorhanden sind, startet GardenGlow ohne externen Login und meldet automatisch den Standardbenutzer **„Gärtner“** an.
+Lege deine Gartenbereiche so an, wie du wirklich denkst: „Tomatenhaus“, „Kräuterbeet“, „Vorgarten“, „Schattenecke“ oder „Experimentierfläche“. GardenGlow ist bewusst flexibel – es muss kein perfekter Plan sein.
 
-Dieser Modus eignet sich für private Installationen oder Umgebungen, die bereits durch einen Reverse Proxy, ein VPN oder eine vergleichbare vorgelagerte Zugriffskontrolle geschützt sind.
+### 2. Pflanzen hinzufügen
 
-### Betrieb mit OIDC
+Füge Pflanzen zu ihren Standorten hinzu und ergänze Fotos, Kommentare oder Beobachtungen. So entsteht mit der Zeit eine lebendige Chronik: Was hat funktioniert? Was kam wieder? Was war ein Fehlkauf? Was muss nächstes Jahr unbedingt nochmal her?
 
-Für den Betrieb mit OIDC müssen die folgenden Pflichtvariablen vollständig gesetzt sein:
+### 3. Fortschritt sehen
+
+Fotos und Notizen machen Veränderungen sichtbar. Gerade bei Aussaat, Stecklingen, Jungpflanzen und Stauden ist das Gold wert: Du erkennst, was wirklich wächst – und nicht nur, was du hoffst.
+
+### 4. Optional smarter werden
+
+Wenn du Sensoren nutzt, kann GardenGlow Bodenfeuchte, Temperatur, Regen und Bewässerung direkt mit deinen Beeten verknüpfen. Aus diesen Daten kann die App eine Bewässerungsdauer vorschlagen. Das ist besonders praktisch für automatische Bewässerung oder wenn du deine Pflanzen nicht nach Bauchgefühl ertränken möchtest.
+
+## Smarte Bewässerung
+
+GardenGlow kann Messwerte aus InfluxDB nutzen und daraus je Beet eine Empfehlung ableiten: **Wie viele Minuten sollte heute bewässert werden?**
+
+Das ist kein Muss. GardenGlow funktioniert auch wunderbar als Pflanzen- und Beetjournal. Mit Sensoren wird es aber zum kleinen Gartencockpit:
+
+- aktuelle Bodenfeuchte direkt am Beet,
+- historische Verläufe für Feuchte, Temperatur, Regen und Bewässerung,
+- Ziel-Bodenfeuchte pro Beet,
+- automatische Prognosen für die Bewässerungsdauer,
+- Home-Assistant-Blueprint für passende Automationen.
+
+Für Home Assistant stellt GardenGlow einen Blueprint unter `/homeassistant/gardenglow-irrigation-blueprint.yaml` bereit. Die Import-URL findest du in der GardenGlow-Konfiguration im Bereich **Home Assistant Blueprint**.
+
+## Kleine Konfiguration, großer Nutzen
+
+Für den normalen Start brauchst du nur wenige Werte:
+
+| Einstellung | Wofür? |
+| --- | --- |
+| `SECRET_KEY` | Pflicht. Schützt Sessions und sollte ein langer, zufälliger Wert sein. |
+| `DATABASE_URL` | Speicherort der Datenbank. Für Docker ist `sqlite:////data/garden.db` praktisch. |
+| `UPLOAD_FOLDER` | Speicherort für Pflanzenfotos. Für Docker passt `/data/uploads`. |
+| `GARDENGLOW_VERSION` | Optionaler Container-Tag. Ohne Wert wird `latest` genutzt. |
+| `HEADER_LOGO_URL` | Optionales Logo im Kopfbereich. |
+| `WIDGET_API_KEY` | Optionaler Schlüssel für Widgets und Bewässerungs-APIs. |
+
+Für Sensorik kommen bei Bedarf noch InfluxDB-Werte dazu:
+
+| Einstellung | Wofür? |
+| --- | --- |
+| `INFLUX_URL` | Adresse deiner InfluxDB. |
+| `INFLUX_TOKEN` | API-Token für den Zugriff. |
+| `INFLUX_ORG` | Organisation in InfluxDB. |
+| `INFLUX_BUCKET` | Bucket mit den Zeitreihen. |
+
+## Login: einfach oder professionell
+
+Standardmäßig ist GardenGlow angenehm unkompliziert: Wenn du keine externe Anmeldung konfigurierst, startet die App mit dem Benutzer **„Gärtner“**. Das ist ideal für private Installationen, die bereits durch dein Heimnetz, VPN oder einen Reverse Proxy geschützt sind.
+
+Für professionelle Setups kann GardenGlow auch mit OIDC betrieben werden. Dann brauchst du vollständig:
 
 - `OIDC_SERVER_METADATA_URL`
 - `OIDC_CLIENT_ID`
 - `OIDC_CLIENT_SECRET`
 
-Optional kann zusätzlich `OIDC_LOGOUT_URL` gesetzt werden, um auf eine externe Logout-URL des Identity-Providers zu verweisen.
+Optional ist `OIDC_LOGOUT_URL`. Sobald du OIDC nutzt, müssen die drei Pflichtwerte vollständig gesetzt sein.
 
-Sobald mindestens eine OIDC-Variable gesetzt ist, müssen die Pflichtvariablen `OIDC_SERVER_METADATA_URL`, `OIDC_CLIENT_ID` und `OIDC_CLIENT_SECRET` vollständig vorhanden sein. Unvollständige OIDC-Konfigurationen werden nicht als Betrieb ohne OIDC interpretiert.
+## Für Integrationen
 
-## Deployment mit OIDC
+Wenn du Dashboards, Widgets oder Home Assistant anbinden möchtest, gibt es schlanke JSON-Endpunkte. Sie verwenden den `WIDGET_API_KEY` über `X-API-Key` oder `Authorization: Bearer`.
 
-Wenn GardenGlow mit einem externen OIDC-Provider betrieben werden soll, müssen `OIDC_SERVER_METADATA_URL`, `OIDC_CLIENT_ID` und `OIDC_CLIENT_SECRET` vollständig gesetzt werden. `OIDC_LOGOUT_URL` ist optional.
+| Endpunkt | Liefert |
+| --- | --- |
+| `GET /api/stats` | Kompakte Zahlen zu Pflanzen, Beeten, Uploads und Datenbankgröße. |
+| `GET /api/irrigation-predictions` | Bewässerungsprognosen für alle produktiven Beete. |
+| `GET /api/locations/<id>/irrigation-prediction` | Bewässerungsprognose für ein einzelnes Beet. |
 
-Beispiel für `docker-compose.yml` mit OIDC; beachte dazu die Hinweise unter [Betrieb mit OIDC](#betrieb-mit-oidc):
+Beispiel für ein gethomepage-Widget:
+
+```yaml
+- Garten:
+    description: Pflanzen & Beete
+    icon: mdi-flower
+    href: https://gardenglow.example.com
+    widget:
+      type: customapi
+      url: https://gardenglow.example.com/api/stats
+      method: GET
+      headers:
+        X-API-Key: "{{HOMEPAGE_VAR_GARTEN_API_KEY}}"
+      mappings:
+        - field: plants
+          label: Pflanzen
+          format: number
+        - field: beds
+          label: Beete
+          format: number
+        - field: uploads
+          label: Uploads
+          format: number
+```
+
+Tipp: Speichere den Key als Umgebungsvariable und nicht direkt im Klartext in der Widget-Datei.
+
+## Für Entwicklerinnen und Entwickler
+
+GardenGlow ist eine Container-App und speichert Daten persistent, wenn du ein Volume verwendest. Lokal kannst du den `SECRET_KEY` so setzen:
+
+```bash
+export SECRET_KEY="$(python -c 'import secrets; print(secrets.token_urlsafe(48))')"
+```
+
+Wenn der Schlüssel fehlt, leer ist, offensichtlich unsicher aussieht oder kürzer als 32 Zeichen ist, startet GardenGlow bewusst nicht. Das verhindert versehentlich unsichere Installationen.
+
+---
+
+Viel Spaß beim Pflanzen, Planen, Fotografieren und Gießen. 🌱
+
+## Technische Doku
+
+Dieser Abschnitt ist für alle gedacht, die GardenGlow dauerhaft betreiben, automatisieren oder in eine bestehende Homelab-/Server-Umgebung einbauen möchten.
+
+### Vollständige `docker-compose.yml`
+
+Die folgende Compose-Datei enthält die üblichen Einstellungen für Datenbank, Uploads, optionale Sensorik, Widgets, Home Assistant und OIDC. Für den einfachen Privatbetrieb kannst du die optionalen Blöcke leer lassen oder entfernen.
 
 ```yaml
 services:
@@ -113,212 +195,76 @@ services:
     container_name: gardenglow
     restart: unless-stopped
     environment:
+      # Pflicht: bitte durch einen eigenen, langen Zufallswert ersetzen.
       SECRET_KEY: hier-den-generierten-secret-key-einfuegen
+
+      # Persistente Daten in /data.
       DATABASE_URL: sqlite:////data/garden.db
       UPLOAD_FOLDER: /data/uploads
-      OIDC_SERVER_METADATA_URL: https://example.com/.well-known/openid-configuration
-      OIDC_CLIENT_ID: change-me
-      OIDC_CLIENT_SECRET: change-me
-      OIDC_LOGOUT_URL: https://example.com/logout
+      MAX_ATTACHMENT_SIZE_BYTES: "15728640"
+      AVATAR_FOLDER: /data/avatars
+      MAX_AVATAR_SIZE_BYTES: "5242880"
+      MAP_FOLDER: /data/maps
+      BACKUP_FOLDER: /data/backups
+      STATS_UPLOAD_CACHE_TTL_SECONDS: "60"
+
+      # Optional: öffentliche URL, Versionsanzeige und eigenes Logo.
+      GARDENGLOW_EXTERNAL_URL: https://gardenglow.example.com
+      APP_VERSION: ""
+      GIT_COMMIT: ""
+      HEADER_LOGO_URL: ""
+
+      # Optional: API-Key für Widgets und Bewässerungs-Endpunkte.
+      WIDGET_API_KEY: bitte-aendern-wenn-genutzt
+
+      # Optional: InfluxDB für Sensorwerte und Bewässerungsprognosen.
+      INFLUX_URL: ""
+      INFLUX_TOKEN: ""
+      INFLUX_ORG: ""
+      INFLUX_BUCKET: ""
+      INFLUX_TIMEOUT_SECONDS: "5"
+
+      # Optional: Bewässerungsprognosen feinjustieren.
+      IRRIGATION_PREDICTION_MAX_MINUTES: "120"
+      IRRIGATION_PREDICTION_TRAIN_INTERVAL_DAYS: "7"
+      IRRIGATION_PREDICTION_TRAINING_LOOKBACK_DAYS: "900"
+      IRRIGATION_PREDICTION_TRAIN_CRON_TIME: "03:00"
+      IRRIGATION_PREDICTION_TRAIN_CRON_ENABLED: "true"
+
+      # Optional: Pflanzen-/Taxonomie-Hilfen.
+      COMMON_NAME_LOOKUP_LANG: de
+      DEBUG_MODE: "false"
+
+      # Optional: professioneller Login per OIDC.
+      # Wenn du OIDC nutzt, müssen alle drei Kernwerte vollständig gesetzt sein.
+      OIDC_SERVER_METADATA_URL: ""
+      OIDC_CLIENT_ID: ""
+      OIDC_CLIENT_SECRET: ""
+      OIDC_LOGOUT_URL: ""
+
     volumes:
       - gardenglow_data:/data
     ports:
       - "8000:8000"
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/healthz')"]
-      interval: 30s
-      timeout: 3s
-      retries: 3
+
 volumes:
   gardenglow_data:
 ```
 
+### Wichtige Hinweise zum Betrieb
 
-## Konfiguration
+- `SECRET_KEY` ist Pflicht, muss mindestens 32 Zeichen lang sein und darf kein offensichtlicher Platzhalter sein.
+- Ohne OIDC-Konfiguration startet GardenGlow automatisch mit dem Benutzer **„Gärtner“**. Schütze die Instanz dann über Heimnetz, VPN, Reverse Proxy oder eine vergleichbare vorgelagerte Zugriffskontrolle.
+- Sobald du eine der OIDC-Kernvariablen nutzt, müssen `OIDC_SERVER_METADATA_URL`, `OIDC_CLIENT_ID` und `OIDC_CLIENT_SECRET` vollständig gesetzt sein.
+- Für Sensorwerte und Bewässerungsprognosen müssen `INFLUX_URL`, `INFLUX_TOKEN`, `INFLUX_ORG` und `INFLUX_BUCKET` zusammenpassen.
+- `WIDGET_API_KEY` schützt die JSON-Endpunkte für Statistik-Widgets und Bewässerungsprognosen.
 
-Die wichtigsten Einstellungen werden über Umgebungsvariablen gelesen. `SECRET_KEY` ist immer verpflichtend. Die OIDC-Variablen sind optional, müssen aber vollständig gesetzt sein, sobald mindestens eine der drei Kernvariablen (`OIDC_SERVER_METADATA_URL`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`) verwendet wird.
+### API-Kurzreferenz
 
-### Allgemein
+| Endpunkt | Zweck | Authentifizierung |
+| --- | --- | --- |
+| `GET /api/stats` | Pflanzen-, Beet-, Upload- und Datenbankstatistiken für Dashboards. | `WIDGET_API_KEY` |
+| `GET /api/irrigation-predictions` | Bewässerungsprognosen für alle produktiven Beete. | `WIDGET_API_KEY` |
+| `GET /api/locations/<id>/irrigation-prediction` | Bewässerungsprognose für ein einzelnes Beet. | `WIDGET_API_KEY` |
 
-| Variable | Pflicht | Standard | Beschreibung |
-| --- | --- | --- | --- |
-| `SECRET_KEY` | Ja | — | Flask Secret Key für Sessions und Signaturen. Muss gesetzt, nicht leer, kein offensichtlicher Placeholder und mindestens 32 Zeichen lang sein. |
-| `DATABASE_URL` | Nein | `sqlite:///garden.db` | SQLAlchemy-Datenbankverbindung, z. B. SQLite in `/data`. |
-| `APP_VERSION` | Nein | leer | Optionale Versionsanzeige auf der Admin-/Wartungsseite. |
-| `GIT_COMMIT` | Nein | leer | Optionaler Git-Commit für die Admin-/Wartungsseite; wenn leer, wird der aktuelle Commit per `git rev-parse --short HEAD` ermittelt. |
-| `GARDENGLOW_EXTERNAL_URL` | Nein | leer | Öffentliche Basis-URL der GardenGlow-Instanz, z. B. für Home-Assistant-/Widget-Links. |
-| `HEADER_LOGO_URL` | Nein | leer | URL eines optionalen Header-Logos; wenn leer oder nicht gesetzt, wird kein Logo angezeigt. |
-
-### Uploads und Dateien
-
-| Variable | Pflicht | Standard | Beschreibung |
-| --- | --- | --- | --- |
-| `UPLOAD_FOLDER` | Nein | `/data/uploads` | Verzeichnis für hochgeladene Pflanzenfotos. |
-| `MAX_ATTACHMENT_SIZE_BYTES` | Nein | `15728640` | Maximalgröße pro Dateiupload in Byte (15 MiB). |
-| `AVATAR_FOLDER` | Nein | `/data/avatars` | Verzeichnis für lokal gespeicherte Benutzer-Avatare. |
-| `MAX_AVATAR_SIZE_BYTES` | Nein | `5242880` | Maximalgröße für vom OIDC-Profil heruntergeladene Avatare in Byte (5 MiB). |
-| `MAP_FOLDER` | Nein | `/data/maps` | Verzeichnis für Karten-/Lageplan-Dateien. |
-| `BACKUP_FOLDER` | Nein | `/data/backups` | Verzeichnis, aus dem die Admin-/Wartungsseite die letzten Backups anzeigt. |
-| `STATS_UPLOAD_CACHE_TTL_SECONDS` | Nein | `60` | Cache-Dauer in Sekunden für die Größenberechnung der Upload-Statistiken. |
-
-### OIDC
-
-| Variable | Pflicht | Standard | Beschreibung |
-| --- | --- | --- | --- |
-| `OIDC_SERVER_METADATA_URL` | Bedingt | leer | URL zur OIDC Discovery (`.well-known/openid-configuration`). Pflicht, sobald OIDC über eine der Kernvariablen aktiviert wird. |
-| `OIDC_CLIENT_ID` | Bedingt | leer | OIDC Client-ID. Pflicht, sobald OIDC über eine der Kernvariablen aktiviert wird. |
-| `OIDC_CLIENT_SECRET` | Bedingt | leer | OIDC Client-Secret. Pflicht, sobald OIDC über eine der Kernvariablen aktiviert wird. |
-| `OIDC_LOGOUT_URL` | Nein | leer | Externe Logout-URL des Identity-Providers. |
-
-> Hinweis: Wenn keine der OIDC-Kernvariablen gesetzt ist, startet GardenGlow ohne externen Login und meldet automatisch den Standardbenutzer **„Gärtner“** an.
-
-### APIs und Integrationen
-
-| Variable | Pflicht | Standard | Beschreibung |
-| --- | --- | --- | --- |
-| `WIDGET_API_KEY` | Nein | leer | API-Key für den Statistik-Webservice `/api/stats` und die Bewässerungsprognose-Endpunkte. Wenn leer, antwortet `/api/stats` mit `503`. |
-
-### Influx/Sensorik
-
-| Variable | Pflicht | Standard | Beschreibung |
-| --- | --- | --- | --- |
-| `INFLUX_URL` | Nein | leer | URL der InfluxDB-Instanz für Sensor-Zeitreihen. |
-| `INFLUX_TOKEN` | Nein | leer | InfluxDB API-Token. |
-| `INFLUX_ORG` | Nein | leer | InfluxDB Organisation. |
-| `INFLUX_BUCKET` | Nein | leer | InfluxDB Bucket mit den Sensor-Zeitreihen. |
-| `INFLUX_TIMEOUT_SECONDS` | Nein | `5` | Timeout für InfluxDB-Anfragen in Sekunden; Werte unter `0.1` werden auf `0.1` begrenzt. |
-
-### Bewässerungsprognosen
-
-| Variable | Pflicht | Standard | Beschreibung |
-| --- | --- | --- | --- |
-| `IRRIGATION_PREDICTION_MAX_MINUTES` | Nein | `120` | Obergrenze für ML-Bewässerungsprognosen in Minuten. Negative Modellwerte werden zu `0`, Werte oberhalb der Obergrenze werden auf diese Obergrenze beschränkt. |
-| `IRRIGATION_PREDICTION_TRAIN_INTERVAL_DAYS` | Nein | `7` | Mindestabstand zwischen zwei Trainingsläufen je Beet in Tagen. |
-| `IRRIGATION_PREDICTION_TRAINING_LOOKBACK_DAYS` | Nein | `900` | Historischer Sensorzeitraum für das Modelltraining in Tagen; maximal `900`, mindestens `1`. Pro Beet beginnt das Training frühestens beim ersten verfügbaren Datenpunkt eines zugeordneten Feuchtesensors. |
-| `IRRIGATION_PREDICTION_TRAIN_CRON_TIME` | Nein | `03:00` | Tägliche Uhrzeit, zu der fällige Bewässerungs-Prognosemodelle automatisch geprüft und bei Bedarf neu trainiert werden (Format `HH:MM`). |
-| `IRRIGATION_PREDICTION_TRAIN_CRON_ENABLED` | Nein | `true` | Aktiviert (`true`) oder deaktiviert (`false`) den täglichen Trainings-Cronjob. |
-
-### Debug/Taxonomie
-
-| Variable | Pflicht | Standard | Beschreibung |
-| --- | --- | --- | --- |
-| `COMMON_NAME_LOOKUP_LANG` | Nein | `de` | Sprache für die automatische Suche des „Bürgerlichen Namens“ über Wikipedia. |
-| `DEBUG_MODE` | Nein | `false` | Aktiviert mit `1`, `true`, `yes`, `on` oder `y` das vollständige Magic-/Taxonomie-Debugging. Ohne aktivierten Debug-Modus werden auf der Pflanzenseite keine Magic-Debug-Hinweise und kein Magic-Debuglog angezeigt; bei aktivem Debug enthält die JSON-Antwort zusätzlich externe Webanfragen samt Headern, Status und vollständigem Antwortinhalt. |
-
-## Sensorik, Bewässerungsprognose und Home Assistant
-
-GardenGlow verbindet die Beet- und Pflanzenverwaltung mit Sensordaten aus InfluxDB. Dadurch werden aktuelle Messwerte, historische Verläufe und eine Vorhersage der Bewässerungsdauer direkt in der App sowie über API-Endpunkte nutzbar.
-
-### Sensoren
-
-Sensoren werden über die Navigation **Sensoren** angelegt und gepflegt. Unterstützt werden die Sensortypen **Bodenfeuchte**, **Temperatur**, **Niederschlag** und **Bewässerung**. Ein Sensor kann einem oder mehreren Beeten zugeordnet werden; ohne Standortzuordnung gilt er als globaler Wetter-/Umgebungssensor und kann standortübergreifend verwendet werden.
-
-Für Home-Assistant-Entities reicht in der Regel die Entity-ID, z. B. `sensor.beet_1_bodenfeuchtigkeit`. GardenGlow nutzt dann die Standardstruktur der Home-Assistant-InfluxDB-Integration (`_field=value` sowie Tags wie `entity_id` und `domain`). Alternativ können Measurement, Field und Tags manuell gepflegt werden, wenn die Zeitreihen anders strukturiert sind. Auf der Sensor-Detailseite lässt sich der letzte Influx-Wert testen.
-
-### Anzeige von Sensorwerten
-
-Die Start- und Beet-Ansichten verwenden die verknüpften Sensoren, um aktuelle Bodenfeuchtewerte und Sensorverläufe darzustellen. In Beet-Ansichten werden Bodenfeuchte, Temperatur, Niederschlag und Bewässerung zusammen mit der Ziel-Bodenfeuchte angezeigt, sofern InfluxDB vollständig konfiguriert ist und passende Daten vorliegen.
-
-### Vorhersage der Bewässerungsdauer
-
-GardenGlow trainiert je produktivem Beet ein Modell aus vorhandenen Sensor-Zeitreihen. Die Prognose beantwortet die praktische Frage, wie viele Minuten die Bewässerung heute laufen sollte, um die konfigurierte Ziel-Bodenfeuchte zu erreichen. Negative Modellwerte werden auf `0` Minuten gesetzt; Werte oberhalb von `IRRIGATION_PREDICTION_MAX_MINUTES` werden auf diese Obergrenze begrenzt.
-
-Die Ziel-Bodenfeuchte kann global in der Konfiguration gesetzt und pro Beet überschrieben werden. Das Modelltraining läuft standardmäßig täglich um `03:00` Uhr, prüft aber nur fällige Modelle; zusätzlich wird beim API-Abruf trainiert, wenn für ein Beet noch kein Modell vorhanden ist oder das vorhandene Modell außerhalb des konfigurierten Trainingsintervalls liegt. Den Status der Modelle und manuelle Trainingsaktionen findest du auf der Admin-/Wartungsseite.
-
-Für Integrationen stehen zwei geschützte Endpunkte zur Verfügung: `GET /api/irrigation-predictions` für alle Beete und `GET /api/locations/<id>/irrigation-prediction` für ein einzelnes Beet. Beide benötigen `WIDGET_API_KEY` und eine vollständige InfluxDB-Konfiguration. Details zu Antwortfeldern und Fehlerfällen stehen im Abschnitt [API-Endpunkte](#api-endpunkte).
-
-### Home-Assistant-Blueprint
-
-GardenGlow stellt den Blueprint unter `/homeassistant/gardenglow-irrigation-blueprint.yaml` bereit. Die konkrete Import-URL wird in der GardenGlow-Konfiguration im Bereich **Home Assistant Blueprint** angezeigt und kann dort kopiert werden. Für den Blueprint wird außerdem ein einmaliger `rest_command` in der Home-Assistant-`configuration.yaml` benötigt, weil ein Blueprint diesen Webservice-Aufruf nicht selbst als Integration anlegen kann.
-
-Beim Erstellen der Automation wählst du API-Token, Beet-ID, Startzeit, eine Switch- oder Valve-Entität sowie optional einen `input_number`-Helfer für die prognostizierten Minuten. Zur Startzeit ruft Home Assistant die GardenGlow-Prognose ab, schreibt die Minuten optional in den Helfer und schaltet bzw. öffnet die Bewässerungs-Entität genau für die vorhergesagte Dauer.
-
-## API-Endpunkte
-
-Die folgenden JSON-Endpunkte sind für externe Integrationen und Widgets gedacht. Für beide API-Gruppen kann der in `WIDGET_API_KEY` konfigurierte Schlüssel entweder über `X-API-Key: <WIDGET_API_KEY>` oder über `Authorization: Bearer <WIDGET_API_KEY>` gesendet werden.
-
-### `GET /api/stats`
-
-- **Methode und Pfad:** `GET /api/stats`
-- **Zweck:** Liefert kompakte Pflanzen-, Beet-, Upload- und Datenbankstatistiken für Dashboards oder Widgets.
-- **Authentifizierung:** Erfordert `WIDGET_API_KEY`; nutze den Header `X-API-Key: <WIDGET_API_KEY>` oder alternativ `Authorization: Bearer <WIDGET_API_KEY>`.
-- **Wichtige Antwortfelder:**
-  - `plants`: Anzahl aller Pflanzen
-  - `beds`: Anzahl aller Beete/Pflanzorte ohne den internen Papierkorb
-  - `uploads`: Anzahl aller hochgeladenen Dateien im Upload-Verzeichnis
-  - `upload_size_bytes`: Gesamtgröße aller Uploads in Byte
-  - `database_size_bytes`: Größe der SQLite-Datenbankdatei in Byte; bei anderen Datenbanktypen oder fehlender Datei `0`
-- **Fehler-/Sonderfälle:** Wenn `WIDGET_API_KEY` nicht gesetzt ist, antwortet der Endpunkt mit `503`. Bei fehlendem oder falschem API-Key antwortet er mit `401`. Upload-Statistiken werden für die Dauer von `STATS_UPLOAD_CACHE_TTL_SECONDS` zwischengespeichert.
-
-### `GET /api/irrigation-predictions`
-
-- **Methode und Pfad:** `GET /api/irrigation-predictions`
-- **Zweck:** Liefert ML-basierte Bewässerungsprognosen für alle produktiven Beete. GardenGlow sagt aus den vorhandenen Sensor-Zeitreihen vorher, wie viele Minuten die Bewässerung heute laufen sollte, um die Ziel-Bodenfeuchte zu erreichen.
-- **Authentifizierung:** Erfordert `WIDGET_API_KEY`; nutze den Header `X-API-Key: <WIDGET_API_KEY>` oder alternativ `Authorization: Bearer <WIDGET_API_KEY>`.
-- **Wichtige Antwortfelder:**
-  - `predictions`: Liste der Prognosen je Beet
-  - `max_minutes`: aktuell konfigurierte Obergrenze für vorhergesagte Bewässerungsdauer
-  - Pro Eintrag in `predictions`: `location_id`, `location_name`, `target_soil_moisture_percent`, `predicted_minutes`, `raw_predicted_minutes`, `source`, `trained_now`, `training_error`, `model` und `features`
-- **Fehler-/Sonderfälle:** Wenn `WIDGET_API_KEY` nicht gesetzt ist, antwortet der Endpunkt mit `503`; bei fehlendem oder falschem API-Key mit `401`. Wenn InfluxDB nicht vollständig konfiguriert ist, antwortet der Endpunkt ebenfalls mit `503`. Ein täglicher Cronjob prüft standardmäßig um `03:00` Uhr, ob Modelle fällig sind, und trainiert sie bei Bedarf neu; die Uhrzeit kann über `IRRIGATION_PREDICTION_TRAIN_CRON_TIME` im Format `HH:MM` geändert werden. Beim Abruf wird das Training zusätzlich automatisch ausgeführt, falls noch kein Modell vorhanden ist oder das letzte Training mindestens eine Woche zurückliegt. Negative Vorhersagen werden auf `0` Minuten gesetzt; Werte oberhalb der konfigurierten Obergrenze werden begrenzt.
-
-### `GET /api/locations/<id>/irrigation-prediction`
-
-- **Methode und Pfad:** `GET /api/locations/<id>/irrigation-prediction`
-- **Zweck:** Liefert die ML-basierte Bewässerungsprognose für ein einzelnes Beet mit der angegebenen numerischen Standort-ID.
-- **Authentifizierung:** Erfordert `WIDGET_API_KEY`; nutze den Header `X-API-Key: <WIDGET_API_KEY>` oder alternativ `Authorization: Bearer <WIDGET_API_KEY>`.
-- **Wichtige Antwortfelder:** `location_id`, `location_name`, `target_soil_moisture_percent`, `predicted_minutes`, `raw_predicted_minutes`, `max_minutes`, `source`, `trained_now`, `training_error`, `model` und `features`.
-- **Fehler-/Sonderfälle:** Wenn `WIDGET_API_KEY` nicht gesetzt ist, antwortet der Endpunkt mit `503`; bei fehlendem oder falschem API-Key mit `401`. Wenn InfluxDB nicht vollständig konfiguriert ist, antwortet der Endpunkt ebenfalls mit `503`. Für den internen Papierkorb wird keine Bewässerung vorhergesagt; der Endpunkt antwortet dann mit `400`. Für unbekannte Standort-IDs gilt die normale Flask-404-Behandlung. Negative Vorhersagen werden auf `0` Minuten gesetzt; Werte oberhalb der konfigurierten Obergrenze werden begrenzt.
-
-### Beispiel: gethomepage Custom API Widget
-
-Beispielkonfiguration für `services.yaml` in gethomepage:
-
-```yaml
-- Garten:
-        description: Pflanzen & Beete
-        icon: mdi-flower
-        href: https://gardenglow.example.com
-        widget:
-          type: customapi
-          url: https://gardenglow.example.com/api/stats
-          method: GET
-          headers:
-            X-API-Key: "{{HOMEPAGE_VAR_GARTEN_API_KEY}}"
-          mappings:
-            - field: plants
-              label: Pflanzen
-              format: number
-            - field: beds
-              label: Beete
-              format: number
-            - field: uploads
-              label: Uploads
-              format: number
-            - field: upload_size_bytes
-              label: Uploadgröße
-              format: bytes
-            - field: database_size_bytes
-              label: DB-Größe
-              format: bytes
-```
-
-Tipp: Lege den Key in gethomepage als Umgebungsvariable ab (z. B. `HOMEPAGE_VAR_GARTEN_API_KEY`) und hinterlege ihn nicht im Klartext in der YAML.
-
-## Setup / Deployment
-
-### Pflichtvariable `SECRET_KEY`
-
-`SECRET_KEY` ist beim App-Start verpflichtend und wird **ohne Default** gelesen.
-
-Anforderungen:
-- gesetzt (nicht leer)
-- kein offensichtlicher Placeholder (z. B. `dev-secret-change-me`, `changeme`, `secret`)
-- mindestens 32 Zeichen
-
-Beispiel (lokal):
-
-```bash
-export SECRET_KEY="$(python -c 'import secrets; print(secrets.token_urlsafe(48))')"
-```
-
-Wenn `SECRET_KEY` fehlt oder zu schwach ist, bricht die App mit einer klaren Konfigurations-Exception beim Start ab.
+Den API-Key sendest du entweder als Header `X-API-Key: <WIDGET_API_KEY>` oder als `Authorization: Bearer <WIDGET_API_KEY>`.
