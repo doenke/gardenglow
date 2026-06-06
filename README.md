@@ -26,12 +26,15 @@ Zusätzlich ist die Anwendung als installierbare PWA nutzbar und enthält einen 
 
 ## Start mit Docker Compose
 
+`docker-compose.yml` nutzt standardmäßig das veröffentlichte Container-Image aus GitHub Container Registry.
+Über `GARDENGLOW_VERSION` kann ein konkreter Release-Tag gewählt werden; ohne Variable wird `latest` verwendet.
+
 ### `docker-compose.yml`
 
 ```yaml
 services:
   gardenglow:
-    build: https://github.com/doenke/garten.git#main
+    image: ghcr.io/doenke/gardenglow:${GARDENGLOW_VERSION:-latest}
     container_name: gardenglow
     restart: unless-stopped
     environment:
@@ -42,8 +45,6 @@ services:
       OIDC_CLIENT_ID: change-me
       OIDC_CLIENT_SECRET: change-me
       OIDC_LOGOUT_URL: https://example.com/logout
-      WIDGET_API_KEY: change-this-api-key
-      DEBUG_MODE: "false"
     volumes:
       - gardenglow_data:/data
     ports:
@@ -57,10 +58,34 @@ volumes:
   gardenglow_data:
 ```
 
-### Start
+### Start mit Release-Image
+
+Konkreten Release-Tag nutzen:
 
 ```bash
-docker compose up --build
+GARDENGLOW_VERSION=1.2.3 docker compose up -d
+```
+
+Aktuelles `latest`-Image nutzen:
+
+```bash
+docker compose up -d
+```
+
+### Lokal aus dem ausgecheckten Repo bauen
+
+Für lokale Builds ergänzt `docker-compose.build.yml` den bestehenden Service um `build: .`:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.build.yml up --build
+```
+
+### Optionaler Remote-Build aus dem GitHub-Repository
+
+Für den bisherigen Remote-Build-Komfort ergänzt `docker-compose.remote-build.yml` den bestehenden Service um den GitHub-Build-Kontext:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.remote-build.yml up --build
 ```
 
 ## Wichtige Umgebungsvariablen
