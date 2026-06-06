@@ -14,6 +14,7 @@ class IndexViewTest(unittest.TestCase):
         self.db_fd, self.db_path = tempfile.mkstemp(suffix='.sqlite')
         os.close(self.db_fd)
         os.environ['DATABASE_URL'] = f'sqlite:///{self.db_path}'
+        os.environ['APP_VERSION'] = 'test-version'
         self.app = create_app()
         self.app.config.update(TESTING=True)
         self.client = self.app.test_client()
@@ -51,6 +52,15 @@ class IndexViewTest(unittest.TestCase):
             db.drop_all()
         os.unlink(self.db_path)
         os.environ.pop('DATABASE_URL', None)
+        os.environ.pop('APP_VERSION', None)
+
+    def test_footer_links_app_version_to_github_repository(self):
+        response = self.client.get('/')
+
+        self.assertEqual(response.status_code, 200)
+        html = response.get_data(as_text=True)
+        self.assertIn('href="https://github.com/doenke/gardenglow"', html)
+        self.assertIn('Version test-version', html)
 
     def test_index_plant_table_marks_empty_mobile_fields(self):
         response = self.client.get('/')
