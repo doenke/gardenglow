@@ -1,13 +1,14 @@
 # GardenGlow
 
-GardenGlow ist eine Progressive Web App (PWA) zur Verwaltung der Bette und Pflanzen eines Gartens.
-Die Anwendung verwaltet Beete, Pflanzen, Fotos und Kommentare – ebenso wie Bodenfeuchte und Bewässerung.
+GardenGlow ist eine Progressive Web App (PWA) zur Verwaltung der Beete und Pflanzen eines Gartens.
+Die Anwendung verwaltet Beete, Pflanzen, Fotos und Kommentare – ebenso wie Sensoren, Bodenfeuchte und Bewässerung inklusive Vorhersage der benötigten Bewässerungsdauer.
 
 ## Inhalt
 
 - [Schnellstart](#schnellstart)
 - [Features](#features)
 - [Konfiguration](#konfiguration)
+- [Sensorik, Bewässerungsprognose und Home Assistant](#sensorik-bewässerungsprognose-und-home-assistant)
 - [Authentifizierung](#deployment-mit-oidc)
 - [Deployment und Betrieb](#setup--deployment)
 - [API-Endpunkte](#webservice-für-bewässerungs-prognosen)
@@ -18,6 +19,7 @@ Die Anwendung verwaltet Beete, Pflanzen, Fotos und Kommentare – ebenso wie Bod
 GardenGlow ist für den Betrieb in Containern ausgelegt und speichert alle Daten persistent in einem Volume.
 Es können Gartenbereiche (Pflanzorte) angelegt und darin Pflanzen verwaltet werden.
 Zu Pflanzen lassen sich Fotos mit Datum und Kommentar sowie reine Textkommentare hinterlegen.
+Sensoren für Bodenfeuchte, Temperatur, Niederschlag und Bewässerung können Beeten zugeordnet werden. Über InfluxDB liest GardenGlow aktuelle Werte und historische Zeitreihen aus, zeigt sie in Beet-Ansichten an und nutzt sie für ML-basierte Prognosen der Bewässerungsdauer. Für Home Assistant stellt GardenGlow zusätzlich einen Bewässerungs-Blueprint bereit, der die prognostizierten Minuten abrufen und Switch- oder Valve-Entitäten passend schalten kann.
 
 
 ## Features
@@ -26,6 +28,10 @@ Zu Pflanzen lassen sich Fotos mit Datum und Kommentar sowie reine Textkommentare
 - Automatischer Standardbenutzer **„Gärtner“**, wenn keine OIDC-Variablen gesetzt sind
 - Benutzerprofil mit Name, E-Mail und Avatar (Avatar-Download vom OIDC-Profilbild)
 - Verwaltung von Pflanzorten und zugeordneten Pflanzen
+- Sensorverwaltung für Bodenfeuchte, Temperatur, Niederschlag und Bewässerung mit Beet-Zuordnung
+- InfluxDB-Anbindung für aktuelle Sensorwerte und Messhistorien
+- ML-basierte Vorhersage der benötigten Bewässerungsdauer je Beet anhand vorhandener Sensor-Zeitreihen
+- Home-Assistant-Bewässerungs-Blueprint zum automatischen Abruf der Prognose und Schalten von Switch-/Valve-Entitäten
 - Foto-Uploads inkl. Datum und Beschreibung
 - Kommentare auch ohne Foto möglich
 - Installierbare PWA (inkl. Web App Manifest / Service Worker)
@@ -255,6 +261,34 @@ Die wichtigsten Einstellungen werden über Umgebungsvariablen gelesen. `SECRET_K
 | --- | --- | --- | --- |
 | `COMMON_NAME_LOOKUP_LANG` | Nein | `de` | Sprache für die automatische Suche des „Bürgerlichen Namens“ über Wikipedia. |
 | `DEBUG_MODE` | Nein | `false` | Aktiviert mit `1`, `true`, `yes`, `on` oder `y` das vollständige Magic-/Taxonomie-Debugging. Ohne aktivierten Debug-Modus werden auf der Pflanzenseite keine Magic-Debug-Hinweise und kein Magic-Debuglog angezeigt; bei aktivem Debug enthält die JSON-Antwort zusätzlich externe Webanfragen samt Headern, Status und vollständigem Antwortinhalt. |
+
+## Sensorik, Bewässerungsprognose und Home Assistant
+
+GardenGlow verbindet die Beet- und Pflanzenverwaltung mit Sensordaten aus InfluxDB. Dadurch werden aktuelle Messwerte, historische Verläufe und eine Vorhersage der Bewässerungsdauer direkt in der App sowie über API-Endpunkte nutzbar.
+
+### Sensoren
+
+Sensoren werden über die Navigation **Sensoren** angelegt und gepflegt. Unterstützt werden die Sensortypen **Bodenfeuchte**, **Temperatur**, **Niederschlag** und **Bewässerung**. Ein Sensor kann einem oder mehreren Beeten zugeordnet werden; ohne Standortzuordnung gilt er als globaler Wetter-/Umgebungssensor und kann standortübergreifend verwendet werden.
+
+Für Home-Assistant-Entities reicht in der Regel die Entity-ID, z. B. `sensor.beet_1_bodenfeuchtigkeit`. GardenGlow nutzt dann die Standardstruktur der Home-Assistant-InfluxDB-Integration (`_field=value` sowie Tags wie `entity_id` und `domain`). Alternativ können Measurement, Field und Tags manuell gepflegt werden, wenn die Zeitreihen anders strukturiert sind. Auf der Sensor-Detailseite lässt sich der letzte Influx-Wert testen.
+
+### Anzeige von Sensorwerten
+
+Die Start- und Beet-Ansichten verwenden die verknüpften Sensoren, um aktuelle Bodenfeuchtewerte und Sensorverläufe darzustellen. In Beet-Ansichten werden Bodenfeuchte, Temperatur, Niederschlag und Bewässerung zusammen mit der Ziel-Bodenfeuchte angezeigt, sofern InfluxDB vollständig konfiguriert ist und passende Daten vorliegen.
+
+### Vorhersage der Bewässerungsdauer
+
+GardenGlow trainiert je produktivem Beet ein Modell aus vorhandenen Sensor-Zeitreihen. Die Prognose beantwortet die praktische Frage, wie viele Minuten die Bewässerung heute laufen sollte, um die konfigurierte Ziel-Bodenfeuchte zu erreichen. Negative Modellwerte werden auf `0` Minuten gesetzt; Werte oberhalb von `IRRIGATION_PREDICTION_MAX_MINUTES` werden auf diese Obergrenze begrenzt.
+
+Die Ziel-Bodenfeuchte kann global in der Konfiguration gesetzt und pro Beet überschrieben werden. Das Modelltraining läuft standardmäßig täglich um `03:00` Uhr, prüft aber nur fällige Modelle; zusätzlich wird beim API-Abruf trainiert, wenn für ein Beet noch kein Modell vorhanden ist oder das vorhandene Modell außerhalb des konfigurierten Trainingsintervalls liegt. Den Status der Modelle und manuelle Trainingsaktionen findest du auf der Admin-/Wartungsseite.
+
+Für Integrationen stehen zwei geschützte Endpunkte zur Verfügung: `GET /api/irrigation-predictions` für alle Beete und `GET /api/locations/<id>/irrigation-prediction` für ein einzelnes Beet. Beide benötigen `WIDGET_API_KEY` und eine vollständige InfluxDB-Konfiguration. Details zu Antwortfeldern und Fehlerfällen stehen im Abschnitt [API-Endpunkte](#api-endpunkte).
+
+### Home-Assistant-Blueprint
+
+GardenGlow stellt den Blueprint unter `/homeassistant/gardenglow-irrigation-blueprint.yaml` bereit. Die konkrete Import-URL wird in der GardenGlow-Konfiguration im Bereich **Home Assistant Blueprint** angezeigt und kann dort kopiert werden. Für den Blueprint wird außerdem ein einmaliger `rest_command` in der Home-Assistant-`configuration.yaml` benötigt, weil ein Blueprint diesen Webservice-Aufruf nicht selbst als Integration anlegen kann.
+
+Beim Erstellen der Automation wählst du API-Token, Beet-ID, Startzeit, eine Switch- oder Valve-Entität sowie optional einen `input_number`-Helfer für die prognostizierten Minuten. Zur Startzeit ruft Home Assistant die GardenGlow-Prognose ab, schreibt die Minuten optional in den Helfer und schaltet bzw. öffnet die Bewässerungs-Entität genau für die vorhergesagte Dauer.
 
 ## API-Endpunkte
 
