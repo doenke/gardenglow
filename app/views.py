@@ -1997,8 +1997,6 @@ def save_influx_config():
     influx_config.influx_bucket = (request.form.get('influx_bucket') or '').strip()
     if 'homeassistant_url' in request.form:
         influx_config.homeassistant_url = (request.form.get('homeassistant_url') or '').strip()
-    if 'gardenglow_external_url' in request.form:
-        influx_config.gardenglow_external_url = _normalize_external_url(request.form.get('gardenglow_external_url'))
     influx_config.updated_at = utc_now()
 
     influx_token = (request.form.get('influx_token') or '').strip()
@@ -2019,7 +2017,6 @@ def save_influx_config():
 def save_homeassistant_config():
     influx_config = _ensure_influx_integration_config()
     influx_config.homeassistant_url = (request.form.get('homeassistant_url') or '').strip()
-    influx_config.gardenglow_external_url = _normalize_external_url(request.form.get('gardenglow_external_url'))
     influx_config.updated_at = utc_now()
 
     homeassistant_token = (request.form.get('homeassistant_token') or '').strip()
@@ -2042,6 +2039,7 @@ def save_connection_options():
         flash(str(error), 'error')
         return redirect(url_for('main.config', _anchor='connection-options'))
 
+    influx_config.gardenglow_external_url = _normalize_external_url(request.form.get('gardenglow_external_url'))
     influx_config.verify_tls = _form_bool('verify_tls')
     influx_config.updated_at = utc_now()
     db.session.commit()
