@@ -24,12 +24,18 @@ Zusätzlich ist die Anwendung als installierbare PWA nutzbar und enthält einen 
 - Reverse-Proxy-tauglich durch `ProxyFix`
 - Healthcheck unter `/healthz`
 
-## Start mit Docker Compose
+## Schnellstart
 
 `docker-compose.yml` nutzt standardmäßig das veröffentlichte Container-Image aus GitHub Container Registry.
 Über `GARDENGLOW_VERSION` kann ein konkreter Release-Tag gewählt werden; ohne Variable wird `latest` verwendet.
 
-### `docker-compose.yml`
+Erzeuge zuerst einen sicheren `SECRET_KEY`:
+
+```bash
+python -c 'import secrets; print(secrets.token_urlsafe(48))'
+```
+
+Minimales `docker-compose.yml` ohne OIDC-Variablen:
 
 ```yaml
 services:
@@ -38,13 +44,9 @@ services:
     container_name: gardenglow
     restart: unless-stopped
     environment:
-      SECRET_KEY: changeme
+      SECRET_KEY: hier-den-generierten-secret-key-einfuegen
       DATABASE_URL: sqlite:////data/garden.db
       UPLOAD_FOLDER: /data/uploads
-      OIDC_SERVER_METADATA_URL: https://example.com/.well-known/openid-configuration
-      OIDC_CLIENT_ID: change-me
-      OIDC_CLIENT_SECRET: change-me
-      OIDC_LOGOUT_URL: https://example.com/logout
     volumes:
       - gardenglow_data:/data
     ports:
@@ -57,6 +59,8 @@ services:
 volumes:
   gardenglow_data:
 ```
+
+Ohne OIDC-Variablen startet GardenGlow automatisch mit dem Standardbenutzer **„Gärtner“**. Datenbank und Uploads liegen persistent im Docker-Volume `gardenglow_data`. Nach dem Start mit `docker compose up -d` erreichst du die App unter `http://localhost:8000`.
 
 ### Start mit Release-Image
 
@@ -86,6 +90,39 @@ Für den bisherigen Remote-Build-Komfort ergänzt `docker-compose.remote-build.y
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.remote-build.yml up --build
+```
+
+## Deployment mit OIDC
+
+Wenn GardenGlow mit einem externen OIDC-Provider betrieben werden soll, müssen `OIDC_SERVER_METADATA_URL`, `OIDC_CLIENT_ID` und `OIDC_CLIENT_SECRET` vollständig gesetzt werden. `OIDC_LOGOUT_URL` ist optional.
+
+Beispiel für `docker-compose.yml` mit OIDC:
+
+```yaml
+services:
+  gardenglow:
+    image: ghcr.io/doenke/gardenglow:${GARDENGLOW_VERSION:-latest}
+    container_name: gardenglow
+    restart: unless-stopped
+    environment:
+      SECRET_KEY: hier-den-generierten-secret-key-einfuegen
+      DATABASE_URL: sqlite:////data/garden.db
+      UPLOAD_FOLDER: /data/uploads
+      OIDC_SERVER_METADATA_URL: https://example.com/.well-known/openid-configuration
+      OIDC_CLIENT_ID: change-me
+      OIDC_CLIENT_SECRET: change-me
+      OIDC_LOGOUT_URL: https://example.com/logout
+    volumes:
+      - gardenglow_data:/data
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/healthz')"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+volumes:
+  gardenglow_data:
 ```
 
 ## Releases / Container Images
