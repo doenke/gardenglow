@@ -226,39 +226,43 @@ Die wichtigsten Einstellungen werden über Umgebungsvariablen gelesen. `SECRET_K
 | `COMMON_NAME_LOOKUP_LANG` | Nein | `de` | Sprache für die automatische Suche des „Bürgerlichen Namens“ über Wikipedia. |
 | `DEBUG_MODE` | Nein | `false` | Aktiviert mit `1`, `true`, `yes`, `on` oder `y` das vollständige Magic-/Taxonomie-Debugging. Ohne aktivierten Debug-Modus werden auf der Pflanzenseite keine Magic-Debug-Hinweise und kein Magic-Debuglog angezeigt; bei aktivem Debug enthält die JSON-Antwort zusätzlich externe Webanfragen samt Headern, Status und vollständigem Antwortinhalt. |
 
-## Webservice für Bewässerungs-Prognosen
+## API-Endpunkte
 
-GardenGlow stellt ML-basierte JSON-Endpunkte bereit, die aus den vorhandenen Sensor-Zeitreihen je Beet vorhersagen, wie viele Minuten die Bewässerung heute laufen sollte, um die Ziel-Bodenfeuchte zu erreichen. Ein täglicher Cronjob prüft standardmäßig um `03:00` Uhr, ob Modelle fällig sind, und trainiert sie bei Bedarf neu. Die Uhrzeit kann über `IRRIGATION_PREDICTION_TRAIN_CRON_TIME` im Format `HH:MM` geändert werden. Zusätzlich wird das Training pro Beet beim Abruf weiterhin automatisch ausgeführt, falls noch kein Modell vorhanden ist oder das letzte Training mindestens eine Woche zurückliegt.
+Die folgenden JSON-Endpunkte sind für externe Integrationen und Widgets gedacht. Für beide API-Gruppen kann der in `WIDGET_API_KEY` konfigurierte Schlüssel entweder über `X-API-Key: <WIDGET_API_KEY>` oder über `Authorization: Bearer <WIDGET_API_KEY>` gesendet werden.
 
-Endpunkte:
+### `GET /api/stats`
 
-- `GET /api/irrigation-predictions` – Prognosen für alle produktiven Beete
-- `GET /api/locations/<id>/irrigation-prediction` – Prognose für ein einzelnes Beet
+- **Methode und Pfad:** `GET /api/stats`
+- **Zweck:** Liefert kompakte Pflanzen-, Beet-, Upload- und Datenbankstatistiken für Dashboards oder Widgets.
+- **Authentifizierung:** Erfordert `WIDGET_API_KEY`; nutze den Header `X-API-Key: <WIDGET_API_KEY>` oder alternativ `Authorization: Bearer <WIDGET_API_KEY>`.
+- **Wichtige Antwortfelder:**
+  - `plants`: Anzahl aller Pflanzen
+  - `beds`: Anzahl aller Beete/Pflanzorte ohne den internen Papierkorb
+  - `uploads`: Anzahl aller hochgeladenen Dateien im Upload-Verzeichnis
+  - `upload_size_bytes`: Gesamtgröße aller Uploads in Byte
+  - `database_size_bytes`: Größe der SQLite-Datenbankdatei in Byte; bei anderen Datenbanktypen oder fehlender Datei `0`
+- **Fehler-/Sonderfälle:** Wenn `WIDGET_API_KEY` nicht gesetzt ist, antwortet der Endpunkt mit `503`. Bei fehlendem oder falschem API-Key antwortet er mit `401`. Upload-Statistiken werden für die Dauer von `STATS_UPLOAD_CACHE_TTL_SECONDS` zwischengespeichert.
 
-Authentifizierung entspricht `/api/stats`:
+### `GET /api/irrigation-predictions`
 
-- Header `X-API-Key: <WIDGET_API_KEY>`
-- alternativ `Authorization: Bearer <WIDGET_API_KEY>`
+- **Methode und Pfad:** `GET /api/irrigation-predictions`
+- **Zweck:** Liefert ML-basierte Bewässerungsprognosen für alle produktiven Beete. GardenGlow sagt aus den vorhandenen Sensor-Zeitreihen vorher, wie viele Minuten die Bewässerung heute laufen sollte, um die Ziel-Bodenfeuchte zu erreichen.
+- **Authentifizierung:** Erfordert `WIDGET_API_KEY`; nutze den Header `X-API-Key: <WIDGET_API_KEY>` oder alternativ `Authorization: Bearer <WIDGET_API_KEY>`.
+- **Wichtige Antwortfelder:**
+  - `predictions`: Liste der Prognosen je Beet
+  - `max_minutes`: aktuell konfigurierte Obergrenze für vorhergesagte Bewässerungsdauer
+  - Pro Eintrag in `predictions`: `location_id`, `location_name`, `target_soil_moisture_percent`, `predicted_minutes`, `raw_predicted_minutes`, `source`, `trained_now`, `training_error`, `model` und `features`
+- **Fehler-/Sonderfälle:** Wenn `WIDGET_API_KEY` nicht gesetzt ist, antwortet der Endpunkt mit `503`; bei fehlendem oder falschem API-Key mit `401`. Wenn InfluxDB nicht vollständig konfiguriert ist, antwortet der Endpunkt ebenfalls mit `503`. Ein täglicher Cronjob prüft standardmäßig um `03:00` Uhr, ob Modelle fällig sind, und trainiert sie bei Bedarf neu; die Uhrzeit kann über `IRRIGATION_PREDICTION_TRAIN_CRON_TIME` im Format `HH:MM` geändert werden. Beim Abruf wird das Training zusätzlich automatisch ausgeführt, falls noch kein Modell vorhanden ist oder das letzte Training mindestens eine Woche zurückliegt. Negative Vorhersagen werden auf `0` Minuten gesetzt; Werte oberhalb der konfigurierten Obergrenze werden begrenzt.
 
-Die Antwort enthält unter anderem `predicted_minutes`, `raw_predicted_minutes`, `target_soil_moisture_percent`, Modell-Metadaten und die für die aktuelle Prognose verwendeten Features. Negative Vorhersagen werden auf `0` Minuten gesetzt; die Obergrenze wird auf der Konfigurationsseite oder über `IRRIGATION_PREDICTION_MAX_MINUTES` konfiguriert und beträgt standardmäßig `120` Minuten.
+### `GET /api/locations/<id>/irrigation-prediction`
 
-## Webservice für Pflanzen-/Beet-Zahlen
+- **Methode und Pfad:** `GET /api/locations/<id>/irrigation-prediction`
+- **Zweck:** Liefert die ML-basierte Bewässerungsprognose für ein einzelnes Beet mit der angegebenen numerischen Standort-ID.
+- **Authentifizierung:** Erfordert `WIDGET_API_KEY`; nutze den Header `X-API-Key: <WIDGET_API_KEY>` oder alternativ `Authorization: Bearer <WIDGET_API_KEY>`.
+- **Wichtige Antwortfelder:** `location_id`, `location_name`, `target_soil_moisture_percent`, `predicted_minutes`, `raw_predicted_minutes`, `max_minutes`, `source`, `trained_now`, `training_error`, `model` und `features`.
+- **Fehler-/Sonderfälle:** Wenn `WIDGET_API_KEY` nicht gesetzt ist, antwortet der Endpunkt mit `503`; bei fehlendem oder falschem API-Key mit `401`. Wenn InfluxDB nicht vollständig konfiguriert ist, antwortet der Endpunkt ebenfalls mit `503`. Für den internen Papierkorb wird keine Bewässerung vorhergesagt; der Endpunkt antwortet dann mit `400`. Für unbekannte Standort-IDs gilt die normale Flask-404-Behandlung. Negative Vorhersagen werden auf `0` Minuten gesetzt; Werte oberhalb der konfigurierten Obergrenze werden begrenzt.
 
-Es gibt einen zusätzlichen JSON-Endpunkt unter `GET /api/stats`, der folgende Werte ausgibt:
-
-- `plants`: Anzahl aller Pflanzen
-- `beds`: Anzahl aller Beete/Pflanzorte (ohne den internen Papierkorb)
-- `uploads`: Anzahl aller hochgeladenen Dateien im Upload-Verzeichnis
-- `upload_size_bytes`: Gesamtgröße aller Uploads in Byte
-- `database_size_bytes`: Größe der SQLite-Datenbankdatei in Byte
-
-Authentifizierung:
-- Per Header `X-API-Key: <WIDGET_API_KEY>`
-- alternativ `Authorization: Bearer <WIDGET_API_KEY>`
-
-Wenn `WIDGET_API_KEY` nicht gesetzt ist, antwortet der Endpunkt mit `503`.
-
-### Beispiel für gethomepage Custom API Widget
+### Beispiel: gethomepage Custom API Widget
 
 Beispielkonfiguration für `services.yaml` in gethomepage:
 
@@ -292,6 +296,7 @@ Beispielkonfiguration für `services.yaml` in gethomepage:
 ```
 
 Tipp: Lege den Key in gethomepage als Umgebungsvariable ab (z. B. `HOMEPAGE_VAR_GARTEN_API_KEY`) und hinterlege ihn nicht im Klartext in der YAML.
+
 ## Setup / Deployment
 
 ### Pflichtvariable `SECRET_KEY`
