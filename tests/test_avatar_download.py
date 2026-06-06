@@ -91,6 +91,46 @@ class AvatarDownloadSecurityTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             _avatar_target_path(self.avatar_folder, '../escape.png')
 
+    def test_successful_avatar_download_removes_previous_file(self):
+        old_filename = 'avatar_old.png'
+        old_target = os.path.join(self.avatar_folder, old_filename)
+        os.makedirs(self.avatar_folder, exist_ok=True)
+        with open(old_target, 'wb') as f:
+            f.write(b'old-avatar')
+        user = User(sub='safe-user', avatar_filename=old_filename)
+        response = FakeAvatarResponse(
+            [b'new-avatar'],
+            {'Content-Type': 'image/png', 'Content-Length': '10'},
+        )
+
+        with self.app.app_context(), patch('app.auth.requests.get', return_value=response):
+            _download_avatar(user, 'https://example.test/avatar.png')
+
+        self.assertFalse(os.path.exists(old_target))
+        self.assertIsNotNone(user.avatar_filename)
+        self.assertNotEqual(user.avatar_filename, old_filename)
+        with open(os.path.join(self.avatar_folder, user.avatar_filename), 'rb') as f:
+            self.assertEqual(f.read(), b'new-avatar')
+
+    def test_rejected_avatar_download_keeps_previous_file(self):
+        old_filename = 'avatar_old.png'
+        old_target = os.path.join(self.avatar_folder, old_filename)
+        os.makedirs(self.avatar_folder, exist_ok=True)
+        with open(old_target, 'wb') as f:
+            f.write(b'old-avatar')
+        user = User(sub='safe-user', avatar_filename=old_filename)
+        response = FakeAvatarResponse(
+            [b'not-an-image'],
+            {'Content-Type': 'text/html', 'Content-Length': '10'},
+        )
+
+        with self.app.app_context(), patch('app.auth.requests.get', return_value=response):
+            _download_avatar(user, 'https://example.test/avatar.png')
+
+        self.assertEqual(user.avatar_filename, old_filename)
+        with open(old_target, 'rb') as f:
+            self.assertEqual(f.read(), b'old-avatar')
+
     def test_invalid_content_type_is_rejected(self):
         user = User(sub='safe-user')
         response = FakeAvatarResponse(
