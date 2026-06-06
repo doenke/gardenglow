@@ -190,7 +190,9 @@ Die folgende Compose-Datei enthält die üblichen Einstellungen für Datenbank, 
 ```yaml
 services:
   gardenglow:
-    image: ghcr.io/doenke/gardenglow:${GARDENGLOW_VERSION:-latest}
+    image: ghcr.io/doenke/gardenglow:latest
+    # für die DEV Version:
+    #build: https://github.com/doenke/gardenglow.git#main
     container_name: gardenglow
     restart: unless-stopped
     environment:
