@@ -60,7 +60,7 @@ volumes:
   gardenglow_data:
 ```
 
-Ohne OIDC-Variablen startet GardenGlow automatisch mit dem Standardbenutzer **„Gärtner“**. Datenbank und Uploads liegen persistent im Docker-Volume `gardenglow_data`. Nach dem Start mit `docker compose up -d` erreichst du die App unter `http://localhost:8000`.
+Ohne OIDC-Variablen startet GardenGlow automatisch mit dem Standardbenutzer **„Gärtner“**; weitere Details findest du unter [Betrieb ohne OIDC](#betrieb-ohne-oidc). Datenbank und Uploads liegen persistent im Docker-Volume `gardenglow_data`. Nach dem Start mit `docker compose up -d` erreichst du die App unter `http://localhost:8000`.
 
 ### Start mit Release-Image
 
@@ -92,11 +92,33 @@ Für den bisherigen Remote-Build-Komfort ergänzt `docker-compose.remote-build.y
 docker compose -f docker-compose.yml -f docker-compose.remote-build.yml up --build
 ```
 
+## Authentifizierung
+
+GardenGlow kann entweder ohne externen Identity-Provider oder mit OIDC betrieben werden. Welche Variante aktiv ist, hängt ausschließlich von den gesetzten OIDC-Umgebungsvariablen ab.
+
+### Betrieb ohne OIDC
+
+Setze für diesen Betriebsmodus keine OIDC-Variablen. Wenn keine OIDC-Variablen vorhanden sind, startet GardenGlow ohne externen Login und meldet automatisch den Standardbenutzer **„Gärtner“** an.
+
+Dieser Modus eignet sich für private Installationen oder Umgebungen, die bereits durch einen Reverse Proxy, ein VPN oder eine vergleichbare vorgelagerte Zugriffskontrolle geschützt sind.
+
+### Betrieb mit OIDC
+
+Für den Betrieb mit OIDC müssen die folgenden Pflichtvariablen vollständig gesetzt sein:
+
+- `OIDC_SERVER_METADATA_URL`
+- `OIDC_CLIENT_ID`
+- `OIDC_CLIENT_SECRET`
+
+Optional kann zusätzlich `OIDC_LOGOUT_URL` gesetzt werden, um auf eine externe Logout-URL des Identity-Providers zu verweisen.
+
+Sobald mindestens eine OIDC-Variable gesetzt ist, müssen die Pflichtvariablen `OIDC_SERVER_METADATA_URL`, `OIDC_CLIENT_ID` und `OIDC_CLIENT_SECRET` vollständig vorhanden sein. Unvollständige OIDC-Konfigurationen werden nicht als Betrieb ohne OIDC interpretiert.
+
 ## Deployment mit OIDC
 
 Wenn GardenGlow mit einem externen OIDC-Provider betrieben werden soll, müssen `OIDC_SERVER_METADATA_URL`, `OIDC_CLIENT_ID` und `OIDC_CLIENT_SECRET` vollständig gesetzt werden. `OIDC_LOGOUT_URL` ist optional.
 
-Beispiel für `docker-compose.yml` mit OIDC:
+Beispiel für `docker-compose.yml` mit OIDC; beachte dazu die Hinweise unter [Betrieb mit OIDC](#betrieb-mit-oidc):
 
 ```yaml
 services:
