@@ -88,6 +88,36 @@ Für den bisherigen Remote-Build-Komfort ergänzt `docker-compose.remote-build.y
 docker compose -f docker-compose.yml -f docker-compose.remote-build.yml up --build
 ```
 
+## Releases / Container Images
+
+Die veröffentlichten Container-Images werden über Tags versioniert:
+
+- `latest` steht für den neuesten stabilen Release.
+- `1.2.3` steht exakt für diesen Release.
+- `1.2` kann optional als Minor-Tag verwendet werden und steht dann für den neuesten Patch der Minor-Version.
+- `edge` oder `main` können optional als Entwicklungs-Tags verwendet werden und stehen dann für den aktuellen Entwicklungsstand.
+
+Für produktive Deployments wird empfohlen, eine konkrete Version zu pinnen:
+
+```bash
+GARDENGLOW_VERSION=1.2.3 docker compose up -d
+```
+
+Produktive Systeme sollten nach Möglichkeit eine konkrete Version wie `1.2.3` statt `latest` verwenden, damit Updates kontrolliert und reproduzierbar erfolgen.
+
+Update auf den neuesten stabilen Release:
+
+```bash
+docker compose pull
+docker compose up -d
+```
+
+Lokaler Build aus dem ausgecheckten Repository:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.build.yml up --build
+```
+
 ## Wichtige Umgebungsvariablen
 
 ### Allgemein
