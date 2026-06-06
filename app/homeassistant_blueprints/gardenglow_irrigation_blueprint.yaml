@@ -7,7 +7,7 @@ blueprint:
     {{ gardenglow_base_url }}/api/locations/{{ bed_id }}/irrigation-prediction
     mit dem GardenGlow API Token auf und liefert die Antwort per response_variable
     zurück.
-  domain: script
+  domain: automation
   input:
     gardenglow_base_url:
       name: GardenGlow Base-URL
@@ -30,6 +30,12 @@ blueprint:
           min: 1
           mode: box
           step: 1
+    irrigation_start_time:
+      name: Startzeit
+      description: Uhrzeit, zu der die Bewässerungs-Automation täglich automatisch startet.
+      default: "06:00:00"
+      selector:
+        time:
     watering_entity:
       name: Bewässerungs-Entität
       description: Switch oder Valve, das für die vorhergesagte Dauer eingeschaltet bzw. geöffnet wird.
@@ -53,10 +59,15 @@ variables:
   gardenglow_base_url: !input gardenglow_base_url
   api_token: !input api_token
   bed_id: !input bed_id
+  irrigation_start_time: !input irrigation_start_time
   watering_entity: !input watering_entity
   minutes_helper_entity: !input minutes_helper_entity
 
-sequence:
+trigger:
+  - platform: time
+    at: !input irrigation_start_time
+
+action:
   - action: rest_command.gardenglow_get_irrigation_minutes
     data:
       base_url: "{{ gardenglow_base_url }}"
