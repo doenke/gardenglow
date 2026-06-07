@@ -275,6 +275,26 @@ class IrrigationPredictionServiceTest(unittest.TestCase):
             config = InfluxIntegrationConfig.query.one()
             self.assertEqual(config.irrigation_prediction_max_minutes, 75)
 
+    def test_widget_api_key_accepts_special_characters_via_bearer_header(self):
+        special_token = "abc:!#%&=?{}[]_~.-+/\"'"
+        self.app.config['WIDGET_API_KEY'] = special_token
+
+        response = self.client.get('/api/stats', headers={
+            'Authorization': f'Bearer {special_token}',
+        })
+
+        self.assertEqual(response.status_code, 200)
+
+    def test_widget_api_key_accepts_special_characters_via_x_api_key_header(self):
+        special_token = "abc:!#%&=?{}[]_~.-+/\"'"
+        self.app.config['WIDGET_API_KEY'] = special_token
+
+        response = self.client.get('/api/stats', headers={
+            'X-API-Key': special_token,
+        })
+
+        self.assertEqual(response.status_code, 200)
+
     def test_api_returns_prediction_payload(self):
         now = datetime(2026, 6, 5, 12, tzinfo=timezone.utc)
         adapter = FakeAdapter({'soil': [{'time': now.isoformat(), 'value': 50}], 'irrigation': []})
