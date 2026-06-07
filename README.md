@@ -105,6 +105,7 @@ Für den normalen Start brauchst du nur wenige Werte:
 | `GARDENGLOW_VERSION` | Optionaler Container-Tag. Ohne Wert wird `latest` genutzt. |
 | `HEADER_LOGO_URL` | Optionales Logo im Kopfbereich. |
 | `WIDGET_API_KEY` | Optionaler Schlüssel für Widgets und Bewässerungs-APIs. |
+| `API_REQUEST_HEADER_LOGGING` | Optionales Debug-Logging: schreibt die vollständigen Request-Header für `/api`-Endpunkte ins Docker-Log. Standardmäßig aktiv, wenn `DEBUG_MODE=true` ist. |
 
 Für Sensorik kommen bei Bedarf noch InfluxDB-Werte dazu:
 
@@ -232,6 +233,8 @@ services:
       # Optional: Pflanzen-/Taxonomie-Hilfen.
       COMMON_NAME_LOOKUP_LANG: de
       DEBUG_MODE: "false"
+      # Optional: API-Request-Header im Docker-Log ausgeben (sonst nur bei DEBUG_MODE=true).
+      API_REQUEST_HEADER_LOGGING: "false"
 
       # Optional: professioneller Login per OIDC.
       # Wenn du OIDC nutzt, müssen alle drei Kernwerte vollständig gesetzt sein.
