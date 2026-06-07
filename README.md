@@ -39,7 +39,7 @@ python -c 'import secrets; print(secrets.token_urlsafe(48))'
 ```yaml
 services:
   gardenglow:
-    image: ghcr.io/doenke/gardenglow:${GARDENGLOW_VERSION:-latest}
+    image: ghcr.io/doenke/gardenglow:latest
     container_name: gardenglow
     restart: unless-stopped
     environment:
@@ -102,7 +102,6 @@ Für den normalen Start brauchst du nur wenige Werte:
 | `SECRET_KEY` | Pflicht. Schützt Sessions und sollte ein langer, zufälliger Wert sein. |
 | `DATABASE_URL` | Speicherort der Datenbank. Für Docker ist `sqlite:////data/garden.db` praktisch. |
 | `UPLOAD_FOLDER` | Speicherort für Pflanzenfotos. Für Docker passt `/data/uploads`. |
-| `GARDENGLOW_VERSION` | Optionaler Container-Tag. Ohne Wert wird `latest` genutzt. |
 | `HEADER_LOGO_URL` | Optionales Logo im Kopfbereich. |
 | `WIDGET_API_KEY` | Optionaler Schlüssel für Widgets und Bewässerungs-APIs. |
 
