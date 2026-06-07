@@ -84,7 +84,7 @@
     url: "{{ gardenglow_public_base_url }}/api/locations/{{ '{{' }} bed_id {{ '}}' }}/irrigation-prediction"
     method: GET
     headers:
-      X-API-Key: "{{ '{{' }} api_token {{ '}}' }}"</code></pre>
+      Authorization: "Bearer {{ '{{' }} api_token {{ '}}' }}"</code></pre>
         <button type="button" class="btn secondary" data-copy-target="homeassistant-rest-command-yaml" aria-label="RESTful-Command-YAML kopieren">YAML kopieren</button>
       </div>
       <ol class="text-muted mt-0 mb-0">

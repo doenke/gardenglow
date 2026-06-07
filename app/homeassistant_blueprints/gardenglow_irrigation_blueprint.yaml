@@ -13,7 +13,7 @@ blueprint:
         url: "__GARDENGLOW_BASE_URL__/api/locations/{{ bed_id }}/irrigation-prediction"
         method: GET
         headers:
-          X-API-Key: "{{ api_token }}"
+          Authorization: "Bearer {{ api_token }}"
 
     Danach kann diese Blueprint-Automation den Command
     rest_command.gardenglow_get_irrigation_minutes verwenden. Beim Ausführen
