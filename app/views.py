@@ -111,7 +111,6 @@ ENVIRONMENT_VARIABLES = [
     {'name': 'HEADER_LOGO_URL', 'config_key': 'HEADER_LOGO_URL', 'default': ''},
     {'name': 'COMMON_NAME_LOOKUP_LANG', 'config_key': 'COMMON_NAME_LOOKUP_LANG', 'default': 'de'},
     {'name': 'DEBUG_MODE', 'config_key': 'DEBUG_MODE', 'default': 'false'},
-    {'name': 'API_REQUEST_HEADER_LOGGING', 'config_key': 'API_REQUEST_HEADER_LOGGING', 'default': 'DEBUG_MODE'},
     {'name': 'INFLUX_URL', 'config_key': 'INFLUX_URL', 'default': ''},
     {'name': 'INFLUX_TOKEN', 'config_key': 'INFLUX_TOKEN', 'default': '', 'sensitive': True},
     {'name': 'INFLUX_ORG', 'config_key': 'INFLUX_ORG', 'default': ''},
