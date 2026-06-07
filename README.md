@@ -45,7 +45,6 @@ services:
     environment:
       SECRET_KEY: hier-den-generierten-secret-key-einfuegen
       DATABASE_URL: sqlite:////data/garden.db
-      UPLOAD_FOLDER: /data/uploads
     volumes:
       - gardenglow_data:/data
     ports:
