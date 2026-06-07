@@ -26,7 +26,7 @@ GardenGlow passt zu dir, wenn du ...
 
 ## Schnellstart mit Docker
 
-Wenn du GardenGlow einfach ausprobieren oder privat betreiben möchtest, reicht meist dieses Setup.
+Wenn du GardenGlow einfach ausprobieren, reicht meist dieses Setup.
 
 1. Erzeuge einen sicheren Schlüssel:
 
