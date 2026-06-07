@@ -168,6 +168,9 @@ class InfluxConfigViewTest(unittest.TestCase):
         self.assertIn('X-API-Key: "{{ api_token }}"', yaml)
         self.assertIn('rest_command.gardenglow_get_irrigation_minutes', yaml)
         self.assertIn('response_variable: gardenglow_response', yaml)
+        self.assertIn('gardenglow_status:', yaml)
+        self.assertIn('GardenGlow API-Fehler (HTTP {{ gardenglow_status }}): {{ gardenglow_content }}', yaml)
+        self.assertIn('from_json({})', yaml)
         self.assertIn('valve.open_valve', yaml)
         self.assertIn('switch.turn_on', yaml)
 

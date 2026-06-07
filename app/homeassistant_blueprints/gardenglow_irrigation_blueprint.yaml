@@ -83,11 +83,22 @@ action:
     response_variable: gardenglow_response
 
   - variables:
+      gardenglow_status: "{{ gardenglow_response.status | default(0) | int(0) }}"
+      gardenglow_content: "{{ gardenglow_response.content | default('') }}"
+      watering_domain: "{{ watering_entity.split('.')[0] }}"
+
+  - if:
+      - condition: template
+        value_template: "{{ gardenglow_status | int(0) < 200 or gardenglow_status | int(0) >= 300 }}"
+    then:
+      - stop: "GardenGlow API-Fehler (HTTP {{ gardenglow_status }}): {{ gardenglow_content }}"
+        error: true
+
+  - variables:
       gardenglow_payload: >-
-        {{ gardenglow_response.content | default('{}') | from_json }}
+        {{ gardenglow_response.content if gardenglow_response.content is mapping else (gardenglow_response.content | default('{}') | from_json({})) }}
       irrigation_minutes: >-
         {{ gardenglow_payload.predicted_minutes | default(0) | float(0) }}
-      watering_domain: "{{ watering_entity.split('.')[0] }}"
 
   - if:
       - condition: template
