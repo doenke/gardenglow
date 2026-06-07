@@ -1,4 +1,4 @@
-from flask import Flask, request
+from flask import Flask
 from sqlalchemy import inspect
 from werkzeug.middleware.proxy_fix import ProxyFix
 from .models import db, LightNeed, InfluxIntegrationConfig, IrrigationPredictionModel, Location, Sensor, User, SENSOR_TYPE_SOIL_MOISTURE, SENSOR_TYPE_TEMPERATURE, SENSOR_TYPE_RAINFALL
@@ -7,8 +7,6 @@ from .views import main_bp
 from .map_data import parse_stored_points
 from .services import influx_service
 from .services.irrigation_prediction_scheduler import DEFAULT_IRRIGATION_PREDICTION_TRAIN_CRON_TIME, start_irrigation_prediction_train_cron
-import json
-import logging
 import os
 
 
@@ -27,51 +25,6 @@ _WEAK_SECRET_KEY_VALUES = {
     'test',
     'dev-secret-change-me',
 }
-
-
-_TRUTHY_CONFIG_VALUES = {'1', 'true', 'yes', 'on', 'y'}
-
-
-def _env_bool(name, default=False):
-    raw_value = os.getenv(name)
-    if raw_value is None:
-        return default
-    return raw_value.strip().lower() in _TRUTHY_CONFIG_VALUES
-
-
-def _is_api_request_path(path):
-    return path == '/api' or path.startswith('/api/')
-
-
-def _api_request_headers_for_log():
-    return {key: value for key, value in request.headers.items()}
-
-
-def _register_api_request_header_logging(app):
-    if app.config.get('API_REQUEST_HEADER_LOGGING'):
-        app.logger.setLevel(logging.INFO)
-
-    @app.before_request
-    def log_api_request_headers():
-        if not app.config.get('API_REQUEST_HEADER_LOGGING'):
-            return
-        if not _is_api_request_path(request.path):
-            return
-
-        app.logger.info(
-            'API request headers: %s',
-            json.dumps(
-                {
-                    'method': request.method,
-                    'path': request.full_path.rstrip('?'),
-                    'endpoint': request.endpoint,
-                    'remote_addr': request.remote_addr,
-                    'headers': _api_request_headers_for_log(),
-                },
-                ensure_ascii=False,
-                sort_keys=True,
-            ),
-        )
 
 
 def _validate_secret_key(secret_key):
@@ -141,8 +94,7 @@ def create_app():
     app.config['STATS_UPLOAD_CACHE_TTL_SECONDS'] = max(0, int(os.getenv('STATS_UPLOAD_CACHE_TTL_SECONDS', '60')))
     app.config['HEADER_LOGO_URL'] = os.getenv('HEADER_LOGO_URL', '').strip()
     app.config['COMMON_NAME_LOOKUP_LANG'] = os.getenv('COMMON_NAME_LOOKUP_LANG', 'de').strip().lower() or 'de'
-    app.config['DEBUG_MODE'] = _env_bool('DEBUG_MODE')
-    app.config['API_REQUEST_HEADER_LOGGING'] = _env_bool('API_REQUEST_HEADER_LOGGING', app.config['DEBUG_MODE'])
+    app.config['DEBUG_MODE'] = (os.getenv('DEBUG_MODE', 'false') or '').strip().lower() in {'1', 'true', 'yes', 'on', 'y'}
     app.config['INFLUX_URL'] = os.getenv('INFLUX_URL', '').strip()
     app.config['INFLUX_TOKEN'] = os.getenv('INFLUX_TOKEN', '').strip()
     app.config['INFLUX_ORG'] = os.getenv('INFLUX_ORG', '').strip()
@@ -160,8 +112,6 @@ def create_app():
     oauth.init_app(app)
 
     app.jinja_env.filters['stored_points'] = parse_stored_points
-
-    _register_api_request_header_logging(app)
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(main_bp)
