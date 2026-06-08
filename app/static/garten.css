@@ -167,6 +167,10 @@ tbody tr[data-row-link]:hover td{background:color-mix(in srgb,var(--surface-soft
 .index-locations-panel .plant-count-cell{text-align:center}
 .index-locations-panel td{padding:.62rem .68rem}
 .index-plants-panel{margin-top:1rem}
+.index-plants-table .index-plant-location-cell{white-space:nowrap}
+.index-plants-table .index-plant-location-link{display:inline-flex;align-items:center;max-width:18rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;border:1px solid var(--border);border-radius:999px;padding:.18rem .5rem;background:var(--surface);font-size:.82rem;text-decoration:none;box-shadow:0 2px 8px rgba(0,0,0,.06)}
+.index-plants-table .index-plant-location-link:hover{background:color-mix(in srgb,var(--surface) 84%, var(--primary) 16%);text-decoration:none}
+.index-plants-table .index-plant-location-link:focus-visible{outline:3px solid color-mix(in srgb,var(--primary) 75%, #fff 25%);outline-offset:2px}
 
 /* Responsive layout */
 @media (max-width:900px){.page-wrap{padding:.8rem 0}.site-header{gap:.75rem;padding:.8rem .9rem}.brand{gap:.6rem}.brand img{height:38px}.brand h1{font-size:1.2rem}.avatar{width:38px;height:38px}.index-dashboard{padding:1rem}.index-hero{display:block}.index-map-panel{position:relative;top:auto;margin-bottom:1rem}.index-map-image{max-height:none}.index-map-kicker{position:static;display:inline-flex;margin:0 0 .65rem}.index-locations-panel,.index-plants-panel{padding:0;border:0;border-radius:0;background:transparent;box-shadow:none;backdrop-filter:none}.index-section-head h2{font-size:1.5rem}}
