@@ -1,0 +1,532 @@
+  const setSoilMoistureHints = (messages) => {
+    const hintsNode = document.getElementById('soil-moisture-hints');
+    if (!hintsNode) return;
+    const safeMessages = Array.isArray(messages) && messages.length ? messages : [];
+    hintsNode.innerHTML = safeMessages.map((message) => {
+      const paragraph = document.createElement('p');
+      paragraph.textContent = message;
+      return paragraph.outerHTML;
+    }).join('');
+  };
+
+  const updateOptionalSoilMoistureCardLine = (id, text) => {
+    const node = document.getElementById(id);
+    if (!node) return;
+    if (text) {
+      node.textContent = text;
+      node.classList.remove('hidden');
+    } else {
+      node.textContent = '';
+      node.classList.add('hidden');
+    }
+  };
+
+  const updateSoilMoistureCurrent = (current, targetSoilMoisture = null, plannedIrrigation = null) => {
+    const card = document.getElementById('soil-moisture-current-card');
+    if (!card) return;
+    const label = document.getElementById('soil-moisture-current-label');
+    const meta = document.getElementById('soil-moisture-current-meta');
+    if (current && current.value !== null && current.value !== undefined) {
+      if (label) label.textContent = current.label || `${current.value} %`;
+      const sensorCount = Array.isArray(current.sensor_values)
+        ? current.sensor_values.filter((item) => item.value !== null && item.value !== undefined).length
+        : 0;
+      if (meta) meta.textContent = sensorCount > 1 ? `${sensorCount} Sensoren · Durchschnitt` : '';
+      updateOptionalSoilMoistureCardLine(
+        'soil-moisture-target-label',
+        targetSoilMoisture ? `Ziel ${targetSoilMoisture.label || `${targetSoilMoisture.value} %`}` : ''
+      );
+      updateOptionalSoilMoistureCardLine(
+        'soil-moisture-irrigation-label',
+        plannedIrrigation ? `Bewässerung geplant: ${plannedIrrigation.label || `${plannedIrrigation.minutes} min`}` : ''
+      );
+      card.classList.remove('hidden');
+      return;
+    }
+    updateOptionalSoilMoistureCardLine('soil-moisture-target-label', '');
+    updateOptionalSoilMoistureCardLine('soil-moisture-irrigation-label', '');
+    card.classList.add('hidden');
+  };
+
+  const parseSeriesPoints = (points) => (points || [])
+    .map((point) => ({ time: new Date(point.time).getTime(), value: Number(point.value) }))
+    .filter((point) => Number.isFinite(point.time) && Number.isFinite(point.value))
+    .sort((a, b) => a.time - b.time);
+
+  const updateSoilMoistureLegend = (series, weatherSeries = {}) => {
+    if (Array.isArray(series)) {
+      series.forEach((sensorSeries, index) => {
+        const item = document.querySelector(`.soil-moisture-legend-item[data-sensor-id="${sensorSeries.sensor_id}"]`);
+        if (!item) return;
+        item.style.setProperty('--sensor-color', soilMoistureColors[index % soilMoistureColors.length]);
+        const status = item.querySelector('small');
+        if (status) status.textContent = (sensorSeries.points || []).length ? '' : '(keine Daten)';
+      });
+    }
+    Object.entries(weatherSeries || {}).forEach(([kind, weatherItem]) => {
+      const item = document.querySelector(`.weather-legend-item[data-weather-kind="${kind}"]`);
+      if (!item) return;
+      const status = item.querySelector('small');
+      const weatherSensorSeries = Array.isArray(weatherItem.series) ? weatherItem.series : [];
+      const pointCount = weatherSensorSeries.length
+        ? weatherSensorSeries.reduce((sum, sensorSeries) => sum + (sensorSeries.points || []).length, 0)
+        : (weatherItem.points || []).length;
+      if (status) status.textContent = pointCount ? '' : '(keine Daten)';
+    });
+  };
+
+  const drawAxis = (context, { minValue, maxValue, yFor, x, align, color, labelForTick, title, titleOffset = null, titleGap = 16, maxTitleX = null }) => {
+    const valueRange = Math.max(1, maxValue - minValue);
+    context.font = '12px system-ui, sans-serif';
+    const ticks = Array.from({ length: 5 }, (_, tick) => minValue + (valueRange * tick) / 4);
+    const tickLabels = ticks.map((value) => labelForTick(value));
+    const tickLabelGap = 8;
+    const maxTickLabelWidth = tickLabels.reduce((width, label) => Math.max(width, context.measureText(label).width), 0);
+    const calculatedTitleOffset = align === 'right'
+      ? -(tickLabelGap + maxTickLabelWidth + titleGap)
+      : tickLabelGap + maxTickLabelWidth + titleGap;
+    const resolvedTitleOffset = titleOffset === null ? calculatedTitleOffset : titleOffset;
+    const titleX = maxTitleX === null ? x + resolvedTitleOffset : Math.min(x + resolvedTitleOffset, maxTitleX);
+
+    context.strokeStyle = color;
+    context.fillStyle = color;
+    context.lineWidth = 1;
+    context.textAlign = align;
+    context.textBaseline = 'middle';
+    ticks.forEach((value, index) => {
+      const y = yFor(value);
+      context.beginPath();
+      context.moveTo(x, y);
+      context.lineTo(x + (align === 'right' ? 5 : -5), y);
+      context.stroke();
+      context.fillText(tickLabels[index], x + (align === 'right' ? -tickLabelGap : tickLabelGap), y);
+    });
+    context.save();
+    context.translate(titleX, 18);
+    context.rotate(-Math.PI / 2);
+    context.textAlign = 'right';
+    context.fillText(title, 0, 0);
+    context.restore();
+  };
+
+  const valueDomain = (points, { minFloor = null, maxCeil = null, padding = 0 } = {}) => {
+    if (!points.length) return null;
+    const rawMin = Math.min(...points.map((point) => point.value));
+    const rawMax = Math.max(...points.map((point) => point.value));
+    let minValue = Math.floor(rawMin - padding);
+    let maxValue = Math.ceil(rawMax + padding);
+    if (minFloor !== null) minValue = Math.max(minFloor, minValue);
+    if (maxCeil !== null) maxValue = Math.min(maxCeil, maxValue);
+    if (minValue === maxValue) {
+      minValue -= 1;
+      maxValue += 1;
+    }
+    return { minValue, maxValue };
+  };
+
+  const drawLineSeries = (context, points, { xFor, yFor, color, pointRadius = 2.8, lineWidth = 2 }) => {
+    if (!points.length) return;
+    context.strokeStyle = color;
+    context.fillStyle = color;
+    context.lineWidth = lineWidth;
+    context.beginPath();
+    points.forEach((point, pointIndex) => {
+      const x = xFor(point.time);
+      const y = yFor(point.value);
+      if (pointIndex === 0) context.moveTo(x, y);
+      else context.lineTo(x, y);
+    });
+    context.stroke();
+    points.forEach((point) => {
+      context.beginPath();
+      context.arc(xFor(point.time), yFor(point.value), pointRadius, 0, Math.PI * 2);
+      context.fill();
+    });
+  };
+
+
+  const dailyTemperatureRange = (points) => {
+    const buckets = new Map();
+    points.forEach((point) => {
+      const date = new Date(point.time);
+      if (Number.isNaN(date.getTime())) return;
+      const dayStart = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+      const existing = buckets.get(dayStart) || { firstTime: point.time, lastTime: point.time, min: point.value, max: point.value };
+      existing.firstTime = Math.min(existing.firstTime, point.time);
+      existing.lastTime = Math.max(existing.lastTime, point.time);
+      existing.min = Math.min(existing.min, point.value);
+      existing.max = Math.max(existing.max, point.value);
+      buckets.set(dayStart, existing);
+    });
+    return Array.from(buckets.values())
+      .map((range) => ({ ...range, time: range.firstTime + ((range.lastTime - range.firstTime) / 2) }))
+      .sort((a, b) => a.time - b.time);
+  };
+
+  const drawTemperatureRangeArea = (context, ranges, { xFor, yFor }) => {
+    if (!ranges.length) return;
+    context.save();
+    if (ranges.length === 1) {
+      const range = ranges[0];
+      const x = xFor(range.time);
+      const yMin = yFor(range.min);
+      const yMax = yFor(range.max);
+      context.fillStyle = 'rgba(220, 38, 38, .18)';
+      context.beginPath();
+      context.rect(x - 8, Math.min(yMax, yMin), 16, Math.max(2, Math.abs(yMin - yMax)));
+      context.fill();
+      context.restore();
+      return;
+    }
+
+    context.fillStyle = 'rgba(220, 38, 38, .18)';
+    context.beginPath();
+    ranges.forEach((range, index) => {
+      const x = xFor(range.time);
+      const y = yFor(range.max);
+      if (index === 0) context.moveTo(x, y);
+      else context.lineTo(x, y);
+    });
+    [...ranges].reverse().forEach((range) => {
+      context.lineTo(xFor(range.time), yFor(range.min));
+    });
+    context.closePath();
+    context.fill();
+
+    context.restore();
+  };
+
+
+  const formatDateTick = (time) => new Date(time).toLocaleDateString('de-DE', {
+    day: '2-digit',
+    month: '2-digit',
+  });
+
+  const chartDateKey = (time) => {
+    const date = new Date(time);
+    return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+  };
+
+  const dateTickCandidates = (minTime, maxTime) => {
+    const ticks = [{ time: minTime, key: chartDateKey(minTime) }];
+    const cursor = new Date(minTime);
+    cursor.setHours(0, 0, 0, 0);
+    cursor.setDate(cursor.getDate() + 1);
+    while (cursor.getTime() < maxTime) {
+      ticks.push({ time: cursor.getTime(), key: chartDateKey(cursor.getTime()) });
+      cursor.setDate(cursor.getDate() + 1);
+    }
+    const maxKey = chartDateKey(maxTime);
+    if (!ticks.some((tick) => tick.key === maxKey)) {
+      ticks.push({ time: maxTime, key: maxKey });
+    }
+    return ticks;
+  };
+
+  const selectDateTicks = (minTime, maxTime, plotWidth) => {
+    const candidates = dateTickCandidates(minTime, maxTime);
+    const maxLabels = Math.max(3, Math.min(8, Math.floor(plotWidth / 64)));
+    if (candidates.length <= maxLabels) return candidates;
+    const selected = [];
+    const usedKeys = new Set();
+    const lastIndex = candidates.length - 1;
+    for (let index = 0; index < maxLabels; index += 1) {
+      const candidate = candidates[Math.round((lastIndex * index) / (maxLabels - 1))];
+      if (!usedKeys.has(candidate.key)) {
+        selected.push(candidate);
+        usedKeys.add(candidate.key);
+      }
+    }
+    return selected;
+  };
+
+  const drawDateAxis = (context, { minTime, maxTime, xFor, padding, cssHeight, plotWidth }) => {
+    const ticks = selectDateTicks(minTime, maxTime, plotWidth);
+    context.save();
+    context.strokeStyle = '#d1d5db';
+    context.fillStyle = '#6b7280';
+    context.font = '12px system-ui, sans-serif';
+    context.textAlign = 'center';
+    context.textBaseline = 'top';
+    ticks.forEach((tick) => {
+      const x = xFor(tick.time);
+      const y = cssHeight - padding.bottom;
+      context.beginPath();
+      context.moveTo(x, y);
+      context.lineTo(x, y + 5);
+      context.stroke();
+      context.fillText(formatDateTick(tick.time), x, y + 10);
+    });
+    context.restore();
+  };
+
+  const drawSoilMoistureChart = () => {
+    const canvas = document.getElementById('soil-moisture-chart');
+    const dataNode = document.getElementById('soil-moisture-series-data');
+    const weatherDataNode = document.getElementById('weather-series-data');
+    const targetDataNode = document.getElementById('target-soil-moisture-data');
+    if (!canvas || !dataNode) return;
+
+    let series = [];
+    let weatherSeries = {};
+    let targetSoilMoisture = null;
+    try {
+      series = JSON.parse(dataNode.textContent || '[]');
+    } catch (error) {
+      series = [];
+    }
+    try {
+      weatherSeries = JSON.parse(weatherDataNode?.textContent || '{}');
+    } catch (error) {
+      weatherSeries = {};
+    }
+    try {
+      targetSoilMoisture = JSON.parse(targetDataNode?.textContent || 'null');
+    } catch (error) {
+      targetSoilMoisture = null;
+    }
+    const targetValue = Number(targetSoilMoisture?.value);
+    const hasTargetValue = Number.isFinite(targetValue);
+
+    const context = canvas.getContext('2d');
+    if (!context) return;
+
+    const parentWidth = canvas.parentElement ? canvas.parentElement.clientWidth : 0;
+    const cssWidth = Math.max(320, parentWidth || canvas.clientWidth || 640);
+    const desktopHeight = Number(canvas.dataset.chartHeight) || 260;
+    const mobileHeight = Number(canvas.dataset.chartHeightMobile) || 180;
+    const cssHeight = window.matchMedia('(max-width: 700px)').matches ? mobileHeight : desktopHeight;
+    const ratio = window.devicePixelRatio || 1;
+    canvas.width = Math.floor(cssWidth * ratio);
+    canvas.height = Math.floor(cssHeight * ratio);
+    canvas.style.height = `${cssHeight}px`;
+    context.setTransform(ratio, 0, 0, ratio, 0, 0);
+    context.clearRect(0, 0, cssWidth, cssHeight);
+
+    series.forEach((sensorSeries, index) => {
+      document.querySelector(`.soil-moisture-legend-item[data-sensor-id="${sensorSeries.sensor_id}"]`)
+        ?.style.setProperty('--sensor-color', soilMoistureColors[index % soilMoistureColors.length]);
+    });
+
+    const soilSeries = series.map((sensorSeries) => ({ ...sensorSeries, parsedPoints: parseSeriesPoints(sensorSeries.points) }));
+    const temperature = weatherSeries.temperature || {};
+    const rainfall = weatherSeries.rainfall || {};
+    const irrigation = weatherSeries.irrigation || {};
+    const weatherSensorSeries = (weatherItem) => {
+      const sensorSeries = Array.isArray(weatherItem.series) ? weatherItem.series : [];
+      if (sensorSeries.length) {
+        return sensorSeries.map((item) => ({ ...item, parsedPoints: parseSeriesPoints(item.points) }));
+      }
+      return [{ sensor_id: null, name: weatherItem.label || '', parsedPoints: parseSeriesPoints(weatherItem.points) }];
+    };
+    const temperatureSeries = weatherSensorSeries(temperature);
+    const rainfallSeries = weatherSensorSeries(rainfall);
+    const irrigationSeries = weatherSensorSeries(irrigation);
+    const temperaturePoints = temperatureSeries.flatMap((sensorSeries) => sensorSeries.parsedPoints);
+    const temperatureRanges = dailyTemperatureRange(temperaturePoints);
+    const temperatureRangePoints = temperatureRanges.flatMap((range) => [
+      { time: range.time, value: range.min },
+      { time: range.time, value: range.max },
+    ]);
+    const rainfallPoints = rainfallSeries.flatMap((sensorSeries) => sensorSeries.parsedPoints);
+    const irrigationPoints = irrigationSeries.flatMap((sensorSeries) => sensorSeries.parsedPoints);
+    const soilPoints = soilSeries.flatMap((sensorSeries) => sensorSeries.parsedPoints);
+    const allPoints = [...soilPoints, ...temperaturePoints, ...rainfallPoints, ...irrigationPoints];
+    const soilDomainPoints = hasTargetValue ? [...soilPoints, { time: 0, value: targetValue }] : soilPoints;
+
+    if (!allPoints.length) {
+      context.fillStyle = '#6b7280';
+      context.font = '14px system-ui, sans-serif';
+      context.textAlign = 'center';
+      context.fillText('Keine Messpunkte im gewählten Zeitraum', cssWidth / 2, cssHeight / 2);
+      return;
+    }
+
+    const isCompactChart = cssWidth < 560;
+    const padding = { top: 24, right: isCompactChart ? 168 : 228, bottom: 38, left: 52 };
+    const rightAxisGap = isCompactChart ? 54 : 72;
+    const rightAxisTitleMaxX = cssWidth - 8;
+    const plotWidth = cssWidth - padding.left - padding.right;
+    const plotHeight = cssHeight - padding.top - padding.bottom;
+    const minTime = Math.min(...allPoints.map((point) => point.time));
+    const maxTime = Math.max(...allPoints.map((point) => point.time));
+    const timeRange = Math.max(1, maxTime - minTime);
+    const xFor = (time) => padding.left + ((time - minTime) / timeRange) * plotWidth;
+    const yFactory = (domain) => (value) => padding.top + (1 - ((value - domain.minValue) / Math.max(1, domain.maxValue - domain.minValue))) * plotHeight;
+
+    context.strokeStyle = '#e5e7eb';
+    context.lineWidth = 1;
+    for (let tick = 0; tick <= 4; tick += 1) {
+      const y = padding.top + (plotHeight * tick) / 4;
+      context.beginPath();
+      context.moveTo(padding.left, y);
+      context.lineTo(cssWidth - padding.right, y);
+      context.stroke();
+    }
+
+    const soilDomain = valueDomain(soilDomainPoints, { minFloor: 0, maxCeil: 100, padding: 5 });
+    const temperatureDomain = valueDomain(temperatureRangePoints, { padding: 2 });
+    const rainfallDomain = valueDomain(rainfallPoints, { minFloor: 0, padding: 1 });
+    const irrigationDomain = valueDomain(irrigationPoints, { minFloor: 0, padding: 5 });
+    const soilYFor = soilDomain ? yFactory(soilDomain) : null;
+    const temperatureYFor = temperatureDomain ? yFactory(temperatureDomain) : null;
+    const rainfallYFor = rainfallDomain ? yFactory(rainfallDomain) : null;
+    const irrigationYFor = irrigationDomain ? yFactory(irrigationDomain) : null;
+
+    if (soilDomain && soilYFor) {
+      drawAxis(context, {
+        minValue: soilDomain.minValue,
+        maxValue: soilDomain.maxValue,
+        yFor: soilYFor,
+        x: padding.left,
+        align: 'right',
+        color: '#2563eb',
+        labelForTick: (value) => `${Math.round(value)}%`,
+        title: 'Bodenfeuchte',
+      });
+    }
+    if (temperatureDomain && temperatureYFor) {
+      drawAxis(context, {
+        minValue: temperatureDomain.minValue,
+        maxValue: temperatureDomain.maxValue,
+        yFor: temperatureYFor,
+        x: cssWidth - padding.right,
+        align: 'left',
+        color: '#dc2626',
+        labelForTick: (value) => `${Math.round(value)}°C`,
+        title: 'Temperatur',
+        maxTitleX: rightAxisTitleMaxX,
+      });
+    }
+    if (rainfallDomain && rainfallYFor) {
+      drawAxis(context, {
+        minValue: rainfallDomain.minValue,
+        maxValue: rainfallDomain.maxValue,
+        yFor: rainfallYFor,
+        x: cssWidth - padding.right + rightAxisGap,
+        align: 'left',
+        color: '#0f766e',
+        labelForTick: (value) => `${Math.round(value)} mm`,
+        title: 'Regen',
+        maxTitleX: rightAxisTitleMaxX,
+      });
+    }
+    if (irrigationDomain && irrigationYFor) {
+      drawAxis(context, {
+        minValue: irrigationDomain.minValue,
+        maxValue: irrigationDomain.maxValue,
+        yFor: irrigationYFor,
+        x: cssWidth - padding.right + (rightAxisGap * 2),
+        align: 'left',
+        color: '#f97316',
+        labelForTick: (value) => `${Math.round(value)} min`,
+        title: 'Bewässerung',
+        maxTitleX: rightAxisTitleMaxX,
+      });
+    }
+
+    drawDateAxis(context, {
+      minTime,
+      maxTime,
+      xFor,
+      padding,
+      cssHeight,
+      plotWidth,
+    });
+
+    const barCount = Math.max(rainfallPoints.length, irrigationPoints.length, 1);
+    const barWidth = Math.max(3, Math.min(14, plotWidth / Math.max(8, barCount) * 0.32));
+    const drawDailyBars = (sensorSeriesList, { yFor, domain, fill, stroke, xOffset = 0 }) => {
+      if (!yFor || !domain) return;
+      const baseline = yFor(Math.max(0, domain.minValue));
+      context.fillStyle = fill;
+      context.strokeStyle = stroke;
+      sensorSeriesList.forEach((sensorSeries) => {
+        sensorSeries.parsedPoints.forEach((point) => {
+          const x = xFor(point.time) - barWidth / 2 + xOffset;
+          const y = yFor(point.value);
+          context.fillRect(x, Math.min(y, baseline), barWidth, Math.max(1, Math.abs(baseline - y)));
+          context.strokeRect(x, Math.min(y, baseline), barWidth, Math.max(1, Math.abs(baseline - y)));
+        });
+      });
+    };
+    drawDailyBars(rainfallSeries, {
+      yFor: rainfallYFor,
+      domain: rainfallDomain,
+      fill: 'rgba(15, 118, 110, .45)',
+      stroke: '#0f766e',
+      xOffset: irrigationPoints.length ? -(barWidth * 0.65) : 0,
+    });
+    drawDailyBars(irrigationSeries, {
+      yFor: irrigationYFor,
+      domain: irrigationDomain,
+      fill: 'rgba(249, 115, 22, .38)',
+      stroke: '#f97316',
+      xOffset: rainfallPoints.length ? (barWidth * 0.65) : 0,
+    });
+
+    soilSeries.forEach((sensorSeries, index) => {
+      if (!soilYFor) return;
+      drawLineSeries(context, sensorSeries.parsedPoints, {
+        xFor,
+        yFor: soilYFor,
+        color: soilMoistureColors[index % soilMoistureColors.length],
+      });
+    });
+    if (temperatureYFor && temperatureRanges.length) {
+      drawTemperatureRangeArea(context, temperatureRanges, {
+        xFor,
+        yFor: temperatureYFor,
+      });
+    }
+    if (hasTargetValue && soilYFor) {
+      const y = soilYFor(targetValue);
+      context.save();
+      context.strokeStyle = targetSoilMoistureColor;
+      context.lineWidth = 2;
+      context.setLineDash([8, 6]);
+      context.beginPath();
+      context.moveTo(padding.left, y);
+      context.lineTo(cssWidth - padding.right, y);
+      context.stroke();
+      context.setLineDash([]);
+      context.fillStyle = targetSoilMoistureColor;
+      context.font = '12px system-ui, sans-serif';
+      context.textAlign = 'right';
+      context.textBaseline = 'bottom';
+      context.fillText(`Ziel ${targetSoilMoisture.label || `${targetValue}%`}`, cssWidth - padding.right - 4, y - 4);
+      context.restore();
+    }
+
+  };
+  const loadSoilMoistureData = async () => {
+    const dataNode = document.getElementById('soil-moisture-series-data');
+    const weatherDataNode = document.getElementById('weather-series-data');
+    if (!dataNode) return;
+    const rangeSelect = document.getElementById('soil-moisture-range');
+    setSoilMoistureHints(['Messdaten werden im Hintergrund geladen.']);
+    const url = new URL(soilMoistureDataUrl, window.location.origin);
+    if (rangeSelect && rangeSelect.value) url.searchParams.set('moisture_range', rangeSelect.value);
+    try {
+      const response = await fetch(url, { headers: { 'Accept': 'application/json' } });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const payload = await response.json();
+      dataNode.textContent = JSON.stringify(payload.series || []);
+      if (weatherDataNode) weatherDataNode.textContent = JSON.stringify(payload.weather_series || {});
+      const targetDataNode = document.getElementById('target-soil-moisture-data');
+      if (targetDataNode) targetDataNode.textContent = JSON.stringify(payload.target_soil_moisture || null);
+      updateSoilMoistureCurrent(payload.current, payload.target_soil_moisture || null, payload.planned_irrigation || null);
+      updateSoilMoistureLegend(payload.series || [], payload.weather_series || {});
+      setSoilMoistureHints(payload.hints || []);
+      drawSoilMoistureChart();
+    } catch (error) {
+      setSoilMoistureHints(['Messdaten konnten nicht geladen werden.']);
+      updateSoilMoistureCurrent(null);
+      drawSoilMoistureChart();
+    }
+  };
+
+  drawSoilMoistureChart();
+  loadSoilMoistureData();
+  window.addEventListener('resize', drawSoilMoistureChart);
+  document.getElementById('soil-moisture-range')?.addEventListener('change', loadSoilMoistureData);
