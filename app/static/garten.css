@@ -179,3 +179,24 @@ tbody tr[data-row-link]:hover td{background:color-mix(in srgb,var(--surface-soft
 .location-footer-actions{display:flex;align-items:center;justify-content:space-between;gap:.75rem;flex-wrap:wrap;margin-top:1rem}
 .location-footer-actions .floating-trash{margin:0}
 .location-footer-id{margin:0;text-align:left;font-size:.78rem}
+
+/* Reusable sensor history chart */
+.soil-moisture-history{display:grid;gap:.85rem;margin:1.5rem 0;padding:1rem;border:1px solid var(--border);border-radius:16px;background:var(--surface-soft)}
+.soil-moisture-history-head{display:flex;align-items:end;justify-content:space-between;gap:1rem;flex-wrap:wrap}
+.soil-moisture-range-form{display:flex;align-items:center;gap:.5rem}
+.soil-moisture-hints{display:grid;gap:.4rem;color:var(--muted)}
+.soil-moisture-hints p{margin:0}
+.soil-moisture-chart-wrap{width:100%;min-height:260px}
+.soil-moisture-chart-wrap canvas{display:block;width:100%;height:260px;background:var(--surface);border:1px solid var(--border);border-radius:12px}
+.soil-moisture-legend{display:flex;gap:.7rem 1rem;flex-wrap:wrap;color:var(--muted);font-size:.95rem}
+.soil-moisture-legend-item{display:inline-flex;align-items:center;gap:.35rem}
+.soil-moisture-legend-swatch{width:.85rem;height:.85rem;border-radius:999px;background:var(--sensor-color,#2663eb);border:1px solid rgba(0,0,0,.12)}
+.weather-legend-item[data-weather-kind="temperature"]{--sensor-color:#dc2626}
+.weather-legend-item[data-weather-kind="rainfall"]{--sensor-color:#0f766e}
+.weather-legend-item[data-weather-kind="irrigation"]{--sensor-color:#f97316}
+.weather-legend-item[data-weather-kind="rainfall"] .soil-moisture-legend-swatch,
+.weather-legend-item[data-weather-kind="irrigation"] .soil-moisture-legend-swatch{border-radius:3px}
+.target-soil-moisture-legend-item{--sensor-color:#60a5fa}
+.target-soil-moisture-legend-item .soil-moisture-legend-swatch{height:.18rem;border-radius:999px}
+.soil-moisture-legend small{color:var(--muted)}
+@media (max-width:700px){.soil-moisture-chart-wrap{min-height:180px}.soil-moisture-chart-wrap canvas{height:180px}}

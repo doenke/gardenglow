@@ -1349,6 +1349,24 @@ def _sensor_sort_key(sensor):
     return ((sensor.name or '').casefold(), sensor.id or 0)
 
 
+
+
+def _active_sensors_for_type(sensor_type):
+    return (
+        Sensor.query
+        .filter(Sensor.is_active.is_(True))
+        .filter(Sensor.sensor_type == sensor_type)
+        .order_by(Sensor.name.asc(), Sensor.id.asc())
+        .all()
+    )
+
+
+def _active_weather_sensors():
+    return {
+        kind: _active_sensors_for_type(sensor_type)
+        for kind, sensor_type in _weather_sensor_types().items()
+    }
+
 def _location_sensors_for_type(location, sensor_type):
     base_query = (
         Sensor.query
@@ -1574,6 +1592,9 @@ def _aggregate_daily_active_minutes_points(points, start, stop):
             continue
         normalized_points.append({'time': point_time, 'value': value})
     normalized_points.sort(key=lambda point: point['time'])
+    if normalized_points:
+        range_start = min(range_start, normalized_points[0]['time'])
+        range_stop = max(range_stop, normalized_points[-1]['time'])
 
     buckets = {}
     for index, point in enumerate(normalized_points):
@@ -2581,6 +2602,10 @@ def sensors():
             query = query.filter(Sensor.sensor_type == selected_sensor_type)
         sensors = query.order_by(Sensor.name.asc(), Sensor.id.asc()).all()
     sensor_current_values = _load_sensor_current_values(sensors)
+    all_active_soil_sensors = _active_sensors_for_type(SENSOR_TYPE_SOIL_MOISTURE)
+    all_active_weather_sensors = _active_weather_sensors()
+    sensor_history_available = (not selected_location and not selected_sensor_type) and (bool(all_active_soil_sensors) or any(all_active_weather_sensors.values()))
+    soil_moisture_range_key, _soil_moisture_lookback = _selected_soil_moisture_range()
     return render_template(
         'sensors.html',
         sensors=sensors,
@@ -2588,12 +2613,98 @@ def sensors():
         sensor_types=SENSOR_TYPES,
         selected_sensor_type=selected_sensor_type,
         sensor_current_values=sensor_current_values,
+        sensor_history_available=sensor_history_available,
+        soil_moisture_series=_empty_soil_moisture_series(all_active_soil_sensors),
+        weather_series=_empty_weather_sensor_series(all_active_weather_sensors),
+        soil_moisture_hints=['Sensordaten werden im Hintergrund geladen.'] if sensor_history_available else [],
+        soil_moisture_range_key=soil_moisture_range_key,
+        soil_moisture_range_options=SOIL_MOISTURE_RANGE_OPTIONS,
         locations=locations,
         selected_location=selected_location,
         selected_location_id=selected_location.id if selected_location else None,
         garden_map=GardenMap.query.order_by(GardenMap.id.asc()).first(),
         user=current_user(),
     )
+
+
+
+
+@main_bp.route('/sensors/history')
+@login_required
+def sensor_history_data():
+    soil_moisture_range_key, soil_moisture_lookback = _selected_soil_moisture_range()
+    soil_sensors = _active_sensors_for_type(SENSOR_TYPE_SOIL_MOISTURE)
+    weather_sensors_by_kind = _active_weather_sensors()
+    soil_series = _empty_soil_moisture_series(soil_sensors)
+    weather_series = _empty_weather_sensor_series(weather_sensors_by_kind)
+    hints = []
+    configured_sensors = soil_sensors + [sensor for sensors in weather_sensors_by_kind.values() for sensor in sensors]
+
+    if not configured_sensors:
+        hints.append('Es sind keine aktiven Sensoren vorhanden.')
+        return jsonify({
+            'range_key': soil_moisture_range_key,
+            'series': soil_series,
+            'weather_series': weather_series,
+            'hints': hints,
+            'has_series_data': False,
+        })
+
+    config = _sensor_influx_config()
+    if not config.enabled:
+        hints.append('InfluxDB ist nicht vollständig konfiguriert; es können keine Verlaufsdaten geladen werden.')
+        return jsonify({
+            'range_key': soil_moisture_range_key,
+            'series': soil_series,
+            'weather_series': weather_series,
+            'hints': hints,
+            'has_series_data': False,
+        })
+
+    adapter = influx_service.get_sensor_time_series_adapter(config)
+    stop = datetime.now(timezone.utc)
+    start = stop - soil_moisture_lookback
+    errors = []
+    for sensor, sensor_series in zip(soil_sensors, soil_series):
+        try:
+            sensor_series['points'] = adapter.query_sensor(sensor, start, stop)
+        except Exception as exc:  # pragma: no cover - concrete InfluxDB failures are integration-specific
+            errors.append(f'{sensor.name}: {exc}')
+
+    for kind, sensors_for_kind in weather_sensors_by_kind.items():
+        flat_points = []
+        for sensor in sensors_for_kind:
+            sensor_points = []
+            try:
+                sensor_points = adapter.query_sensor(sensor, start, stop)
+            except Exception as exc:  # pragma: no cover - concrete InfluxDB failures are integration-specific
+                errors.append(f'{sensor.name}: {exc}')
+            if kind == 'rainfall':
+                sensor_points = _aggregate_daily_sum_points(sensor_points)
+            elif kind == 'irrigation':
+                sensor_points = _aggregate_daily_active_minutes_points(sensor_points, start, stop)
+            flat_points.extend(sensor_points)
+            for sensor_series in weather_series[kind]['series']:
+                if sensor_series['sensor_id'] == sensor.id:
+                    sensor_series['points'] = sensor_points
+                    break
+        weather_series[kind]['points'] = sorted(flat_points, key=lambda point: point.get('time') or '')
+
+    if errors:
+        hints.append('InfluxDB-Fehler beim Laden einzelner Sensoren: ' + '; '.join(errors))
+    has_series_data = any(sensor_series['points'] for sensor_series in soil_series) or any(
+        item['points'] or any(sensor_series['points'] for sensor_series in item.get('series', []))
+        for item in weather_series.values()
+    )
+    if not has_series_data:
+        hints.append('Für den gewählten Zeitraum wurden keine Sensordaten gefunden.')
+    return jsonify({
+        'range_key': soil_moisture_range_key,
+        'series': soil_series,
+        'weather_series': weather_series,
+        'hints': hints,
+        'has_series_data': has_series_data,
+    })
 
 
 @main_bp.route('/sensors/new', methods=['POST'])

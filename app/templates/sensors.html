@@ -74,6 +74,61 @@
   </table>
 </section>
 
+{% if sensor_history_available %}
+<section class="soil-moisture-history" aria-labelledby="sensor-history-title">
+  <div class="soil-moisture-history-head">
+    <div>
+      <h3 id="sensor-history-title" class="m-0">Sensor-Verlauf aller aktiven Sensoren</h3>
+      <p class="text-muted m-0">Zeigt Bodenfeuchte, Temperatur, Regenmenge und Bewässerung für alle aktiven Sensoren.</p>
+    </div>
+    <form method="get" class="soil-moisture-range-form">
+      <label for="soil-moisture-range">Zeitraum</label>
+      <select id="soil-moisture-range" name="moisture_range">
+        {% for option in soil_moisture_range_options %}
+        <option value="{{ option.key }}" {% if option.key == soil_moisture_range_key %}selected{% endif %}>{{ option.label }}</option>
+        {% endfor %}
+      </select>
+    </form>
+  </div>
+
+  <script type="application/json" id="soil-moisture-series-data">{{ soil_moisture_series|tojson }}</script>
+  <script type="application/json" id="weather-series-data">{{ weather_series|tojson }}</script>
+  <script type="application/json" id="target-soil-moisture-data">null</script>
+
+  <div class="soil-moisture-hints" id="soil-moisture-hints" role="status" aria-live="polite">
+    {% for hint in soil_moisture_hints %}
+    <p>{{ hint }}</p>
+    {% endfor %}
+  </div>
+
+  <div class="soil-moisture-chart-wrap">
+    <canvas id="soil-moisture-chart" height="260" data-chart-height="260" data-chart-height-mobile="180" aria-label="Sensorverlauf aller aktiven Sensoren" role="img"></canvas>
+  </div>
+  <div id="soil-moisture-legend" class="soil-moisture-legend" aria-label="Sensor-Legende">
+    {% for sensor_series in soil_moisture_series %}
+    <span class="soil-moisture-legend-item" data-sensor-id="{{ sensor_series.sensor_id }}">
+      <span class="soil-moisture-legend-swatch" aria-hidden="true"></span>
+      <span class="soil-moisture-legend-name">{{ sensor_series.name }}</span>
+      <small>(lädt …)</small>
+    </span>
+    {% endfor %}
+    {% for kind, weather_item in weather_series.items() if weather_item.configured %}
+    <span class="soil-moisture-legend-item weather-legend-item" data-weather-kind="{{ kind }}">
+      <span class="soil-moisture-legend-swatch" aria-hidden="true"></span>
+      <span class="soil-moisture-legend-name">{{ weather_item.label }}</span>
+      <small>(lädt …)</small>
+    </span>
+    {% endfor %}
+  </div>
+</section>
+<script>
+  const soilMoistureColors = ['#2563eb', '#16a34a', '#dc2626', '#9333ea', '#ea580c', '#be123c'];
+  const targetSoilMoistureColor = '#60a5fa';
+  const soilMoistureDataUrl = '/sensors/history';
+  {% include '_sensor_history_chart_script.html' %}
+</script>
+{% endif %}
+
 <dialog id="sensor-create-dialog" class="sensor-dialog" aria-labelledby="sensor-create-dialog-title">
   <form method="post" action="/sensors/new" class="grid sensor-create-form">
     <div class="dialog-head">
