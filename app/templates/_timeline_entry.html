@@ -15,7 +15,7 @@
 
   {% if image_url %}
     {% if image_button %}
-    <button type="button" class="timeline-image-btn" data-image-src="{{ image_url }}" aria-label="Bild groß anzeigen">
+    <button type="button" class="timeline-image-btn" data-image-src="{{ image_url }}" aria-label="Bild groß anzeigen" onclick="document.getElementById('image-modal')?.classList.remove('hidden')">
       <img src="{{ image_url }}" class="timeline-image-fixed" alt="{{ image_alt or 'Anhang' }}">
     </button>
     {% else %}
